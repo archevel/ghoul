@@ -1,0 +1,52 @@
+package evaluator
+
+import (
+	e "github.com/archevel/ghoul/expressions"
+)
+
+func head(expr e.List) e.Expr {
+	return expr.Head()
+}
+
+func headList(expr e.List) (list e.List, ok bool) {
+	list, ok = expr.Head().(e.List)
+	return
+}
+
+func tail(expr e.List) (list e.List, ok bool) {
+	list, ok = expr.Tail().(e.List)
+	return
+}
+
+func list(expr e.Expr, exprs ...e.Expr) e.List {
+	var tail e.List = e.NIL
+	for i := len(exprs) - 1; i >= 0; i-- {
+		tail = &e.Pair{exprs[i], tail}
+	}
+	return &e.Pair{expr, tail}
+}
+
+func wrappNonList(expr e.Expr) e.List {
+	if list, ok := expr.(e.List); ok {
+		return list
+	}
+
+	return list(expr)
+}
+
+func isTruthy(truth e.Expr) bool {
+	b, isBool := truth.(e.Boolean)
+	return truth != e.NIL && (!isBool || bool(b))
+}
+
+func isOfKind(given e.Expr, wanted e.Expr) (e.List, bool) {
+	if list, ok := given.(e.List); ok && list.Head().Equiv(wanted) {
+		t, ok := tail(list)
+		if ok {
+			_, ok = tail(t)
+		}
+
+		return t, ok
+	}
+	return nil, false
+}
