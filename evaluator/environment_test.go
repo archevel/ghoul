@@ -1,17 +1,18 @@
 package evaluator
 
 import (
-	e "github.com/archevel/ghoul/expressions"
 	"testing"
+
+	e "github.com/archevel/ghoul/expressions"
 )
 
-func TestNewEnvironmentHasOneFrame(t *testing.T) {
+func TestNewEnvironmentHasOneScope(t *testing.T) {
 	env := NewEnvironment()
 
-	frameCount := len(*env)
+	scopeCount := len(*env)
 
-	if frameCount != 1 {
-		t.Errorf("Expected frame count to be 1 was %d", frameCount)
+	if scopeCount != 1 {
+		t.Errorf("Expected scope count to be 1 was %d", scopeCount)
 	}
 }
 
@@ -28,10 +29,10 @@ func TestBoundFunctionsCanBeFoundByTheirId(t *testing.T) {
 	}
 }
 
-func TestBoundFunctionsResideInBottomFrame(t *testing.T) {
+func TestBoundFunctionsResideInBottomScope(t *testing.T) {
 	env := NewEnvironment()
-	// Add a frame
-	env = newEnvWithEmptyFrame(env)
+	// Add a scope
+	env = newEnvWithEmptyScope(env)
 
 	id := e.Identifier("foo")
 	nilFunc := func(args e.List) (e.Expr, error) { return e.NIL, nil }

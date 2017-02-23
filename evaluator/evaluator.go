@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"errors"
+
 	e "github.com/archevel/ghoul/expressions"
 	//	p "github.com/archevel/ghoul/parser"
 	//	"fmt"
@@ -164,7 +165,7 @@ func evaluateBegin(begin e.List, env *environment) (e.Expr, error) {
 func createLambda(lambda e.List, env *environment) e.Function {
 	fun := func(args e.List) (e.Expr, error) {
 		//		fmt.Println("args:", args.Repr())
-		new_env := newEnvWithEmptyFrame(env)
+		new_env := newEnvWithEmptyScope(env)
 		paramList, ok := headList(lambda)
 		//		fmt.Println("paramList:", paramList)
 		var variadicParam e.Expr = head(lambda)

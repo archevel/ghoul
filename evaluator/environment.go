@@ -2,20 +2,21 @@ package evaluator
 
 import (
 	"errors"
+
 	e "github.com/archevel/ghoul/expressions"
 )
 
-type frame map[e.Identifier]e.Expr
+type scope map[e.Identifier]e.Expr
 
-type environment []*frame
+type environment []*scope
 
 func NewEnvironment() *environment {
-	return newEnvWithEmptyFrame(&environment{})
+	return newEnvWithEmptyScope(&environment{})
 }
 
 func bindFuncAtBottomAs(id e.Identifier, fun e.Function, env *environment) {
-	frame := bottomFrame(env)
-	(*frame)[id] = fun
+	scope := bottomScope(env)
+	(*scope)[id] = fun
 }
 
 func RegisterFuncAs(name string, f func(e.List) (e.Expr, error), env *environment) {
@@ -29,8 +30,8 @@ func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, er
 		return nil, errors.New("Bad syntax: no valid identifier given")
 	}
 
-	frame := currentFrame(env)
-	(*frame)[id] = value
+	scope := currentScope(env)
+	(*scope)[id] = value
 
 	//	fmt.Println("bound id:", id.Repr(), "to:", value.Repr())
 	return value, nil
@@ -41,10 +42,10 @@ func assign(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
 	ident := variable.(e.Identifier)
 
 	for i := len(*env) - 1; i >= 0; i-- {
-		frame := (*env)[i]
-		_, ok := (*frame)[ident]
+		scope := (*env)[i]
+		_, ok := (*scope)[ident]
 		if ok {
-			(*frame)[ident] = value
+			(*scope)[ident] = value
 			return value, nil
 		}
 	}
@@ -54,8 +55,8 @@ func assign(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
 
 func lookupIdentifier(ident e.Identifier, env *environment) (e.Expr, error) {
 	for i := len(*env) - 1; i >= 0; i-- {
-		frame := (*env)[i]
-		res, ok := (*frame)[ident]
+		scope := (*env)[i]
+		res, ok := (*scope)[ident]
 		if ok {
 			return res, nil
 		}
@@ -65,15 +66,15 @@ func lookupIdentifier(ident e.Identifier, env *environment) (e.Expr, error) {
 
 }
 
-func newEnvWithEmptyFrame(env *environment) *environment {
-	new_env := append(*env, &frame{})
+func newEnvWithEmptyScope(env *environment) *environment {
+	new_env := append(*env, &scope{})
 	return &new_env
 }
 
-func currentFrame(env *environment) *frame {
+func currentScope(env *environment) *scope {
 	return (*env)[len(*env)-1]
 }
 
-func bottomFrame(env *environment) *frame {
+func bottomScope(env *environment) *scope {
 	return (*env)[0]
 }

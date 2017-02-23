@@ -2,10 +2,11 @@ package evaluator
 
 import (
 	"fmt"
-	e "github.com/archevel/ghoul/expressions"
-	p "github.com/archevel/ghoul/parser"
 	"strings"
 	"testing"
+
+	e "github.com/archevel/ghoul/expressions"
+	p "github.com/archevel/ghoul/parser"
 )
 
 func TestEvaluatesSimpleValues(t *testing.T) {
@@ -63,7 +64,7 @@ func TestVariableDefinitionsAreStoredInEnvironment(t *testing.T) {
 
 		Evaluate(parsed.Expressions, env)
 
-		frame := currentFrame(env)
+		frame := currentScope(env)
 		val, ok := (*frame)[e.Identifier(c.identifier)]
 		if !ok {
 			t.Errorf("environment had no value for '%s'", c.identifier)
@@ -298,6 +299,10 @@ func TestAssignmentOnlyChangesWithinTheSmallestScope(t *testing.T) {
 
 func testInputGivesOutput(in string, out e.Expr, t *testing.T) {
 	env := NewEnvironment()
+	testInputGivesOutputWithinEnv(in, out, env, t)
+}
+
+func testInputGivesOutputWithinEnv(in string, out e.Expr, env *environment, t *testing.T) {
 	r := strings.NewReader(in)
 	parseRes, parsed := p.Parse(r)
 
