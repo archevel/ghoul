@@ -64,7 +64,12 @@ value:
      | STRING
      { $$.expr = e.String(strings.Trim($1.tok, "\"`")) }
      | BEG_LIST value sexpr DOT value END_LIST
-     { $$.expr = setLastTail(&e.Pair{$2.expr, $3.expr}, $5.expr) }
+     { 
+	p := &e.Pair{$2.expr, $3.expr}
+	$$.expr = setLastTail(p, $5.expr) 
+	l := yylex.(*schemeLexer)
+	l.SetPairSrcPosition(p, Position{$2.row, $2.col})
+     }
      | BEG_LIST sexpr END_LIST
      { $$.expr = $2.expr }
 ;

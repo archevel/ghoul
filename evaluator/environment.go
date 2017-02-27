@@ -33,7 +33,6 @@ func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, er
 	scope := currentScope(env)
 	(*scope)[id] = value
 
-	//	fmt.Println("bound id:", id.Repr(), "to:", value.Repr())
 	return value, nil
 }
 

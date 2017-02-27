@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	e "github.com/archevel/ghoul/expressions"
 	p "github.com/archevel/ghoul/parser"
 )
 
@@ -204,15 +205,14 @@ func testInputResultsInError(in string, errorMessage string, t *testing.T) {
 
 }
 
-/*
 func TestErrorIsEvaluationErrorContainingBadPair(t *testing.T) {
 
 	cases := []struct {
 		in                    string
 		expectedErrorPairRepr string
 	}{
-		{"(define . x)", "((define . x))"},
-		{"((lambda () (define . x)))", "((define . x))"},
+		{"(define . x)", "(define . x)"},
+		{"((lambda () (define . x)))", "(define . x)"},
 	}
 	for _, c := range cases {
 		in := c.in
@@ -242,13 +242,15 @@ func TestErrorIsEvaluationErrorContainingBadPair(t *testing.T) {
 				t.Errorf("Expected errorPair %s but got %s", expectedErrorPairRepr, ee.ErrorList.Repr())
 			}
 
-			if _, found := parsed.PositionOf(*ee.ErrorList.(*e.Pair)); !found {
+			errorPair, ok := ee.ErrorList.(*e.Pair)
+			if !ok {
+				t.Error("Not ok to convert to *e.Pair")
+			}
+			if _, found := parsed.PositionOf(*errorPair); !found {
 				t.Error("Expected error to have a recorded position, but nothing found")
 			}
 		default:
 			t.Errorf("Did not get an EvaluationError: %T(%+v)", err, err)
 		}
-
 	}
 }
-/**/

@@ -56,18 +56,19 @@ func evaluateSexprSeq(exprs e.List) continuation {
 		} else if !ok {
 			return nil, nil, NewEvaluationError("Malformed expresion sequence", exprs)
 		}
-		*conts = append(*conts, evaluateSexpr(head(exprs)))
+		*conts = append(*conts, evaluateSexpr(head(exprs), exprs))
 		*conts = *conts
 		return e.NIL, env, nil
 	}
 }
 
-func evaluateSexpr(expr e.Expr) continuation {
+func evaluateSexpr(expr e.Expr, parent e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 		if def, ok := isOfKind(expr, DEFINE_SPECIAL_FORM); ok {
 			err := define(def, conts)
 			if err != nil {
-				return nil, nil, err
+				err = NewEvaluationError(err.Error(), parent)
+				return nil, env, err
 			}
 			return e.NIL, env, nil
 		}
@@ -88,6 +89,7 @@ func evaluateSexpr(expr e.Expr) continuation {
 			if val_ok && nil_ok && value != e.NIL && nilTail == e.NIL {
 				res, err := makeAssignment(assignment, env)
 				if err != nil {
+					err = NewEvaluationError(err.Error(), parent)
 					return nil, env, err
 				}
 				return res, env, nil
@@ -105,6 +107,10 @@ func evaluateSexpr(expr e.Expr) continuation {
 
 		if ident, ok := expr.(e.Identifier); ok {
 			resExpr, err := lookupIdentifier(ident, env)
+			if err != nil {
+				err = NewEvaluationError(err.Error(), parent)
+				return nil, env, err
+			}
 			return resExpr, env, err
 		}
 
@@ -163,7 +169,7 @@ func conditional(conds e.List) continuation {
 
 		nextPredOrConsequent := func(truthy e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 			if isTruthy(truthy) {
-				*conts = append(*conts, evaluateSexpr(head(consequent)))
+				*conts = append(*conts, evaluateSexpr(head(consequent), conds))
 				return e.NIL, env, nil
 			}
 
@@ -177,7 +183,8 @@ func conditional(conds e.List) continuation {
 		}
 
 		*conts = append(*conts, nextPredOrConsequent)
-		*conts = append(*conts, evaluateSexpr(predExpr))
+		*conts = append(*conts, evaluateSexpr(predExpr, alternative))
+
 		return e.NIL, env, nil
 	}
 
@@ -266,14 +273,14 @@ func call(callable e.List, conts *contStack) error {
 	}
 	*conts = append(*conts, applyFunc)
 
-	resolveFunc := evaluateSexpr(head(callable))
+	resolveFunc := evaluateSexpr(head(callable), callable)
 	*conts = append(*conts, resolveFunc)
 
 	funcArgs, ok := tail(callable)
 	for ok && funcArgs != e.NIL {
 		anArg := head(funcArgs)
 		*conts = append(*conts, collectArgs)
-		*conts = append(*conts, evaluateSexpr(anArg))
+		*conts = append(*conts, evaluateSexpr(anArg, callable))
 		funcArgs, ok = tail(funcArgs)
 		if !ok {
 			return NewEvaluationError("Bad syntax in procedure application", funcArgs)
@@ -297,7 +304,7 @@ func define(def e.List, conts *contStack) error {
 	}
 
 	*conts = append(*conts, bindVar(head(def)))
-	*conts = append(*conts, evaluateSexpr(head(valueExpr)))
+	*conts = append(*conts, evaluateSexpr(head(valueExpr), valueExpr))
 
 	return nil
 }
