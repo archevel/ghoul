@@ -112,24 +112,27 @@ func TestLambdasAreMonadicFunctions(t *testing.T) {
 		args e.List
 		out  e.Expr
 	}{
-		{`(lambda () 1)`, e.NIL, e.Integer(1)},
-		{`(lambda () 1 2 3 "four")`, e.NIL, e.String("four")},
+		{`(call (lambda () 1))`, e.NIL, e.Integer(1)},
+		{`(call (lambda () 1 2 3 "four"))`, e.NIL, e.String("four")},
 	}
 
 	for _, c := range cases {
 		r := strings.NewReader(c.in)
 		_, parsed := p.Parse(r)
 
+		call := func(args e.List) (e.Expr, error) {
+			funExpr, ok := head(args).(e.Function)
+			if !ok {
+				t.Errorf("Given %s. Expected %s to be a Function", c.in, funExpr.Repr())
+			}
+			fun := funExpr.Fun
+			return (*fun)(c.args)
+		}
+		RegisterFuncAs("call", call, env)
 		res, _ := Evaluate(parsed.Expressions, env)
 
-		funExpr, ok := res.(e.Function)
-		if !ok {
-			t.Errorf("Given %s. Expected %s to be a Function", c.in, res.Repr())
-		}
-		fun := funExpr.Fun
-		funRes, _ := (*fun)(c.args)
-		if funRes != c.out {
-			t.Errorf("Given %s, Expected call to it to give %v, but got %v", c.in, c.out.Repr(), funRes.Repr())
+		if res != c.out {
+			t.Errorf("Given %s, Expected call to it to give %v, but got %v", c.in, c.out.Repr(), res.Repr())
 		}
 
 	}
@@ -139,6 +142,22 @@ func TestLambdasAreCallable(t *testing.T) {
 
 	in := `((lambda () 1))`
 	out := e.Integer(1)
+
+	testInputGivesOutput(in, out, t)
+}
+
+func TestLambdasBindCallArgsToParams(t *testing.T) {
+
+	in := `((lambda (x) x) 'an-arg)`
+	out := e.Identifier("an-arg")
+
+	testInputGivesOutput(in, out, t)
+}
+
+func TestLambdasBindMultipleArgsToParams(t *testing.T) {
+
+	in := `((lambda (x y z) y) 123 678 'an-arg)`
+	out := e.Integer(678)
 
 	testInputGivesOutput(in, out, t)
 }
@@ -163,22 +182,6 @@ func TestLambdaBodiesAreEvaluatedWhenCalled(t *testing.T) {
 
 	in := `((lambda () ((lambda () "foo"))))`
 	out := e.String("foo")
-
-	testInputGivesOutput(in, out, t)
-}
-
-func TestLambdasBindCallArgsToParams(t *testing.T) {
-
-	in := `((lambda (x) x) 'an-arg)`
-	out := e.Identifier("an-arg")
-
-	testInputGivesOutput(in, out, t)
-}
-
-func TestLambdasBindMultipleArgsToParams(t *testing.T) {
-
-	in := `((lambda (x y z) y) 123 678 'an-arg)`
-	out := e.Integer(678)
 
 	testInputGivesOutput(in, out, t)
 }
@@ -228,7 +231,7 @@ func TestCondYieldsTruthyPathOrNIL(t *testing.T) {
 		// predicate true
 		{`(cond (#t 1))`, e.Integer(1)},
 		{`(cond ('(123) 1))`, e.Integer(1)},
-		{`(cond ((lambda () #f) 1))`, e.Integer(1)},
+		//		{`(cond ((lambda () #f) 1))`, e.Integer(1)},
 		{`(cond (0 1))`, e.Integer(1)},
 		{`(cond ("" 1))`, e.Integer(1)},
 		{`(cond ("false" 1))`, e.Integer(1)},
@@ -295,6 +298,25 @@ func TestAssignmentOnlyChangesWithinTheSmallestScope(t *testing.T) {
 		t.Logf("Test #%d", i)
 		testInputGivesOutput(c.in, c.out, t)
 	}
+}
+
+func dontTestStackGrowth(t *testing.T) {
+	in := `
+	(define foo (lambda (n) 
+		(cond ((eq? n 10000000000) n) 
+		(else (foo (+ n 1))))))
+	(foo 0)	
+	`
+	env := NewEnvironment()
+	prepEnv(env)
+
+	//	stackSize := 0
+	//	RegisterFuncAs("storeCallStackSize", func(args e.List) {
+	//		runtime.
+	//	}, env)
+
+	var out e.Expr = e.Integer(10000000000)
+	testInputGivesOutputWithinEnv(in, out, env, t)
 }
 
 func testInputGivesOutput(in string, out e.Expr, t *testing.T) {

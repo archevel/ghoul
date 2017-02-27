@@ -34,6 +34,10 @@ func wrappNonList(expr e.Expr) e.List {
 	return list(expr)
 }
 
+func cons(expr e.Expr, list e.List) e.List {
+	return &e.Pair{expr, list}
+}
+
 func isTruthy(truth e.Expr) bool {
 	b, isBool := truth.(e.Boolean)
 	return truth != e.NIL && (!isBool || bool(b))
