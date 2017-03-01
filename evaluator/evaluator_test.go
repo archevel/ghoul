@@ -283,6 +283,12 @@ func TestAssignmentWorksWhenVariableIsDefined(t *testing.T) {
 	testInputGivesOutput(in, out, t)
 }
 
+func TestAssignmentEvaluatesValue(t *testing.T) {
+	in := `(define x "foo") (set! x (begin 1 2 3)) x`
+	out := e.Integer(3)
+	testInputGivesOutput(in, out, t)
+}
+
 func TestAssignmentOnlyChangesWithinTheSmallestScope(t *testing.T) {
 
 	cases := []struct {

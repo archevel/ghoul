@@ -172,11 +172,10 @@ func TestAssignmentNeedsToConformToFormat(t *testing.T) {
 		expectedErrorMessage string
 	}{
 
-		{`(set! x)`, "undefined identifier: x"},
-
-		{`(define x 1) (set! x)`, "undefined identifier: set!"},
+		{`(set! x)`, "Malformed assignment"},
+		{`(define x 1) (set! x)`, "Malformed assignment"},
 		{`(set! x . 1)`, "Bad syntax in procedure application"},
-		{`(set! x 1 2)`, "undefined identifier: x"},
+		{`(set! x 1 2)`, "Malformed assignment"},
 	}
 	for i, c := range cases {
 		t.Logf("Test #%d", i)

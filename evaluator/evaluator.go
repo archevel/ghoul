@@ -65,11 +65,7 @@ func evaluateSexprSeq(exprs e.List) continuation {
 func evaluateSexpr(expr e.Expr, parent e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 		if def, ok := isOfKind(expr, DEFINE_SPECIAL_FORM); ok {
-			err := define(def, conts)
-			if err != nil {
-				err = NewEvaluationError(err.Error(), parent)
-				return nil, env, err
-			}
+			*conts = append(*conts, define(def))
 			return e.NIL, env, nil
 		}
 
@@ -84,16 +80,9 @@ func evaluateSexpr(expr e.Expr, parent e.List) continuation {
 		}
 
 		if assignment, ok := isOfKind(expr, ASSIGNMENT_SPECIAL_FORM); ok {
-			value, val_ok := tail(assignment)
-			nilTail, nil_ok := tail(value)
-			if val_ok && nil_ok && value != e.NIL && nilTail == e.NIL {
-				res, err := makeAssignment(assignment, env)
-				if err != nil {
-					err = NewEvaluationError(err.Error(), parent)
-					return nil, env, err
-				}
-				return res, env, nil
-			}
+			*conts = append(*conts, makeAssignment(assignment))
+			return e.NIL, env, nil
+
 		}
 
 		if quote, ok := expr.(*e.Quote); ok {
@@ -106,28 +95,47 @@ func evaluateSexpr(expr e.Expr, parent e.List) continuation {
 		}
 
 		if ident, ok := expr.(e.Identifier); ok {
-			resExpr, err := lookupIdentifier(ident, env)
-			if err != nil {
-				err = NewEvaluationError(err.Error(), parent)
-				return nil, env, err
-			}
-			return resExpr, env, err
+			*conts = append(*conts, makeIdentificationLookup(ident, parent))
+			return e.NIL, env, nil
 		}
 
 		if callable, ok := isCall(expr); ok {
-			err := call(callable, conts)
-			return e.NIL, env, err
+			*conts = append(*conts, call(callable))
+			return e.NIL, env, nil
 		}
 
 		return expr, env, nil
 	}
 }
 
-func makeAssignment(assignment e.List, env *environment) (e.Expr, error) {
-	id := head(assignment)
-	t, _ := tail(assignment)
+func makeIdentificationLookup(ident e.Identifier, parent e.List) continuation {
+	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
+		resExpr, err := lookupIdentifier(ident, env)
+		if err != nil {
+			err = NewEvaluationError(err.Error(), parent)
+			return e.NIL, env, err
+		}
+		return resExpr, env, nil
 
-	return assign(id, head(t), env)
+	}
+}
+func makeAssignment(assignment e.List) continuation {
+	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
+		valueExpr, val_ok := tail(assignment)
+		nilTail, nil_ok := tail(valueExpr)
+		if val_ok && nil_ok && valueExpr != e.NIL && nilTail == e.NIL {
+			*conts = append(*conts, func(value e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
+				ret, err := assign(head(assignment), value, env)
+				return ret, env, err
+			})
+			*conts = append(*conts, evaluateSexpr(head(valueExpr), valueExpr))
+			return e.NIL, env, nil
+
+		} else {
+			return e.NIL, env, NewEvaluationError("Malformed assignment", assignment)
+		}
+	}
+
 }
 
 func isCond(expr e.Expr) (e.List, bool) {
@@ -250,63 +258,67 @@ func isCall(expr e.Expr) (e.List, bool) {
 	return nil, false
 }
 
-func call(callable e.List, conts *contStack) error {
-	if callable == e.NIL {
-		return NewEvaluationError("Missing procedure expression in: ()", callable)
-	}
-	var argList e.List = e.NIL
-	collectArgs := func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
+func call(callable e.List) continuation {
+	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 
-		argList = cons(arg, argList)
-		return argList, env, nil
-	}
-
-	applyFunc := func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
-
-		funExpr, ok := arg.(e.Function)
-		if !ok {
-			return e.NIL, env, NewEvaluationError("Not a procedure: "+arg.Repr(), callable)
+		if callable == e.NIL {
+			return e.NIL, env, NewEvaluationError("Missing procedure expression in: ()", callable)
 		}
-		proc := funExpr.Fun
-		res, err := (*proc)(argList)
-		return res, env, err
-	}
-	*conts = append(*conts, applyFunc)
+		var argList e.List = e.NIL
+		collectArgs := func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 
-	resolveFunc := evaluateSexpr(head(callable), callable)
-	*conts = append(*conts, resolveFunc)
-
-	funcArgs, ok := tail(callable)
-	for ok && funcArgs != e.NIL {
-		anArg := head(funcArgs)
-		*conts = append(*conts, collectArgs)
-		*conts = append(*conts, evaluateSexpr(anArg, callable))
-		funcArgs, ok = tail(funcArgs)
-		if !ok {
-			return NewEvaluationError("Bad syntax in procedure application", funcArgs)
+			argList = cons(arg, argList)
+			return argList, env, nil
 		}
+
+		applyFunc := func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
+
+			funExpr, ok := arg.(e.Function)
+			if !ok {
+				return e.NIL, env, NewEvaluationError("Not a procedure: "+arg.Repr(), callable)
+			}
+			proc := funExpr.Fun
+			res, err := (*proc)(argList)
+			return res, env, err
+		}
+		*conts = append(*conts, applyFunc)
+
+		resolveFunc := evaluateSexpr(head(callable), callable)
+		*conts = append(*conts, resolveFunc)
+
+		funcArgs, ok := tail(callable)
+		for ok && funcArgs != e.NIL {
+			anArg := head(funcArgs)
+			*conts = append(*conts, collectArgs)
+			*conts = append(*conts, evaluateSexpr(anArg, callable))
+			funcArgs, ok = tail(funcArgs)
+			if !ok {
+				return e.NIL, env, NewEvaluationError("Bad syntax in procedure application", funcArgs)
+			}
+		}
+		return e.NIL, env, nil
 	}
-	return nil
 }
 
-func define(def e.List, conts *contStack) error {
-	valueExpr, val_ok := tail(def)
-	if !val_ok {
-		return NewEvaluationError("Bad syntax: invalid binding format", def)
+func define(def e.List) continuation {
+	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
+		valueExpr, val_ok := tail(def)
+		if !val_ok {
+			return nil, env, NewEvaluationError("Bad syntax: invalid binding format", def)
+		}
+
+		if valueExpr == e.NIL {
+			return nil, env, NewEvaluationError("Bad syntax: missing value in binding", def)
+		}
+
+		if t, _ := tail(valueExpr); t != e.NIL {
+			return nil, env, NewEvaluationError("Bad syntax: multiple values in binding", def)
+		}
+
+		*conts = append(*conts, bindVar(head(def)))
+		*conts = append(*conts, evaluateSexpr(head(valueExpr), valueExpr))
+		return e.NIL, env, nil
 	}
-
-	if valueExpr == e.NIL {
-		return NewEvaluationError("Bad syntax: missing value in binding", def)
-	}
-
-	if t, _ := tail(valueExpr); t != e.NIL {
-		return NewEvaluationError("Bad syntax: multiple values in binding", def)
-	}
-
-	*conts = append(*conts, bindVar(head(def)))
-	*conts = append(*conts, evaluateSexpr(head(valueExpr), valueExpr))
-
-	return nil
 }
 
 func bindVar(expr e.Expr) continuation {
