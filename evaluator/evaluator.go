@@ -64,48 +64,44 @@ func evaluateSexprSeq(exprs e.List) continuation {
 
 func evaluateSexpr(expr e.Expr, parent e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
-		if def, ok := isOfKind(expr, DEFINE_SPECIAL_FORM); ok {
-			*conts = append(*conts, define(def))
-			return e.NIL, env, nil
+
+		ret, nextCont := chooseEvaluation(expr, parent)
+		if nextCont != nil {
+			*conts = append(*conts, nextCont)
 		}
 
-		if lambda, ok := isOfKind(expr, LAMBDA_SPECIAL_FORM); ok {
-			*conts = append(*conts, createLambda(lambda))
-			return e.NIL, env, nil
-		}
-
-		if conds, ok := isCond(expr); ok {
-			*conts = append(*conts, conditional(conds))
-			return e.NIL, env, nil
-		}
-
-		if assignment, ok := isOfKind(expr, ASSIGNMENT_SPECIAL_FORM); ok {
-			*conts = append(*conts, makeAssignment(assignment))
-			return e.NIL, env, nil
-
-		}
-
-		if quote, ok := expr.(*e.Quote); ok {
-			return quote.Quoted, env, nil
-		}
-
-		if begin, ok := isOfKind(expr, BEGIN_SPECIAL_FORM); ok {
-			*conts = append(*conts, evaluateSexprSeq(begin))
-			return e.NIL, env, nil
-		}
-
-		if ident, ok := expr.(e.Identifier); ok {
-			*conts = append(*conts, makeIdentificationLookup(ident, parent))
-			return e.NIL, env, nil
-		}
-
-		if callable, ok := isCall(expr); ok {
-			*conts = append(*conts, call(callable))
-			return e.NIL, env, nil
-		}
-
-		return expr, env, nil
+		return ret, env, nil
 	}
+}
+
+func chooseEvaluation(expr e.Expr, parent e.List) (ret e.Expr, nextCont continuation) {
+	ret = expr
+	if def, ok := isOfKind(expr, DEFINE_SPECIAL_FORM); ok {
+		nextCont = define(def)
+		ret = e.NIL
+	} else if lambda, ok := isOfKind(expr, LAMBDA_SPECIAL_FORM); ok {
+		nextCont = createLambda(lambda)
+		ret = e.NIL
+	} else if conds, ok := isCond(expr); ok {
+		nextCont = conditional(conds)
+		ret = e.NIL
+	} else if assignment, ok := isOfKind(expr, ASSIGNMENT_SPECIAL_FORM); ok {
+		nextCont = makeAssignment(assignment)
+		ret = e.NIL
+	} else if quote, ok := expr.(*e.Quote); ok {
+		ret = quote.Quoted
+	} else if begin, ok := isOfKind(expr, BEGIN_SPECIAL_FORM); ok {
+		nextCont = evaluateSexprSeq(begin)
+		ret = e.NIL
+	} else if ident, ok := expr.(e.Identifier); ok {
+		nextCont = makeIdentificationLookup(ident, parent)
+		ret = e.NIL
+	} else if callable, ok := isCall(expr); ok {
+		nextCont = call(callable)
+		ret = e.NIL
+	}
+
+	return
 }
 
 func makeIdentificationLookup(ident e.Identifier, parent e.List) continuation {
