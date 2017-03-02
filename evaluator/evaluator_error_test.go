@@ -27,8 +27,8 @@ func TestVariableDefinitionsWithBadSyntax(t *testing.T) {
 		{`(define x)`, "Bad syntax: missing value in binding"},
 		{`(define x 1 1)`, "Bad syntax: multiple values in binding"},
 		{`(define "x" 1)`, "Bad syntax: no valid identifier given"},
-		{`(define . x)`, "undefined identifier: define"},
-		{`(define . (x . 1))`, "Bad syntax in procedure application"},
+		{`(define . x)`, "Malformed expression"},
+		{`(define . (x . 1))`, "Bad syntax: invalid binding format"},
 		{`(define x (define y 1 1))`, "Bad syntax: multiple values in binding"},
 	}
 
@@ -100,7 +100,7 @@ func TestBeginMalformed(t *testing.T) {
 		in                   string
 		expectedErrorMessage string
 	}{
-		{"(begin . `foo`)", "undefined identifier: begin"},
+		{"(begin . `foo`)", "Malformed expression"},
 	}
 
 	for i, c := range cases {
@@ -114,9 +114,9 @@ func TestSpecialFormsMalformed(t *testing.T) {
 		in                   string
 		expectedErrorMessage string
 	}{
-		{"(begin . `foo`)", "undefined identifier: begin"},
-		{"(define x . `foo`)", "Bad syntax in procedure application"},
-		{"(lambda () . `foo`)", "Bad syntax in procedure application"},
+		{"(begin . `foo`)", "Malformed expression"},
+		{"(define x . `foo`)", "Bad syntax: invalid binding format"},
+		{"(lambda () . `foo`)", "Malformed lambda expression"},
 	}
 
 	for i, c := range cases {
@@ -174,7 +174,7 @@ func TestAssignmentNeedsToConformToFormat(t *testing.T) {
 
 		{`(set! x)`, "Malformed assignment"},
 		{`(define x 1) (set! x)`, "Malformed assignment"},
-		{`(set! x . 1)`, "Bad syntax in procedure application"},
+		{`(set! x . 1)`, "Malformed assignment"},
 		{`(set! x 1 2)`, "Malformed assignment"},
 	}
 	for i, c := range cases {
@@ -210,8 +210,8 @@ func TestErrorIsEvaluationErrorContainingBadPair(t *testing.T) {
 		in                    string
 		expectedErrorPairRepr string
 	}{
-		{"(define . x)", "(define . x)"},
-		{"((lambda () (define . x)))", "(define . x)"},
+		{"(define . x)", "((define . x))"},
+		{"((lambda () (define . x)))", "((define . x))"},
 	}
 	for _, c := range cases {
 		in := c.in

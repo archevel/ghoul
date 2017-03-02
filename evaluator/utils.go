@@ -43,14 +43,10 @@ func isTruthy(truth e.Expr) bool {
 	return truth != e.NIL && (!isBool || bool(b))
 }
 
-func isOfKind(given e.Expr, wanted e.Expr) (e.List, bool) {
-	if list, ok := given.(e.List); ok && list.Head().Equiv(wanted) {
-		t, ok := tail(list)
-		if ok {
-			_, ok = tail(t)
-		}
-
-		return t, ok
+func maybeSplitExpr(expr e.Expr) (e.Expr, e.List, bool) {
+	if list, ok := expr.(e.List); ok {
+		t, isList := tail(list)
+		return head(list), t, isList
 	}
-	return nil, false
+	return nil, nil, false
 }

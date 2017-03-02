@@ -32,7 +32,7 @@ func evaluate(exprs e.Expr, env *environment) (res e.Expr, err error) {
 		return exprs, nil
 	}
 	listExpr := wrappNonList(exprs)
-	conts := &contStack{evaluateSexprSeq(listExpr)}
+	conts := &contStack{sexprSeqEvalContinuationFor(listExpr)}
 	var ret e.Expr = e.NIL
 
 	for len(*conts) > 0 {
@@ -48,63 +48,67 @@ func evaluate(exprs e.Expr, env *environment) (res e.Expr, err error) {
 	return ret, nil
 }
 
-func evaluateSexprSeq(exprs e.List) continuation {
+func sexprSeqEvalContinuationFor(exprs e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 
 		if t, ok := tail(exprs); ok && t != e.NIL {
-			*conts = append(*conts, evaluateSexprSeq(t))
+			*conts = append(*conts, sexprSeqEvalContinuationFor(t))
 		} else if !ok {
 			return nil, nil, NewEvaluationError("Malformed expresion sequence", exprs)
 		}
-		*conts = append(*conts, evaluateSexpr(head(exprs), exprs))
+		*conts = append(*conts, sexprEvalContinuationFor(head(exprs), exprs))
 		*conts = *conts
 		return e.NIL, env, nil
 	}
 }
 
-func evaluateSexpr(expr e.Expr, parent e.List) continuation {
+func sexprEvalContinuationFor(expr e.Expr, parent e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 
-		ret, nextCont := chooseEvaluation(expr, parent)
+		ret, nextCont, err := chooseEvaluation(expr, parent)
 		if nextCont != nil {
 			*conts = append(*conts, nextCont)
 		}
 
-		return ret, env, nil
+		return ret, env, err
 	}
 }
 
-func chooseEvaluation(expr e.Expr, parent e.List) (ret e.Expr, nextCont continuation) {
-	ret = expr
-	if def, ok := isOfKind(expr, DEFINE_SPECIAL_FORM); ok {
-		nextCont = define(def)
-		ret = e.NIL
-	} else if lambda, ok := isOfKind(expr, LAMBDA_SPECIAL_FORM); ok {
-		nextCont = createLambda(lambda)
-		ret = e.NIL
-	} else if conds, ok := isCond(expr); ok {
-		nextCont = conditional(conds)
-		ret = e.NIL
-	} else if assignment, ok := isOfKind(expr, ASSIGNMENT_SPECIAL_FORM); ok {
-		nextCont = makeAssignment(assignment)
-		ret = e.NIL
-	} else if quote, ok := expr.(*e.Quote); ok {
+func chooseEvaluation(expr e.Expr, parent e.List) (ret e.Expr, nextCont continuation, err error) {
+	h, t, isList := maybeSplitExpr(expr)
+	if quote, ok := expr.(*e.Quote); ok {
 		ret = quote.Quoted
-	} else if begin, ok := isOfKind(expr, BEGIN_SPECIAL_FORM); ok {
-		nextCont = evaluateSexprSeq(begin)
-		ret = e.NIL
 	} else if ident, ok := expr.(e.Identifier); ok {
-		nextCont = makeIdentificationLookup(ident, parent)
+		nextCont = makeIdentificationLookupContinuationFor(ident, parent)
 		ret = e.NIL
-	} else if callable, ok := isCall(expr); ok {
-		nextCont = call(callable)
+	} else if !isList && h == nil {
+		ret = expr
+	} else if !isList {
+		err = NewEvaluationError("Malformed expression", parent)
+	} else if DEFINE_SPECIAL_FORM.Equiv(h) {
+		nextCont = defineContinuationFor(t)
+		ret = e.NIL
+	} else if LAMBDA_SPECIAL_FORM.Equiv(h) {
+		nextCont = lambdaContinuationFor(t)
+		ret = e.NIL
+	} else if COND_SPECIAL_FORM.Equiv(h) {
+		nextCont = conditionalContinuationFor(t)
+		ret = e.NIL
+	} else if ASSIGNMENT_SPECIAL_FORM.Equiv(h) {
+		nextCont = assignmentContinuationFor(t)
+		ret = e.NIL
+	} else if BEGIN_SPECIAL_FORM.Equiv(h) {
+		nextCont = sexprSeqEvalContinuationFor(t)
+		ret = e.NIL
+	} else {
+		nextCont = functionCallContinuationFor(expr.(e.List))
 		ret = e.NIL
 	}
 
 	return
 }
 
-func makeIdentificationLookup(ident e.Identifier, parent e.List) continuation {
+func makeIdentificationLookupContinuationFor(ident e.Identifier, parent e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 		resExpr, err := lookupIdentifier(ident, env)
 		if err != nil {
@@ -115,16 +119,19 @@ func makeIdentificationLookup(ident e.Identifier, parent e.List) continuation {
 
 	}
 }
-func makeAssignment(assignment e.List) continuation {
+func assignmentContinuationFor(assignment e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 		valueExpr, val_ok := tail(assignment)
+		if !val_ok {
+			return e.NIL, env, NewEvaluationError("Malformed assignment", assignment)
+		}
 		nilTail, nil_ok := tail(valueExpr)
 		if val_ok && nil_ok && valueExpr != e.NIL && nilTail == e.NIL {
 			*conts = append(*conts, func(value e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 				ret, err := assign(head(assignment), value, env)
 				return ret, env, err
 			})
-			*conts = append(*conts, evaluateSexpr(head(valueExpr), valueExpr))
+			*conts = append(*conts, sexprEvalContinuationFor(head(valueExpr), valueExpr))
 			return e.NIL, env, nil
 
 		} else {
@@ -134,15 +141,7 @@ func makeAssignment(assignment e.List) continuation {
 
 }
 
-func isCond(expr e.Expr) (e.List, bool) {
-	if list, ok := expr.(e.List); ok && list.Head().Equiv(COND_SPECIAL_FORM) {
-		t, _ := tail(list)
-		return t, true
-	}
-	return nil, false
-}
-
-func conditional(conds e.List) continuation {
+func conditionalContinuationFor(conds e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 		if conds == e.NIL {
 			return e.NIL, env, nil
@@ -173,7 +172,7 @@ func conditional(conds e.List) continuation {
 
 		nextPredOrConsequent := func(truthy e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 			if isTruthy(truthy) {
-				*conts = append(*conts, evaluateSexpr(head(consequent), conds))
+				*conts = append(*conts, sexprEvalContinuationFor(head(consequent), conds))
 				return e.NIL, env, nil
 			}
 
@@ -182,32 +181,36 @@ func conditional(conds e.List) continuation {
 				return nil, env, NewEvaluationError("Bad syntax: Malformed cond, expected list not pair", conds)
 			}
 
-			*conts = append(*conts, conditional(tailConds))
+			*conts = append(*conts, conditionalContinuationFor(tailConds))
 			return e.NIL, env, nil
 		}
 
 		*conts = append(*conts, nextPredOrConsequent)
-		*conts = append(*conts, evaluateSexpr(predExpr, alternative))
+		*conts = append(*conts, sexprEvalContinuationFor(predExpr, alternative))
 
 		return e.NIL, env, nil
 	}
 
 }
 
-func createLambda(lambda e.List) continuation {
+func lambdaContinuationFor(lambda e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
-		fun := func(args e.List) (e.Expr, error) {
-			// drop env scope back to before calling func
-			*conts = append(*conts, dropScope)
-			// evaluate body
-			body, _ := tail(lambda)
 
-			*conts = append(*conts, evaluateSexprSeq(body))
-			// bind params in new scope
-			*conts = append(*conts, createNewScopeWithBoundArgs(head(lambda), args, env))
-			return e.NIL, nil
+		if body, ok := tail(lambda); ok {
+			fun := func(args e.List) (e.Expr, error) {
+				// drop env scope back to before calling func
+				*conts = append(*conts, dropScope)
+				// evaluate body
+
+				*conts = append(*conts, sexprSeqEvalContinuationFor(body))
+				// bind params in new scope
+				*conts = append(*conts, createNewScopeWithBoundArgs(head(lambda), args, env))
+				return e.NIL, nil
+			}
+			return e.Function{&fun}, env, nil
+		} else {
+			return e.NIL, env, NewEvaluationError("Malformed lambda expression", lambda)
 		}
-		return e.Function{&fun}, env, nil
 	}
 }
 
@@ -254,7 +257,7 @@ func isCall(expr e.Expr) (e.List, bool) {
 	return nil, false
 }
 
-func call(callable e.List) continuation {
+func functionCallContinuationFor(callable e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 
 		if callable == e.NIL {
@@ -279,14 +282,14 @@ func call(callable e.List) continuation {
 		}
 		*conts = append(*conts, applyFunc)
 
-		resolveFunc := evaluateSexpr(head(callable), callable)
+		resolveFunc := sexprEvalContinuationFor(head(callable), callable)
 		*conts = append(*conts, resolveFunc)
 
 		funcArgs, ok := tail(callable)
 		for ok && funcArgs != e.NIL {
 			anArg := head(funcArgs)
 			*conts = append(*conts, collectArgs)
-			*conts = append(*conts, evaluateSexpr(anArg, callable))
+			*conts = append(*conts, sexprEvalContinuationFor(anArg, callable))
 			funcArgs, ok = tail(funcArgs)
 			if !ok {
 				return e.NIL, env, NewEvaluationError("Bad syntax in procedure application", funcArgs)
@@ -296,7 +299,7 @@ func call(callable e.List) continuation {
 	}
 }
 
-func define(def e.List) continuation {
+func defineContinuationFor(def e.List) continuation {
 	return func(arg e.Expr, env *environment, conts *contStack) (e.Expr, *environment, error) {
 		valueExpr, val_ok := tail(def)
 		if !val_ok {
@@ -312,7 +315,7 @@ func define(def e.List) continuation {
 		}
 
 		*conts = append(*conts, bindVar(head(def)))
-		*conts = append(*conts, evaluateSexpr(head(valueExpr), valueExpr))
+		*conts = append(*conts, sexprEvalContinuationFor(head(valueExpr), valueExpr))
 		return e.NIL, env, nil
 	}
 }
