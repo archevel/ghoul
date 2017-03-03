@@ -20,7 +20,11 @@ func bindFuncAtBottomAs(id e.Identifier, fun e.Function, env *environment) {
 }
 
 func RegisterFuncAs(name string, f func(e.List) (e.Expr, error), env *environment) {
-	bindFuncAtBottomAs(e.Identifier(name), e.Function{&f}, env)
+	wrapper := func(arg e.List, isTailCall bool) (e.Expr, error) {
+		return f(arg)
+	}
+
+	bindFuncAtBottomAs(e.Identifier(name), e.Function{&wrapper}, env)
 }
 
 func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
@@ -72,6 +76,10 @@ func newEnvWithEmptyScope(env *environment) *environment {
 
 func currentScope(env *environment) *scope {
 	return (*env)[len(*env)-1]
+}
+
+func clearCurrentScope(env *environment) {
+	(*env)[len(*env)-1] = &scope{}
 }
 
 func bottomScope(env *environment) *scope {

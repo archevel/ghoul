@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -126,7 +127,7 @@ func TestLambdasAreMonadicFunctions(t *testing.T) {
 				t.Errorf("Given %s. Expected %s to be a Function", c.in, funExpr.Repr())
 			}
 			fun := funExpr.Fun
-			return (*fun)(c.args)
+			return (*fun)(c.args, false)
 		}
 		RegisterFuncAs("call", call, env)
 		res, _ := Evaluate(parsed.Expressions, env)
@@ -306,23 +307,48 @@ func TestAssignmentOnlyChangesWithinTheSmallestScope(t *testing.T) {
 	}
 }
 
-func dontTestStackGrowth(t *testing.T) {
+func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
+
 	in := `
 	(define foo (lambda (n) 
-		(cond ((eq? n 10000000000) n) 
-		(else (foo (+ n 1))))))
+		(checkSize n)
+		(cond ((eq? n 100) n) 
+		(else (begin (foo (+ n 1)))))))
 	(foo 0)	
 	`
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+
 	env := NewEnvironment()
 	prepEnv(env)
+	ghoul := &Ghoul{env, nil}
+	var maxConts float64 = 0
+	var maxScopes float64 = 0
+	calls := 0
+	RegisterFuncAs("checkSize", func(args e.List) (e.Expr, error) {
+		calls++
 
-	//	stackSize := 0
-	//	RegisterFuncAs("storeCallStackSize", func(args e.List) {
-	//		runtime.
-	//	}, env)
+		maxConts = math.Max(float64(len(*((*ghoul).conts))), maxConts)
+		maxScopes = math.Max(float64(len(*((*ghoul).env))), maxScopes)
+		return head(args), nil
+	}, env)
 
-	var out e.Expr = e.Integer(10000000000)
-	testInputGivesOutputWithinEnv(in, out, env, t)
+	res, err := ghoul.Evaluate(parsed.Expressions)
+	out := e.Integer(100)
+
+	if err != nil {
+		t.Error("Got evaluation error", err)
+	}
+	if !out.Equiv(res) {
+		t.Errorf("Expected %+v, but got %+v", out.Repr(), res.Repr())
+	}
+	if maxConts != 3.0 {
+		t.Errorf("Bad maxConts: %v", maxConts)
+	}
+
+	if maxScopes != 2.0 {
+		t.Errorf("Bad maxScopes %v", maxScopes)
+	}
 }
 
 func testInputGivesOutput(in string, out e.Expr, t *testing.T) {

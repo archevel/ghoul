@@ -81,7 +81,7 @@ func (e String) Equiv(expr Expr) bool {
 }
 
 type Function struct {
-	Fun *func(args List) (Expr, error)
+	Fun *func(args List, isTailCall bool) (Expr, error)
 }
 
 func (e Function) Repr() string {

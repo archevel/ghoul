@@ -183,6 +183,16 @@ func TestAssignmentNeedsToConformToFormat(t *testing.T) {
 	}
 }
 
+func TestScopingWorks(t *testing.T) {
+	in := `
+(define a 10)
+(define foo (lambda () (set! a b)))
+((lambda (b) (foo)) 33)
+a`
+
+	testInputResultsInError(in, "undefined identifier: b", t)
+}
+
 func testInputResultsInError(in string, errorMessage string, t *testing.T) {
 	env := NewEnvironment()
 	r := strings.NewReader(in)
