@@ -5,7 +5,6 @@ import (
 )
 
 // TODO: Make error messages contain line and column of failed expression. Derived expressions should as far as possible point to their original version.
-// TODO: Make Evaluate use proper tail call optimization if possible. This might be hard because it is not a golang feature... First try might be to see if we can log a message at tail possitions...
 // TODO: Use fn instead of lambda?
 // TODO: Use do instead of begin?
 // TODO: Use def instead of define?
@@ -71,23 +70,23 @@ func (g *Ghoul) popContinuation() continuation {
 	return next
 }
 
-func sexprSeqEvalContinuationFor(exprs e.List, isTailCall bool) continuation {
+func sexprSeqEvalContinuationFor(exprs e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
 		t, ok := tail(exprs)
 		if ok && t != e.NIL {
-			g.pushContinuation(sexprSeqEvalContinuationFor(t, isTailCall))
+			g.pushContinuation(sexprSeqEvalContinuationFor(t, maybeTailCall))
 		} else if !ok {
 			return nil, NewEvaluationError("Malformed expresion sequence", exprs)
 		}
 
-		g.pushContinuation(sexprEvalContinuationFor(head(exprs), exprs, isTailCall && t == e.NIL))
+		g.pushContinuation(sexprEvalContinuationFor(head(exprs), exprs, maybeTailCall && t == e.NIL))
 		return e.NIL, nil
 	}
 }
 
-func sexprEvalContinuationFor(expr e.Expr, parent e.List, isTailCall bool) continuation {
+func sexprEvalContinuationFor(expr e.Expr, parent e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
-		ret, nextCont, err := chooseEvaluation(expr, parent, isTailCall)
+		ret, nextCont, err := chooseEvaluation(expr, parent, maybeTailCall)
 		if nextCont != nil {
 			g.pushContinuation(nextCont)
 		}
@@ -96,7 +95,7 @@ func sexprEvalContinuationFor(expr e.Expr, parent e.List, isTailCall bool) conti
 	}
 }
 
-func chooseEvaluation(expr e.Expr, parent e.List, isTailCall bool) (ret e.Expr, nextCont continuation, err error) {
+func chooseEvaluation(expr e.Expr, parent e.List, maybeTailCall bool) (ret e.Expr, nextCont continuation, err error) {
 	h, t, isList := maybeSplitExpr(expr)
 	if quote, ok := expr.(*e.Quote); ok {
 		ret = quote.Quoted
@@ -108,22 +107,22 @@ func chooseEvaluation(expr e.Expr, parent e.List, isTailCall bool) (ret e.Expr, 
 	} else if !isList {
 		err = NewEvaluationError("Malformed expression", parent)
 	} else if DEFINE_SPECIAL_FORM.Equiv(h) {
-		nextCont = defineContinuationFor(t, isTailCall)
+		nextCont = defineContinuationFor(t, maybeTailCall)
 		ret = e.NIL
 	} else if LAMBDA_SPECIAL_FORM.Equiv(h) {
 		nextCont = lambdaContinuationFor(t)
 		ret = e.NIL
 	} else if COND_SPECIAL_FORM.Equiv(h) {
-		nextCont = conditionalContinuationFor(t, isTailCall)
+		nextCont = conditionalContinuationFor(t, maybeTailCall)
 		ret = e.NIL
 	} else if ASSIGNMENT_SPECIAL_FORM.Equiv(h) {
-		nextCont = assignmentContinuationFor(t, isTailCall)
+		nextCont = assignmentContinuationFor(t, maybeTailCall)
 		ret = e.NIL
 	} else if BEGIN_SPECIAL_FORM.Equiv(h) {
-		nextCont = sexprSeqEvalContinuationFor(t, isTailCall)
+		nextCont = sexprSeqEvalContinuationFor(t, maybeTailCall)
 		ret = e.NIL
 	} else {
-		nextCont = functionCallContinuationFor(expr.(e.List), isTailCall)
+		nextCont = functionCallContinuationFor(expr.(e.List), maybeTailCall)
 		ret = e.NIL
 	}
 
@@ -143,7 +142,7 @@ func makeIdentificationLookupContinuationFor(ident e.Identifier, parent e.List) 
 
 	}
 }
-func assignmentContinuationFor(assignment e.List, isTailCall bool) continuation {
+func assignmentContinuationFor(assignment e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
 		valueExpr, val_ok := tail(assignment)
 		if !val_ok {
@@ -157,7 +156,7 @@ func assignmentContinuationFor(assignment e.List, isTailCall bool) continuation 
 				ret, err := assign(head(assignment), value, env)
 				return ret, err
 			})
-			g.pushContinuation(sexprEvalContinuationFor(head(valueExpr), valueExpr, isTailCall))
+			g.pushContinuation(sexprEvalContinuationFor(head(valueExpr), valueExpr, maybeTailCall))
 			return e.NIL, nil
 
 		} else {
@@ -167,7 +166,7 @@ func assignmentContinuationFor(assignment e.List, isTailCall bool) continuation 
 
 }
 
-func conditionalContinuationFor(conds e.List, isTailCall bool) continuation {
+func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
 		if conds == e.NIL {
 			return e.NIL, nil
@@ -198,7 +197,7 @@ func conditionalContinuationFor(conds e.List, isTailCall bool) continuation {
 
 		nextPredOrConsequent := func(truthy e.Expr, g *Ghoul) (e.Expr, error) {
 			if isTruthy(truthy) {
-				g.pushContinuation(sexprEvalContinuationFor(head(consequent), conds, isTailCall))
+				g.pushContinuation(sexprEvalContinuationFor(head(consequent), conds, maybeTailCall))
 				return e.NIL, nil
 			}
 
@@ -207,7 +206,7 @@ func conditionalContinuationFor(conds e.List, isTailCall bool) continuation {
 				return nil, NewEvaluationError("Bad syntax: Malformed cond, expected list not pair", conds)
 			}
 
-			g.pushContinuation(conditionalContinuationFor(tailConds, isTailCall))
+			g.pushContinuation(conditionalContinuationFor(tailConds, maybeTailCall))
 			return e.NIL, nil
 		}
 
@@ -280,14 +279,14 @@ func isCall(expr e.Expr) (e.List, bool) {
 	return nil, false
 }
 
-func functionCallContinuationFor(callable e.List, isTailCall bool) continuation {
+func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
 		var callEnv *environment = g.env
 
 		if callable == e.NIL {
 			return e.NIL, NewEvaluationError("Missing procedure expression in: ()", callable)
 		}
-		if !isTailCall {
+		if !maybeTailCall {
 			g.pushContinuation(func(arg e.Expr, g *Ghoul) (e.Expr, error) {
 				g.env = callEnv
 				return arg, nil
@@ -328,7 +327,7 @@ func functionCallContinuationFor(callable e.List, isTailCall bool) continuation 
 	}
 }
 
-func defineContinuationFor(def e.List, isTailCall bool) continuation {
+func defineContinuationFor(def e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
 		valueExpr, val_ok := tail(def)
 		if !val_ok {
@@ -344,7 +343,7 @@ func defineContinuationFor(def e.List, isTailCall bool) continuation {
 		}
 
 		g.pushContinuation(bindVar(head(def)))
-		g.pushContinuation(sexprEvalContinuationFor(head(valueExpr), valueExpr, isTailCall))
+		g.pushContinuation(sexprEvalContinuationFor(head(valueExpr), valueExpr, maybeTailCall))
 		return e.NIL, nil
 	}
 }
