@@ -47,12 +47,10 @@ func (g *Ghoul) stepThroughContinuations() (e.Expr, error) {
 	var ret e.Expr = e.NIL
 	var err error
 
-	//var tempEnv *environment
 	for len(*g.conts) > 0 {
-		cur := (*g.conts)[len(*g.conts)-1]
-		*g.conts = (*g.conts)[:len(*g.conts)-1]
-		ret, err = cur(ret, g)
-		//		g.env = tempEnv
+		next := g.popContinuation()
+		ret, err = next(ret, g)
+
 		if err != nil {
 			return nil, err
 		}
@@ -65,6 +63,12 @@ func (g *Ghoul) stepThroughContinuations() (e.Expr, error) {
 func (g *Ghoul) pushContinuation(cont continuation) {
 	var conts *contStack = g.conts
 	*conts = append(*conts, cont)
+}
+
+func (g *Ghoul) popContinuation() continuation {
+	next := (*g.conts)[len(*g.conts)-1]
+	*g.conts = (*g.conts)[:len(*g.conts)-1]
+	return next
 }
 
 func sexprSeqEvalContinuationFor(exprs e.List, isTailCall bool) continuation {
