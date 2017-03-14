@@ -1,11 +1,11 @@
 package evaluator
 
 import (
-	//	"fmt"
-	//	e "github.com/archevel/ghoul/expressions"
-	p "github.com/archevel/ghoul/parser"
 	"strings"
 	"testing"
+
+	e "github.com/archevel/ghoul/expressions"
+	p "github.com/archevel/ghoul/parser"
 )
 
 func TestVariablesMissingFromEnvironmentGivesAnError(t *testing.T) {
@@ -27,8 +27,8 @@ func TestVariableDefinitionsWithBadSyntax(t *testing.T) {
 		{`(define x)`, "Bad syntax: missing value in binding"},
 		{`(define x 1 1)`, "Bad syntax: multiple values in binding"},
 		{`(define "x" 1)`, "Bad syntax: no valid identifier given"},
-		{`(define . x)`, "undefined identifier: define"},
-		{`(define . (x . 1))`, "undefined identifier: define"},
+		{`(define . x)`, "Malformed expression"},
+		{`(define . (x . 1))`, "Bad syntax: invalid binding format"},
 		{`(define x (define y 1 1))`, "Bad syntax: multiple values in binding"},
 	}
 
@@ -100,7 +100,7 @@ func TestBeginMalformed(t *testing.T) {
 		in                   string
 		expectedErrorMessage string
 	}{
-		{"(begin . `foo`)", "undefined identifier: begin"},
+		{"(begin . `foo`)", "Malformed expression"},
 	}
 
 	for i, c := range cases {
@@ -114,9 +114,9 @@ func TestSpecialFormsMalformed(t *testing.T) {
 		in                   string
 		expectedErrorMessage string
 	}{
-		{"(begin . `foo`)", "undefined identifier: begin"},
-		{"(define x . `foo`)", "undefined identifier: define"},
-		{"(lambda () . `foo`)", "undefined identifier: lambda"},
+		{"(begin . `foo`)", "Malformed expression"},
+		{"(define x . `foo`)", "Bad syntax: invalid binding format"},
+		{"(lambda () . `foo`)", "Malformed lambda expression"},
 	}
 
 	for i, c := range cases {
@@ -172,14 +172,25 @@ func TestAssignmentNeedsToConformToFormat(t *testing.T) {
 		expectedErrorMessage string
 	}{
 
-		{`(set! x)`, "undefined identifier: set!"},
-		{`(set! x . 1)`, "undefined identifier: set!"},
-		{`(set! x 1 2)`, "undefined identifier: set!"},
+		{`(set! x)`, "Malformed assignment"},
+		{`(define x 1) (set! x)`, "Malformed assignment"},
+		{`(set! x . 1)`, "Malformed assignment"},
+		{`(set! x 1 2)`, "Malformed assignment"},
 	}
 	for i, c := range cases {
 		t.Logf("Test #%d", i)
 		testInputResultsInError(c.in, c.expectedErrorMessage, t)
 	}
+}
+
+func TestScopingWorks(t *testing.T) {
+	in := `
+(define a 10)
+(define foo (lambda () (set! a b)))
+((lambda (b) (foo)) 33)
+a`
+
+	testInputResultsInError(in, "undefined identifier: b", t)
 }
 
 func testInputResultsInError(in string, errorMessage string, t *testing.T) {
@@ -236,16 +247,19 @@ func TestErrorIsEvaluationErrorContainingBadPair(t *testing.T) {
 		switch ee := err.(type) {
 
 		case EvaluationError:
-			if ee.ErrorPair.Repr() != expectedErrorPairRepr {
-				t.Errorf("Expected errorPair %s but got %s", expectedErrorPairRepr, ee.ErrorPair.Repr())
+			if ee.ErrorList.Repr() != expectedErrorPairRepr {
+				t.Errorf("Expected errorPair %s but got %s", expectedErrorPairRepr, ee.ErrorList.Repr())
 			}
 
-			if _, found := parsed.PositionOf(*ee.ErrorPair); !found {
+			errorPair, ok := ee.ErrorList.(*e.Pair)
+			if !ok {
+				t.Error("Not ok to convert to *e.Pair")
+			}
+			if _, found := parsed.PositionOf(*errorPair); !found {
 				t.Error("Expected error to have a recorded position, but nothing found")
 			}
 		default:
-			t.Errorf("Did not get an EvaluationError: %T", err)
+			t.Errorf("Did not get an EvaluationError: %T(%+v)", err, err)
 		}
-
 	}
 }
