@@ -74,10 +74,6 @@ func currentScope(env *environment) *scope {
 	return (*env)[len(*env)-1]
 }
 
-func clearCurrentScope(env *environment) {
-	(*env)[len(*env)-1] = &scope{}
-}
-
 func bottomScope(env *environment) *scope {
 	return (*env)[0]
 }
