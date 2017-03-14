@@ -127,7 +127,7 @@ func TestLambdasAreMonadicFunctions(t *testing.T) {
 				t.Errorf("Given %s. Expected %s to be a Function", c.in, funExpr.Repr())
 			}
 			fun := funExpr.Fun
-			return (*fun)(c.args, false)
+			return (*fun)(c.args)
 		}
 		RegisterFuncAs("call", call, env)
 		res, _ := Evaluate(parsed.Expressions, env)

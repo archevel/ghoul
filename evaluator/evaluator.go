@@ -220,11 +220,11 @@ func lambdaContinuationFor(lambda e.List) continuation {
 		var env *environment = g.env
 		var conts *contStack = g.conts
 		if body, ok := tail(lambda); ok {
-			fun := func(args e.List, isTailCall bool) (e.Expr, error) {
+			fun := func(args e.List) (e.Expr, error) {
 				// evaluate body
 				*conts = append(*conts, sexprSeqEvalContinuationFor(body, true))
 				// bind params in new scope
-				*conts = append(*conts, prepareScope(head(lambda), args, env, isTailCall))
+				*conts = append(*conts, prepareScope(head(lambda), args, env))
 
 				return e.NIL, nil
 			}
@@ -235,7 +235,7 @@ func lambdaContinuationFor(lambda e.List) continuation {
 	}
 }
 
-func prepareScope(paramExpr e.Expr, args e.List, definitionEnv *environment, isTailCall bool) continuation {
+func prepareScope(paramExpr e.Expr, args e.List, definitionEnv *environment) continuation {
 
 	return func(ignore e.Expr, g *Ghoul) (e.Expr, error) {
 		newEnv := newEnvWithEmptyScope(definitionEnv)
@@ -304,7 +304,7 @@ func functionCallContinuationFor(callable e.List, isTailCall bool) continuation 
 				return e.NIL, NewEvaluationError("Not a procedure: "+arg.Repr(), callable)
 			}
 			proc := funExpr.Fun
-			res, err := (*proc)(argList, isTailCall)
+			res, err := (*proc)(argList)
 			return res, err
 		}
 		*conts = append(*conts, applyFunc)

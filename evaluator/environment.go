@@ -20,11 +20,7 @@ func bindFuncAtBottomAs(id e.Identifier, fun e.Function, env *environment) {
 }
 
 func RegisterFuncAs(name string, f func(e.List) (e.Expr, error), env *environment) {
-	wrapper := func(arg e.List, isTailCall bool) (e.Expr, error) {
-		return f(arg)
-	}
-
-	bindFuncAtBottomAs(e.Identifier(name), e.Function{&wrapper}, env)
+	bindFuncAtBottomAs(e.Identifier(name), e.Function{&f}, env)
 }
 
 func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
