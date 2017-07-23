@@ -19,36 +19,36 @@ const LAMBDA_SPECIAL_FORM = e.Identifier("lambda")
 const DEFINE_SPECIAL_FORM = e.Identifier("define")
 const ASSIGNMENT_SPECIAL_FORM = e.Identifier("set!")
 
-type continuation func(arg e.Expr, g *Ghoul) (e.Expr, error)
+type continuation func(arg e.Expr, ev *Evaluator) (e.Expr, error)
 type contStack []continuation
 
 func Evaluate(exprs e.Expr, env *environment) (res e.Expr, err error) {
-	ghoul := Ghoul{env, nil}
-	return ghoul.Evaluate(exprs)
+	evaluator := Evaluator{env, nil}
+	return evaluator.Evaluate(exprs)
 }
 
-type Ghoul struct {
+type Evaluator struct {
 	env   *environment
 	conts *contStack
 }
 
-func (g *Ghoul) Evaluate(exprs e.Expr) (e.Expr, error) {
+func (ev *Evaluator) Evaluate(exprs e.Expr) (e.Expr, error) {
 	if exprs == e.NIL {
 		return exprs, nil
 	}
 	listExpr := wrappNonList(exprs)
-	g.conts = &contStack{sexprSeqEvalContinuationFor(listExpr, false)}
+	ev.conts = &contStack{sexprSeqEvalContinuationFor(listExpr, false)}
 
-	return g.stepThroughContinuations()
+	return ev.stepThroughContinuations()
 }
 
-func (g *Ghoul) stepThroughContinuations() (e.Expr, error) {
+func (ev *Evaluator) stepThroughContinuations() (e.Expr, error) {
 	var ret e.Expr = e.NIL
 	var err error
 
-	for len(*g.conts) > 0 {
-		next := g.popContinuation()
-		ret, err = next(ret, g)
+	for len(*ev.conts) > 0 {
+		next := ev.popContinuation()
+		ret, err = next(ret, ev)
 
 		if err != nil {
 			return nil, err
@@ -59,36 +59,36 @@ func (g *Ghoul) stepThroughContinuations() (e.Expr, error) {
 	return ret, nil
 }
 
-func (g *Ghoul) pushContinuation(cont continuation) {
-	var conts *contStack = g.conts
+func (ev *Evaluator) pushContinuation(cont continuation) {
+	var conts *contStack = ev.conts
 	*conts = append(*conts, cont)
 }
 
-func (g *Ghoul) popContinuation() continuation {
-	next := (*g.conts)[len(*g.conts)-1]
-	*g.conts = (*g.conts)[:len(*g.conts)-1]
+func (ev *Evaluator) popContinuation() continuation {
+	next := (*ev.conts)[len(*ev.conts)-1]
+	*ev.conts = (*ev.conts)[:len(*ev.conts)-1]
 	return next
 }
 
 func sexprSeqEvalContinuationFor(exprs e.List, maybeTailCall bool) continuation {
-	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		t, ok := tail(exprs)
 		if ok && t != e.NIL {
-			g.pushContinuation(sexprSeqEvalContinuationFor(t, maybeTailCall))
+			ev.pushContinuation(sexprSeqEvalContinuationFor(t, maybeTailCall))
 		} else if !ok {
 			return nil, NewEvaluationError("Malformed expresion sequence", exprs)
 		}
 
-		g.pushContinuation(sexprEvalContinuationFor(head(exprs), exprs, maybeTailCall && t == e.NIL))
+		ev.pushContinuation(sexprEvalContinuationFor(head(exprs), exprs, maybeTailCall && t == e.NIL))
 		return e.NIL, nil
 	}
 }
 
 func sexprEvalContinuationFor(expr e.Expr, parent e.List, maybeTailCall bool) continuation {
-	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		ret, nextCont, err := chooseEvaluation(expr, parent, maybeTailCall)
 		if nextCont != nil {
-			g.pushContinuation(nextCont)
+			ev.pushContinuation(nextCont)
 		}
 
 		return ret, err
@@ -130,8 +130,8 @@ func chooseEvaluation(expr e.Expr, parent e.List, maybeTailCall bool) (ret e.Exp
 }
 
 func makeIdentificationLookupContinuationFor(ident e.Identifier, parent e.List) continuation {
-	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
-		var env *environment = g.env
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+		var env *environment = ev.env
 
 		resExpr, err := lookupIdentifier(ident, env)
 		if err != nil {
@@ -143,20 +143,20 @@ func makeIdentificationLookupContinuationFor(ident e.Identifier, parent e.List) 
 	}
 }
 func assignmentContinuationFor(assignment e.List, maybeTailCall bool) continuation {
-	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		valueExpr, val_ok := tail(assignment)
 		if !val_ok {
 			return e.NIL, NewEvaluationError("Malformed assignment", assignment)
 		}
 		nilTail, nil_ok := tail(valueExpr)
 		if val_ok && nil_ok && valueExpr != e.NIL && nilTail == e.NIL {
-			g.pushContinuation(func(value e.Expr, g *Ghoul) (e.Expr, error) {
-				var env *environment = g.env
+			ev.pushContinuation(func(value e.Expr, ev *Evaluator) (e.Expr, error) {
+				var env *environment = ev.env
 
 				ret, err := assign(head(assignment), value, env)
 				return ret, err
 			})
-			g.pushContinuation(sexprEvalContinuationFor(head(valueExpr), valueExpr, maybeTailCall))
+			ev.pushContinuation(sexprEvalContinuationFor(head(valueExpr), valueExpr, maybeTailCall))
 			return e.NIL, nil
 
 		} else {
@@ -167,7 +167,7 @@ func assignmentContinuationFor(assignment e.List, maybeTailCall bool) continuati
 }
 
 func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
-	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		if conds == e.NIL {
 			return e.NIL, nil
 		}
@@ -195,9 +195,9 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 			predExpr = e.Boolean(true)
 		}
 
-		nextPredOrConsequent := func(truthy e.Expr, g *Ghoul) (e.Expr, error) {
+		nextPredOrConsequent := func(truthy e.Expr, ev *Evaluator) (e.Expr, error) {
 			if isTruthy(truthy) {
-				g.pushContinuation(sexprEvalContinuationFor(head(consequent), conds, maybeTailCall))
+				ev.pushContinuation(sexprEvalContinuationFor(head(consequent), conds, maybeTailCall))
 				return e.NIL, nil
 			}
 
@@ -206,12 +206,12 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 				return nil, NewEvaluationError("Bad syntax: Malformed cond, expected list not pair", conds)
 			}
 
-			g.pushContinuation(conditionalContinuationFor(tailConds, maybeTailCall))
+			ev.pushContinuation(conditionalContinuationFor(tailConds, maybeTailCall))
 			return e.NIL, nil
 		}
 
-		g.pushContinuation(nextPredOrConsequent)
-		g.pushContinuation(sexprEvalContinuationFor(predExpr, alternative, false))
+		ev.pushContinuation(nextPredOrConsequent)
+		ev.pushContinuation(sexprEvalContinuationFor(predExpr, alternative, false))
 
 		return e.NIL, nil
 	}
@@ -219,14 +219,14 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 }
 
 func lambdaContinuationFor(lambda e.List) continuation {
-	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
-		var env *environment = g.env
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+		var env *environment = ev.env
 		if body, ok := tail(lambda); ok {
 			fun := func(args e.List) (e.Expr, error) {
 				// evaluate body
-				g.pushContinuation(sexprSeqEvalContinuationFor(body, true))
+				ev.pushContinuation(sexprSeqEvalContinuationFor(body, true))
 				// bind params in new scope
-				g.pushContinuation(prepareScope(head(lambda), args, env))
+				ev.pushContinuation(prepareScope(head(lambda), args, env))
 
 				return e.NIL, nil
 			}
@@ -239,7 +239,7 @@ func lambdaContinuationFor(lambda e.List) continuation {
 
 func prepareScope(paramExpr e.Expr, args e.List, definitionEnv *environment) continuation {
 
-	return func(ignore e.Expr, g *Ghoul) (e.Expr, error) {
+	return func(ignore e.Expr, ev *Evaluator) (e.Expr, error) {
 		newEnv := newEnvWithEmptyScope(definitionEnv)
 
 		paramList, ok := paramExpr.(e.List)
@@ -267,7 +267,7 @@ func prepareScope(paramExpr e.Expr, args e.List, definitionEnv *environment) con
 			return e.NIL, NewEvaluationError("Arity mismatch: too few arguments", args)
 		}
 
-		g.env = newEnv
+		ev.env = newEnv
 		return e.NIL, nil
 	}
 }
@@ -280,26 +280,26 @@ func isCall(expr e.Expr) (e.List, bool) {
 }
 
 func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuation {
-	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
-		var callEnv *environment = g.env
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+		var callEnv *environment = ev.env
 
 		if callable == e.NIL {
 			return e.NIL, NewEvaluationError("Missing procedure expression in: ()", callable)
 		}
 		if !maybeTailCall {
-			g.pushContinuation(func(arg e.Expr, g *Ghoul) (e.Expr, error) {
-				g.env = callEnv
+			ev.pushContinuation(func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+				ev.env = callEnv
 				return arg, nil
 			})
 		}
 
 		var argList e.List = e.NIL
-		collectArgs := func(arg e.Expr, g *Ghoul) (e.Expr, error) {
+		collectArgs := func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 			argList = cons(arg, argList)
 			return argList, nil
 		}
 
-		applyFunc := func(arg e.Expr, g *Ghoul) (e.Expr, error) {
+		applyFunc := func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 			funExpr, ok := arg.(e.Function)
 			if !ok {
 				return e.NIL, NewEvaluationError("Not a procedure: "+arg.Repr(), callable)
@@ -308,16 +308,16 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 			res, err := (*proc)(argList)
 			return res, err
 		}
-		g.pushContinuation(applyFunc)
+		ev.pushContinuation(applyFunc)
 
 		resolveFunc := sexprEvalContinuationFor(head(callable), callable, false)
-		g.pushContinuation(resolveFunc)
+		ev.pushContinuation(resolveFunc)
 
 		funcArgs, ok := tail(callable)
 		for ok && funcArgs != e.NIL {
 			anArg := head(funcArgs)
-			g.pushContinuation(collectArgs)
-			g.pushContinuation(sexprEvalContinuationFor(anArg, callable, false))
+			ev.pushContinuation(collectArgs)
+			ev.pushContinuation(sexprEvalContinuationFor(anArg, callable, false))
 			funcArgs, ok = tail(funcArgs)
 			if !ok {
 				return e.NIL, NewEvaluationError("Bad syntax in procedure application", funcArgs)
@@ -328,7 +328,7 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 }
 
 func defineContinuationFor(def e.List, maybeTailCall bool) continuation {
-	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		valueExpr, val_ok := tail(def)
 		if !val_ok {
 			return nil, NewEvaluationError("Bad syntax: invalid binding format", def)
@@ -342,15 +342,15 @@ func defineContinuationFor(def e.List, maybeTailCall bool) continuation {
 			return nil, NewEvaluationError("Bad syntax: multiple values in binding", def)
 		}
 
-		g.pushContinuation(bindVar(head(def)))
-		g.pushContinuation(sexprEvalContinuationFor(head(valueExpr), valueExpr, maybeTailCall))
+		ev.pushContinuation(bindVar(head(def)))
+		ev.pushContinuation(sexprEvalContinuationFor(head(valueExpr), valueExpr, maybeTailCall))
 		return e.NIL, nil
 	}
 }
 
 func bindVar(expr e.Expr) continuation {
-	return func(arg e.Expr, g *Ghoul) (e.Expr, error) {
-		var env *environment = g.env
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+		var env *environment = ev.env
 
 		res, err := bindIdentifier(expr, arg, env)
 		return res, err

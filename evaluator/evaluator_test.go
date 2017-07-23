@@ -321,7 +321,7 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 
 	env := NewEnvironment()
 	prepEnv(env)
-	ghoul := &Ghoul{env, nil}
+	ghoul := &Evaluator{env, nil}
 	var maxConts float64 = 0
 	var maxScopes float64 = 0
 	calls := 0
