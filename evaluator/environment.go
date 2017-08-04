@@ -10,8 +10,16 @@ type scope map[e.Identifier]e.Expr
 
 type environment []*scope
 
+type Registrator interface {
+	Register(string, func(e.List) (e.Expr, error))
+}
+
 func NewEnvironment() *environment {
 	return newEnvWithEmptyScope(&environment{})
+}
+
+func (env environment) Register(name string, f func(e.List) (e.Expr, error)) {
+	bindFuncAtBottomAs(e.Identifier(name), e.Function{&f}, &env)
 }
 
 func bindFuncAtBottomAs(id e.Identifier, fun e.Function, env *environment) {

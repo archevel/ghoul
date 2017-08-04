@@ -38,42 +38,42 @@ func (g ghoul) Process(exprReader io.Reader) (e.Expr, error) {
 func prepareEvaluator() *ev.Evaluator {
 	env := ev.NewEnvironment()
 
-	ev.RegisterFuncAs("eq?", func(args e.List) (e.Expr, error) {
+	env.Register("eq?", func(args e.List) (e.Expr, error) {
 		fst := args.Head()
 		t, _ := args.Tail().(e.List)
 		snd := t.Head()
 		return e.Boolean(fst.Equiv(snd)), nil
-	}, env)
+	})
 
-	ev.RegisterFuncAs("and", func(args e.List) (e.Expr, error) {
+	env.Register("and", func(args e.List) (e.Expr, error) {
 		fst := args.Head().(e.Boolean)
 		t, _ := args.Tail().(e.List)
 		snd := t.Head().(e.Boolean)
 		return e.Boolean(fst && snd), nil
-	}, env)
+	})
 
-	ev.RegisterFuncAs("<", func(args e.List) (e.Expr, error) {
+	env.Register("<", func(args e.List) (e.Expr, error) {
 		fst := args.Head().(e.Integer)
 		t, _ := args.Tail().(e.List)
 		snd := t.Head().(e.Integer)
 		return e.Boolean(fst < snd), nil
-	}, env)
+	})
 
-	ev.RegisterFuncAs("mod", func(args e.List) (e.Expr, error) {
+	env.Register("mod", func(args e.List) (e.Expr, error) {
 		fst := args.Head().(e.Integer)
 		t, _ := args.Tail().(e.List)
 		snd := t.Head().(e.Integer)
 		return e.Integer(fst % snd), nil
-	}, env)
+	})
 
-	ev.RegisterFuncAs("+", func(args e.List) (e.Expr, error) {
+	env.Register("+", func(args e.List) (e.Expr, error) {
 		fst := args.Head().(e.Integer)
 		t, _ := args.Tail().(e.List)
 		snd := t.Head().(e.Integer)
 		return e.Integer(fst + snd), nil
-	}, env)
+	})
 
-	ev.RegisterFuncAs("println", func(args e.List) (e.Expr, error) {
+	env.Register("println", func(args e.List) (e.Expr, error) {
 		fst, ok := args.Head().(e.String)
 		if ok {
 			fmt.Println(fst)
@@ -81,6 +81,6 @@ func prepareEvaluator() *ev.Evaluator {
 			fmt.Println(args.Head().Repr())
 		}
 		return e.NIL, nil
-	}, env)
+	})
 	return ev.NewEvaluator(env)
 }
