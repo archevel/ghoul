@@ -4,14 +4,6 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 )
 
-// TODO: Make error messages contain line and column of failed expression. Derived expressions should as far as possible point to their original version.
-// TODO: Use fn instead of lambda?
-// TODO: Use do instead of begin?
-// TODO: Use def instead of define?
-// TODO: Implement macros. Should they be hygenic?
-// TODO: Clean up tests into separate files with distinct areas
-// TODO: Implement an error printer
-
 const COND_SPECIAL_FORM = e.Identifier("cond")
 const ELSE_SPECIAL_FORM = e.Identifier("else")
 const BEGIN_SPECIAL_FORM = e.Identifier("begin")
