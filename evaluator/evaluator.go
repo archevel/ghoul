@@ -27,6 +27,10 @@ func Evaluate(exprs e.Expr, env *environment) (res e.Expr, err error) {
 	return evaluator.Evaluate(exprs)
 }
 
+func NewEvaluator(env *environment) *Evaluator {
+	return &Evaluator{env, nil}
+}
+
 type Evaluator struct {
 	env   *environment
 	conts *contStack

@@ -1,7 +1,6 @@
 package evaluator
 
 import (
-	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -320,17 +319,31 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 	_, parsed := p.Parse(r)
 
 	env := NewEnvironment()
-	prepEnv(env)
 	ghoul := &Evaluator{env, nil}
 	var maxConts float64 = 0
 	var maxScopes float64 = 0
 	calls := 0
+
 	RegisterFuncAs("checkSize", func(args e.List) (e.Expr, error) {
 		calls++
 
 		maxConts = math.Max(float64(len(*((*ghoul).conts))), maxConts)
 		maxScopes = math.Max(float64(len(*((*ghoul).env))), maxScopes)
 		return head(args), nil
+	}, env)
+
+	RegisterFuncAs("eq?", func(args e.List) (e.Expr, error) {
+		fst := head(args)
+		t, _ := tail(args)
+		snd := head(t)
+		return e.Boolean(fst.Equiv(snd)), nil
+	}, env)
+
+	RegisterFuncAs("+", func(args e.List) (e.Expr, error) {
+		fst := head(args).(e.Integer)
+		t, _ := tail(args)
+		snd := head(t).(e.Integer)
+		return e.Integer(fst + snd), nil
 	}, env)
 
 	res, err := ghoul.Evaluate(parsed.Expressions)
@@ -375,95 +388,4 @@ func testInputGivesOutputWithinEnv(in string, out e.Expr, env *environment, t *t
 	} else if !out.Equiv(res) {
 		t.Errorf("Given %s. Expected %s to be equivalent to %s", in, res.Repr(), out.Repr())
 	}
-}
-
-const guidingScript = `
-(define fiz-buz (lambda (n)
-  (cond ((and (eq? 0 (mod n 3)) (eq? 0 (mod n 5))) "FizzBuzz")
-        ((eq? 0 (mod n 3)) "Fizz")
-        ((eq? 0 (mod n 5)) "Buzz")
-        (else n))))
-
-(define loop (lambda (i m body)
-  (cond ((< i m)
-    (begin (body i) (loop (+ 1 i) m body))))))
-
-
-(define do-fizz-buzz-to (lambda (n) 
-  (loop 0 (+ 1 n) 
-    (lambda (i) 
-      (println (fiz-buz i))))))
-
-(do-fizz-buzz-to 10)
-`
-
-//func TestGuiding(t *testing.T) {
-func ExampleGuiding() {
-	env := NewEnvironment()
-	prepEnv(env)
-	r := strings.NewReader(guidingScript)
-	_, parsed := p.Parse(r)
-	Evaluate(parsed.Expressions, env)
-
-	// Output:
-	// FizzBuzz
-	// 1
-	// 2
-	// Fizz
-	// 4
-	// Buzz
-	// Fizz
-	// 7
-	// 8
-	// Fizz
-	// Buzz
-
-}
-
-func prepEnv(env *environment) {
-
-	RegisterFuncAs("eq?", func(args e.List) (e.Expr, error) {
-		fst := head(args)
-		t, _ := tail(args)
-		snd := head(t)
-		return e.Boolean(fst.Equiv(snd)), nil
-	}, env)
-
-	RegisterFuncAs("and", func(args e.List) (e.Expr, error) {
-		fst := head(args).(e.Boolean)
-		t, _ := tail(args)
-		snd := head(t).(e.Boolean)
-		return e.Boolean(fst && snd), nil
-	}, env)
-
-	RegisterFuncAs("<", func(args e.List) (e.Expr, error) {
-		fst := head(args).(e.Integer)
-		t, _ := tail(args)
-		snd := head(t).(e.Integer)
-		return e.Boolean(fst < snd), nil
-	}, env)
-
-	RegisterFuncAs("mod", func(args e.List) (e.Expr, error) {
-		fst := head(args).(e.Integer)
-		t, _ := tail(args)
-		snd := head(t).(e.Integer)
-		return e.Integer(fst % snd), nil
-	}, env)
-
-	RegisterFuncAs("+", func(args e.List) (e.Expr, error) {
-		fst := head(args).(e.Integer)
-		t, _ := tail(args)
-		snd := head(t).(e.Integer)
-		return e.Integer(fst + snd), nil
-	}, env)
-
-	RegisterFuncAs("println", func(args e.List) (e.Expr, error) {
-		fst, ok := head(args).(e.String)
-		if ok {
-			fmt.Println(fst)
-		} else {
-			fmt.Println(head(args).Repr())
-		}
-		return e.NIL, nil
-	}, env)
 }
