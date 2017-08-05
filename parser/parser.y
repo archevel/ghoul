@@ -27,6 +27,7 @@ import (
 %token FLOAT
 %token TRUE
 %token FALSE
+%token HASHBANG
 %token STRING
 %token BEG_LIST
 %token END_LIST
@@ -35,6 +36,9 @@ import (
 progr: sexpr
      { l := yylex.(*schemeLexer)
        l.lpair = $1.expr.(e.List) }
+    | HASHBANG sexpr
+     { l := yylex.(*schemeLexer)
+       l.lpair = $2.expr.(e.List) }
 ;
 sexpr:
      { $$.expr = e.NIL}

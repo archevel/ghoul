@@ -5,12 +5,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	e "github.com/archevel/ghoul/expressions"
 	"io"
 	"strconv"
 	"strings"
 	sc "text/scanner"
 	"unicode"
+
+	e "github.com/archevel/ghoul/expressions"
 )
 
 var ErrNewLineInString = errors.New("New line in string")
@@ -95,9 +96,10 @@ func (l schemeLexer) Lex(lval *yySymType) int {
 				second := data[1]
 				if second == 't' {
 					return TRUE
-				}
-				if second == 'f' {
+				} else if second == 'f' {
 					return FALSE
+				} else if second == '!' {
+					return HASHBANG
 				}
 			} else {
 				lval.tok = l.scanner.Text()
@@ -218,7 +220,7 @@ func isSpace(chr byte) bool {
 	return unicode.IsSpace(rune(chr))
 }
 
-func readLineComment(data []byte, munched int) (int, []byte, error) {
+func readToNewLine(data []byte, munched int) (int, []byte, error) {
 	for i := 1 + munched; i < len(data); i++ {
 		if data[i] == '\n' {
 			return i, data[munched:i], nil
@@ -275,7 +277,7 @@ func makePositionAwareSplitter(pos *Position) func([]byte, bool) (int, []byte, e
 			first := data[munched]
 
 			if first == ';' {
-				return readLineComment(data, munched)
+				return readToNewLine(data, munched)
 			}
 
 			if first == '"' {
@@ -289,6 +291,9 @@ func makePositionAwareSplitter(pos *Position) func([]byte, bool) (int, []byte, e
 			}
 			if first == '#' && munched+1 < len(data) {
 				second := data[munched+1]
+				if second == '!' {
+					readToNewLine(data, munched)
+				}
 				if second == 't' || second == 'f' {
 					return 2 + munched, data[munched : munched+2], nil
 				}

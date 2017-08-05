@@ -2,10 +2,11 @@ package parser
 
 import (
 	"fmt"
-	e "github.com/archevel/ghoul/expressions"
 	"math"
 	"strings"
 	"testing"
+
+	e "github.com/archevel/ghoul/expressions"
 )
 
 func TestParseInteger(t *testing.T) {
@@ -306,7 +307,7 @@ func TestParseTwoSymbols(t *testing.T) {
 		res, parsed := Parse(r)
 		lp := parsed.Expressions
 		if res != 0 {
-			t.Fatal("Parser failed to parse \"%s\"", c.in)
+			t.Fatalf("Parser failed to parse \"%s\"", c.in)
 		}
 
 		actual := lp
@@ -316,6 +317,38 @@ func TestParseTwoSymbols(t *testing.T) {
 		}
 
 	}
+}
+
+func TestParseIgnoresInitialHashbangLine(t *testing.T) {
+	cases := []struct {
+		in  string
+		out e.Expr
+	}{
+		{"#!/usr/bin/ghoul", e.NIL},
+		{"#!/usr/bin/ghoul\n", e.NIL},
+		{"\n#!/usr/bin/ghoul\n", e.NIL},
+		{";; foo bar \n#!/usr/bin/ghoul\n", e.NIL},
+		{"#!/usr/bin/ghoul\n77", e.Pair{e.Integer(77), e.NIL}},
+		{"\n#!/usr/bin/ghoul\n`foo`", e.Pair{e.String("foo"), e.NIL}},
+		{";; foo bar \n#!/usr/bin/ghoul\n(bar)", e.Pair{e.Pair{e.Identifier("bar"), e.NIL}, e.NIL}},
+	}
+
+	for _, c := range cases {
+		r := strings.NewReader(c.in)
+		res, parsed := Parse(r)
+		lp := parsed.Expressions
+		if res != 0 {
+			t.Fatalf("Parser failed to parse \"%s\"", c.in)
+		}
+
+		actual := lp
+
+		if !actual.Equiv(c.out) {
+			t.Errorf("Expected output |%v| to be equivalent to |%v|, but it was not", actual.Repr(), c.out.Repr())
+		}
+
+	}
+
 }
 
 func TestParserRegistersPositionOfPairs(t *testing.T) {
