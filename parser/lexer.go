@@ -90,7 +90,12 @@ func (l schemeLexer) Lex(lval *yySymType) int {
 		case '\'':
 			return QUOTE
 		case '.':
-			return DOT
+			if len(data) == 1 {
+				return DOT
+			} else {
+				lval.tok = l.scanner.Text()
+				return IDENTIFIER
+			}
 		case '#':
 			if len(data) > 1 {
 				second := data[1]
@@ -298,7 +303,6 @@ func makePositionAwareSplitter(pos *Position) func([]byte, bool) (int, []byte, e
 					return 2 + munched, data[munched : munched+2], nil
 				}
 			}
-
 			return readValue(data, munched)
 		}
 

@@ -69,10 +69,10 @@ value:
      { $$.expr = e.String(strings.Trim($1.tok, "\"`")) }
      | BEG_LIST value sexpr DOT value END_LIST
      { 
-	p := &e.Pair{$2.expr, $3.expr}
-	$$.expr = setLastTail(p, $5.expr) 
-	l := yylex.(*schemeLexer)
-	l.SetPairSrcPosition(p, Position{$2.row, $2.col})
+       p := &e.Pair{$2.expr, $3.expr}
+       $$.expr = setLastTail(p, $5.expr)
+	   l := yylex.(*schemeLexer)
+	   l.SetPairSrcPosition(p, Position{$2.row, $2.col})
      }
      | BEG_LIST sexpr END_LIST
      { $$.expr = $2.expr }
@@ -98,7 +98,7 @@ func Parse(r io.Reader) (int, *ParsedExpressions) {
 func setLastTail(p *e.Pair, newEnd e.Expr) *e.Pair {
 	lastPair := p
 	for lastPair.Tail() != e.NIL {
-		lastPair = p.Tail().(*e.Pair)
+		lastPair = lastPair.Tail().(*e.Pair)
 	}
 
 	lastPair.T = newEnd

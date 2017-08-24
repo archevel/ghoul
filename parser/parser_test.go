@@ -175,6 +175,30 @@ func TestParseSpecialIdentifiers(t *testing.T) {
 
 }
 
+func TestParseElipsis(t *testing.T) {
+	cases := []struct {
+		in  string
+		out e.Expr
+	}{
+		{"(a ...)", e.Pair{e.Identifier("a"), e.Pair{e.Identifier("..."), e.NIL}}},
+		{"(a ... b)", e.Pair{e.Identifier("a"), e.Pair{e.Identifier("..."), e.Pair{e.Identifier("b"), e.NIL}}}},
+		{"(a c ... b)", e.Pair{e.Identifier("a"), e.Pair{e.Identifier("c"), e.Pair{e.Identifier("..."), e.Pair{e.Identifier("b"), e.NIL}}}}},
+	}
+
+	for _, c := range cases {
+		res, parsed := Parse(strings.NewReader(c.in))
+		lp := parsed.Expressions
+		if res != 0 {
+			t.Errorf("Parser failed to parse \"%s\"", c)
+		}
+
+		if !c.out.Equiv(lp.Head()) {
+			t.Errorf("Could not parse elipsis. Expected %s, but got %s", c.out.Repr(), lp.Head().Repr())
+		}
+
+	}
+}
+
 func TestParseQuotedSpecialIdentifiers(t *testing.T) {
 
 	cases := strings.Split(SPECIAL_IDENTIFIERS, "")
@@ -270,6 +294,7 @@ func TestParsePairs(t *testing.T) {
 		{"(`bar` . `foo`)", &e.Pair{e.String("bar"), e.String("foo")}},
 		{"(1 . #f)", &e.Pair{e.Integer(1), e.Boolean(false)}},
 		{"(1 2 . #f)", &e.Pair{e.Integer(1), &e.Pair{e.Integer(2), e.Boolean(false)}}},
+		{"(a b c . d)", &e.Pair{e.Identifier("a"), &e.Pair{e.Identifier("b"), &e.Pair{e.Identifier("c"), e.Identifier("d")}}}},
 	}
 
 	for _, c := range cases {
