@@ -12,11 +12,14 @@ type Macro struct {
 }
 
 func (m Macro) Matches(expr e.Expr) (bool, bindings) {
-	toMatch, macroArgs := identifierAndArgs(m.Pattern)
+	macId, macPat := idAndRest(m.Pattern)
+	codeId, code := idAndRest(expr)
+	if macId.Equiv(codeId) {
+		if macPat == nil && code == nil {
+			return true, bindings{}
 
-	candidate, codeArgs := identifierAndArgs(expr)
-	if candidate.Equiv(toMatch) && argsSeemOk(macroArgs, codeArgs) {
-		return true, zipArgs(macroArgs, codeArgs)
+		}
+		return matchWalk(macPat, code, bindings{}, false)
 	}
 	return false, nil
 }
@@ -46,31 +49,106 @@ func walkAndReplace(toWalk e.Expr, bound bindings) e.Expr {
 	return toWalk
 }
 
-func identifierAndArgs(expr e.Expr) (e.Expr, []e.Expr) {
-	identifier := expr
-	var argExprs []e.Expr = nil
-	if list, ok := expr.(e.List); ok {
-		identifier = list.Head()
-		argExprs = []e.Expr{}
-		list = list.Tail().(e.List)
+func matchWalk(macro e.Expr, code e.Expr, bound bindings, hasElispsis bool) (bool, bindings) {
+	if id, ok := macro.(e.Identifier); ok {
+		bound[id] = code
+		return true, bound
+	}
 
-		for ; ok && list != e.NIL; list, ok = list.Tail().(e.List) {
-			argExprs = append(argExprs, list.Head())
+	if macroList, macroOk := macro.(e.List); macroOk {
+		codeList, codeOk := code.(e.List)
+		if codeOk {
+
+			if macroList == e.NIL && codeList == e.NIL {
+				return true, bound
+			}
+			macroLength, _ := listLength(macroList)
+			if macroList == e.NIL || (codeList == e.NIL && (!hasElispsis || macroLength > 1)) {
+				return false, nil
+			}
+
+			macHead := macroList.Head()
+			if id, ok := macHead.(e.Identifier); ok && id.Equiv(e.Identifier("...")) {
+				if macroList.Tail() == e.NIL {
+					return matchWalk(macHead, codeList, bound, true)
+				}
+				followingPatternCount := macroLength - 1
+				bindToMacHead, rest := splitListAt(followingPatternCount, codeList)
+				headMatch, bound := matchWalk(macHead, bindToMacHead, bound, true)
+				if headMatch {
+					return matchWalk(macroList.Tail(), rest, bound, true)
+				}
+			} else {
+
+				headMatch, bound := matchWalk(macHead, codeList.Head(), bound, hasElispsis)
+				if headMatch {
+					return matchWalk(macroList.Tail(), codeList.Tail(), bound, hasElispsis)
+				}
+			}
+		} else {
+			if macroList != e.NIL && macroList.Tail() == e.NIL {
+				return matchWalk(macroList.Head(), code, bound, hasElispsis)
+			}
+			if macroList.Head().Equiv(e.Identifier("...")) {
+				bound[macroList.Head().(e.Identifier)] = e.NIL
+				if macroList != e.NIL {
+					return matchWalk(macroList.Tail(), code, bound, hasElispsis)
+				}
+			}
+
 		}
 	}
-
-	return identifier, argExprs
+	return false, nil
 }
 
-func zipArgs(macroArgs []e.Expr, codeArgs []e.Expr) bindings {
-	bindings := bindings{}
-	for i, mArg := range macroArgs {
-		identifier := mArg.(e.Identifier)
-		bindings[identifier] = codeArgs[i]
+func idAndRest(expr e.Expr) (e.Identifier, e.Expr) {
+	identifier := expr
+	if list, ok := expr.(e.List); ok {
+		identifier = list.Head().(e.Identifier)
+		return identifier.(e.Identifier), list.Tail()
+
 	}
-	return bindings
+	return identifier.(e.Identifier), nil
+}
+func splitListAt(count int, codeList e.List) (e.Expr, e.Expr) {
+
+	firstN := codeList
+	splitPoint := firstN
+	var rest e.Expr
+	ok := false
+	for i := 0; i < count-1; i++ {
+		if sp, ok := splitPoint.Tail().(e.List); ok {
+			splitPoint = sp
+		} else {
+			break
+		}
+
+	}
+
+	rest, ok = splitPoint.Tail().(e.List)
+	if (rest == e.NIL || !ok) && count > 1 {
+		return e.NIL, codeList
+	}
+
+	if splitPoint != e.NIL && (ok || count == 1) {
+		rest = splitPoint.Tail()
+		splitPoint.(*e.Pair).T = e.NIL
+	} else {
+		rest = e.NIL
+	}
+
+	return firstN, rest
 }
 
-func argsSeemOk(macroArgs []e.Expr, codeArgs []e.Expr) bool {
-	return (macroArgs == nil && codeArgs == nil) || (macroArgs != nil && codeArgs != nil && len(macroArgs) == len(codeArgs))
+func listLength(list e.List) (int, bool) {
+	count := 0
+	ok := false
+	for list != e.NIL {
+		count = count + 1
+		list, ok = list.Tail().(e.List)
+		if !ok {
+			return count + 1, false
+		}
+	}
+	return count, true
 }
