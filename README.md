@@ -19,11 +19,17 @@ TODO: Write "wraith" - tool for wrapping Go code for Ghoul use
 TODO: Wrap Golang standard library so it is callable from ghoul  
 TODO: Implement module system so that code can be included when required (as opposed to including it all upfront).  
 TODO: Make error messages contain line and column of failed expression. Derived expressions should as far as possible point to their original version.  
-TODO: Use fn instead of lambda?  
-TODO: Use do instead of begin?  
-TODO: Use def instead of define?  
+TODO: Use `fn` instead of `lambda`?  
+TODO: Use `do` instead of `begin`?  
+TODO: Use `def` instead of `define`?  
 TODO: Implement macros in the macromancy pakage!  
 TODO: Clean up tests into separate files with distinct areas  
 TODO: Implement an error printer  
-
+TODO: Make `Pair` struct private and replace usages with a `Cons(Expr, Expr)` function returning a `*pair`.  
+TODO: Make `List.Tail()` return `(List, bool)` and move usages of `tail()` to that  
+TODO: Make `Pair` interface have a `First() Expr` and `Second() Expr` method.  
+TODO: Replace `cond` with `match` keyword and have it use pattern matching  
+TODO: Implement support for multiple elipsis in macro matching and in expansion bodies.  
+TODO: Ensure macros propagate source location to expanded code  
+TODO: Implement a symbol table and use integers instead of strings to compare/find the right values  
 
