@@ -46,6 +46,38 @@ func TestMacrosCanMatchAnExpression(t *testing.T) {
 	}
 }
 
+func TestMacrosCanPatternMatch(t *testing.T) {
+	cases := []struct {
+		in      string
+		pattern string
+	}{
+		{"(numbers 1 1)", "(numbers x x)"},
+		{"(numbers 1 (a b 1))", "(numbers x (... x))"},
+		{"(numbers 1.5 1.5 1.5)", "(numbers x 1.5 x)"},
+		{"(numbers 1.5 'a 1.5)", "(numbers x 'a x)"},
+		{"(numbers 1.5 '(a 1.5) 1.5)", "(numbers x '(a 1.5) x)"},
+	}
+	for _, c := range cases {
+		patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
+		if patternOk != 0 {
+			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
+		}
+
+		macro := Macro{pattern.Expressions.Head(), nil}
+
+		codeOk, code := parser.Parse(strings.NewReader(c.in))
+
+		if codeOk != 0 {
+			t.Fatal("Parsing code failed")
+		}
+
+		if ok, _ := macro.Matches(code.Expressions.Head()); !ok {
+			t.Errorf(`Macro %s did not match %s`, c.pattern, c.in)
+		}
+
+	}
+}
+
 func TestMacrosBindCorrectlyCommonPatterns(t *testing.T) {
 	cases := []struct {
 		in               string
@@ -106,6 +138,7 @@ func TestMacrosBindCorrectlyCommonPatterns(t *testing.T) {
 			e.Identifier("z"): e.Integer(3),
 			e.Identifier("å"): e.NIL,
 		}},
+
 		{"(define (love foo za ba) foo bar 1)", "(define (f . a_1) . a_2)", bindings{
 			e.Identifier("f"):   e.Identifier("love"),
 			e.Identifier("a_1"): e.Pair{e.Identifier("foo"), e.Pair{e.Identifier("za"), e.Pair{e.Identifier("ba"), e.NIL}}},
@@ -114,40 +147,7 @@ func TestMacrosBindCorrectlyCommonPatterns(t *testing.T) {
 	}
 
 	for _, c := range cases {
-
-		patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
-		if patternOk != 0 {
-			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
-		}
-
-		macro := Macro{pattern.Expressions.Head(), nil}
-
-		parseOk, parseRes := parser.Parse(strings.NewReader(c.in))
-
-		if parseOk != 0 {
-			t.Fatal("Parsing code failed")
-		}
-		_, bindings := macro.Matches(parseRes.Expressions.Head())
-		if len(bindings) != len(c.expectedBindings) {
-			t.Errorf(`Macro %s did not bind corretly for %s. Expected %d bindings got %d`,
-				c.pattern, c.in, len(c.expectedBindings), len(bindings))
-		}
-
-		for k, expectedValue := range c.expectedBindings {
-			value := bindings[k]
-			if value == nil {
-				t.Errorf("Expected value %s for key %s in %s using %s, but got nil!", expectedValue.Repr(), k)
-			} else if !expectedValue.Equiv(value) {
-				t.Errorf("Expected value %s for key %s in %s using %s in bindings, got %s",
-					expectedValue.Repr(), k.Repr(), c.in, c.pattern, value.Repr())
-			}
-		}
-
-		for k, value := range bindings {
-			if !value.Equiv(c.expectedBindings[k]) {
-				t.Errorf("Found value %s for key %s in macro bindings that is not present in the expected bindings", value.Repr(), k)
-			}
-		}
+		runBindingTest(t, c.in, c.pattern, c.expectedBindings)
 	}
 }
 
@@ -169,6 +169,12 @@ func TestMacrosBindCorrectlyWithElipsisPattern(t *testing.T) {
 		}},
 
 		// tail bindings
+		{"(numbers 1 2 3)", "(numbers x z ... y)", bindings{
+			e.Identifier("x"):   e.Integer(1),
+			e.Identifier("..."): e.NIL,
+			e.Identifier("z"):   e.Integer(2),
+			e.Identifier("y"):   e.Integer(3),
+		}},
 		{"(numbers 1 2 3)", "(numbers x ... y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
 			e.Identifier("..."): e.Pair{e.Integer(2), e.NIL},
@@ -179,12 +185,6 @@ func TestMacrosBindCorrectlyWithElipsisPattern(t *testing.T) {
 			e.Identifier("..."): e.NIL,
 			e.Identifier("z"):   e.Integer(2),
 			e.Identifier("y"):   e.Integer(3),
-		}},
-		{"(numbers 1 2 3)", "(numbers x z ... y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Pair{e.Integer(3), e.NIL},
-			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.NIL,
 		}},
 
 		// tail bindings with pair code
@@ -221,9 +221,9 @@ func TestMacrosBindCorrectlyWithElipsisPattern(t *testing.T) {
 		}},
 		{"(numbers 1 2 3)", "(numbers x z ... . y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Pair{e.Integer(3), e.NIL},
+			e.Identifier("..."): e.NIL,
 			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.NIL,
+			e.Identifier("y"):   e.Pair{e.Integer(3), e.NIL},
 		}},
 
 		// final is dot patterns and code has dot too
@@ -243,45 +243,32 @@ func TestMacrosBindCorrectlyWithElipsisPattern(t *testing.T) {
 			e.Identifier("..."): e.NIL,
 			e.Identifier("z"):   e.Integer(2),
 			e.Identifier("y"):   e.Integer(3),
-		}}, /**/
+		}},
 
+		// more complex patterns
+		{"(numbers 1 2 4 . 3)", "(numbers x z ... . y)", bindings{
+			e.Identifier("x"):   e.Integer(1),
+			e.Identifier("..."): e.Pair{e.Integer(4), e.NIL},
+			e.Identifier("z"):   e.Integer(2),
+			e.Identifier("y"):   e.Integer(3),
+		}},
+		{"(numbers 1 (2 4) 5 . 3)", "(numbers x z ... . y)", bindings{
+			e.Identifier("x"):   e.Integer(1),
+			e.Identifier("..."): e.Pair{e.Integer(5), e.NIL},
+			e.Identifier("z"):   e.Pair{e.Integer(2), e.Pair{e.Integer(4), e.NIL}},
+			e.Identifier("y"):   e.Integer(3),
+		}},
+		{"(numbers 1 (2 4) 5 . 3)", "(numbers x (a  b) ... . y)", bindings{
+			e.Identifier("x"):   e.Integer(1),
+			e.Identifier("..."): e.Pair{e.Integer(5), e.NIL},
+			e.Identifier("a"):   e.Integer(2),
+			e.Identifier("b"):   e.Integer(4),
+			e.Identifier("y"):   e.Integer(3),
+		}},
 	}
 
 	for _, c := range cases {
-
-		patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
-		if patternOk != 0 {
-			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
-		}
-
-		macro := Macro{pattern.Expressions.Head(), nil}
-
-		parseOk, parseRes := parser.Parse(strings.NewReader(c.in))
-
-		if parseOk != 0 {
-			t.Fatalf("Parsing code %s failed", c.in)
-		}
-		_, bindings := macro.Matches(parseRes.Expressions.Head())
-		if len(bindings) != len(c.expectedBindings) {
-			t.Errorf(`Macro %s did not bind corretly for %s. Expected %d bindings got %d`,
-				c.pattern, c.in, len(c.expectedBindings), len(bindings))
-		}
-
-		for k, expectedValue := range c.expectedBindings {
-			value := bindings[k]
-			if value == nil {
-				t.Errorf("Expected value %s for key %s in %s using %s, but got nil!", expectedValue.Repr(), k)
-			} else if !expectedValue.Equiv(value) {
-				t.Errorf("Expected value %s for key %s in %s using %s in bindings, got %s",
-					expectedValue.Repr(), k.Repr(), c.in, c.pattern, value.Repr())
-			}
-		}
-
-		for k, value := range bindings {
-			if !value.Equiv(c.expectedBindings[k]) {
-				t.Errorf("Found value %s for key %s in macro bindings that is not present in the expected bindings", value.Repr(), k)
-			}
-		}
+		runBindingTest(t, c.in, c.pattern, c.expectedBindings)
 	}
 }
 
@@ -297,6 +284,7 @@ func TestMacrosDoesNotMatchNonMatchingPatterns(t *testing.T) {
 		{"(zoom 1 (love 'foo))", "(zoom x (zoomer))"},
 		{"(numbers 1 2 . 3)", "(numbers x y z . å)"},
 		{"(define (love foo za ba) foo bar 1)", "(define (f . a_1) a_2)"},
+		{"(numbers 1 2)", "(numbers x x)"},
 	}
 
 	for _, c := range cases {
@@ -373,20 +361,6 @@ func ExampleSwapMacro() {
 	// (let ((tmp foo)) (set! foo bar) (set! bar tmp))
 }
 
-type DefineMacro struct{}
-
-func (m DefineMacro) Transform(expr e.Expr) (e.Expr, error) {
-	list := expr.(e.List)
-	define := list.Head()
-	list = list.Tail().(e.List)
-	idAndArgs := list.Head().(e.List)
-	id := idAndArgs.Head()
-	args := idAndArgs.Tail()
-	body := list.Tail()
-
-	return e.Pair{define, e.Pair{id, e.Pair{e.Pair{e.Identifier("lambda"), e.Pair{args, body}}, e.NIL}}}, nil
-}
-
 func TestMacroTransform(t *testing.T) {
 	cases := []struct {
 		in      string
@@ -433,5 +407,41 @@ func TestMacroTransform(t *testing.T) {
 			t.Errorf("Expansion of %s did not give expected result %s, instead got %+v", c.in, c.out, res.Repr())
 		}
 	}
+}
 
+func runBindingTest(t *testing.T, in string, patternStr string, bound bindings) {
+
+	patternOk, pattern := parser.Parse(strings.NewReader(patternStr))
+	if patternOk != 0 {
+		t.Fatalf("Parsing pattern '%s' failed", pattern)
+	}
+
+	macro := Macro{pattern.Expressions.Head(), nil}
+
+	parseOk, parseRes := parser.Parse(strings.NewReader(in))
+
+	if parseOk != 0 {
+		t.Fatalf("Parsing code %s failed", in)
+	}
+	_, bindings := macro.Matches(parseRes.Expressions.Head())
+	if len(bindings) != len(bound) {
+		t.Errorf(`Macro %s did not bind corretly for %s. Expected %d bindings got %d`,
+			patternStr, in, len(bound), len(bindings))
+	}
+
+	for k, expectedValue := range bound {
+		value := bindings[k]
+		if value == nil {
+			t.Errorf("Expected value %s for key %s in %s using %s, but got nil!", expectedValue.Repr(), k)
+		} else if !expectedValue.Equiv(value) {
+			t.Errorf("Expected value %s for key %s in %s using %s in bindings, got %s",
+				expectedValue.Repr(), k.Repr(), in, patternStr, value.Repr())
+		}
+	}
+
+	for k, value := range bindings {
+		if !value.Equiv(bound[k]) {
+			t.Errorf("Found value %s for key %s in macro bindings that is not present in the expected bindings", value.Repr(), k)
+		}
+	}
 }
