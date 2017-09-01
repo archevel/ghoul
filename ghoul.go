@@ -6,6 +6,7 @@ import (
 
 	ev "github.com/archevel/ghoul/evaluator"
 	e "github.com/archevel/ghoul/expressions"
+	m "github.com/archevel/ghoul/macromancy"
 	parser "github.com/archevel/ghoul/parser"
 )
 
@@ -15,12 +16,13 @@ type Ghoul interface {
 
 func NewGhoul() Ghoul {
 	evaluator := prepareEvaluator()
-	return ghoul{evaluator, nil}
+	mancer := m.NewMacromancer()
+	return ghoul{evaluator, mancer}
 }
 
 type ghoul struct {
-	evaluator *ev.Evaluator
-	parsed    *parser.ParsedExpressions
+	evaluator   *ev.Evaluator
+	macromancer *m.Macromancer
 }
 
 func (g ghoul) Process(exprReader io.Reader) (e.Expr, error) {
@@ -29,8 +31,8 @@ func (g ghoul) Process(exprReader io.Reader) (e.Expr, error) {
 		return nil, fmt.Errorf("Failed to parse code")
 	}
 
-	g.parsed = parsed
-	result, err := g.evaluator.Evaluate(g.parsed.Expressions)
+	manced := g.macromancer.Transform(parsed.Expressions)
+	result, err := g.evaluator.Evaluate(manced)
 
 	return result, err
 }

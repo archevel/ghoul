@@ -16,7 +16,10 @@ func NewMacromancer() *Macromancer {
 	return &Macromancer{}
 }
 
-func (m Macromancer) Transform(inList e.List) e.Expr {
+func (m *Macromancer) Groups() []*MacroGroup {
+	return m.macroGroups
+}
+func (m *Macromancer) Transform(inList e.List) e.Expr {
 	return m.transform(inList)
 }
 

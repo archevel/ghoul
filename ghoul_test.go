@@ -59,11 +59,26 @@ func TestFailsOnUnparsableCode(t *testing.T) {
 
 func TestYieldsEvaluationErrorWhenThereIsAnErrror(t *testing.T) {
 	g := NewGhoul()
-
-	_, err := g.Process(strings.NewReader("(baz 1 2 3)"))
+	in := "(baz 1 2 3)"
+	_, err := g.Process(strings.NewReader(in))
 
 	if err == nil {
-		t.Error("Got nil for error when parsing ')'")
+		t.Error("Got nil for error when processing '%s'", in)
+	}
+}
+
+func TestExpandsMacrosBeforeEvaluating(t *testing.T) {
+	g := NewGhoul()
+	in := "(define-syntax baz (syntax-rules () (((baz x y) (+ x y))))) (baz 1 2)"
+	expected := e.Integer(3)
+	res, err := g.Process(strings.NewReader(in))
+
+	if err != nil {
+		t.Errorf("Got an error '%s' when processing '%s'", err, in)
+	}
+
+	if !expected.Equiv(res) {
+		t.Errorf("Got %s, expected %s when evaluating '%s'", res.Repr(), expected.Repr(), in)
 	}
 }
 
