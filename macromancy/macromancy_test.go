@@ -75,6 +75,17 @@ func TestMacromancerCanExpandToNewMacro(t *testing.T) {
 
 	runMacroTest(t, code, expected)
 }
+func TestMacromancerMacroAlteringMacrosWork(t *testing.T) {
+	code := `(define-syntax define-syntax 
+  (syntax-rules () (((define-syntax (x . pat ) . bdy) (define-syntax x (syntax-rules () (((x . pat) bdy))))))))
+
+(define-syntax (foo bar) biz bar laa)
+
+(foo alpha)
+`
+	expected := `(biz alpha laa)`
+	runMacroTest(t, code, expected)
+}
 
 func runMacroTest(t *testing.T, code string, expected string) {
 	ok, parsedCode := parser.Parse(strings.NewReader(code))
