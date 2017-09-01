@@ -53,8 +53,8 @@ func TestBuildMacroGroupFromCode(t *testing.T) {
 		{`(define-syntax foo (syntax-rules () (((foo fiz 1) (fiz foo)) (foo bar)) ))`, "foo",
 			[]Macro{
 				Macro{
-					e.Pair{e.Identifier("foo"), e.Pair{e.Identifier("fiz"), e.Pair{e.Integer(1), e.NIL}}},
-					e.Pair{e.Identifier("fiz"), e.Pair{e.Identifier("foo"), e.NIL}},
+					e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("fiz"), e.Cons(e.Integer(1), e.NIL))),
+					e.Cons(e.Identifier("fiz"), e.Cons(e.Identifier("foo"), e.NIL)),
 				},
 				Macro{e.Identifier("foo"), e.Identifier("bar")},
 			},

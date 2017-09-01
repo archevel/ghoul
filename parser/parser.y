@@ -44,10 +44,10 @@ sexpr:
      { $$.expr = e.NIL}
      | value sexpr
      {
-         pair := &e.Pair{$1.expr, $2.expr}
-         $$.expr = pair
-	 l := yylex.(*schemeLexer)
-	 l.SetPairSrcPosition(pair, Position{$1.row, $1.col})
+       pair := e.Cons($1.expr, $2.expr)
+       $$.expr = pair
+	   l := yylex.(*schemeLexer)
+	   l.SetPairSrcPosition(pair, Position{$1.row, $1.col})
      }
 ;
 value:
@@ -69,7 +69,7 @@ value:
      { $$.expr = e.String(strings.Trim($1.tok, "\"`")) }
      | BEG_LIST value sexpr DOT value END_LIST
      { 
-       p := &e.Pair{$2.expr, $3.expr}
+       p := e.Cons($2.expr, $3.expr)
        $$.expr = setLastTail(p, $5.expr)
 	   l := yylex.(*schemeLexer)
 	   l.SetPairSrcPosition(p, Position{$2.row, $2.col})

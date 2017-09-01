@@ -180,9 +180,9 @@ func TestParseElipsis(t *testing.T) {
 		in  string
 		out e.Expr
 	}{
-		{"(a ...)", e.Pair{e.Identifier("a"), e.Pair{e.Identifier("..."), e.NIL}}},
-		{"(a ... b)", e.Pair{e.Identifier("a"), e.Pair{e.Identifier("..."), e.Pair{e.Identifier("b"), e.NIL}}}},
-		{"(a c ... b)", e.Pair{e.Identifier("a"), e.Pair{e.Identifier("c"), e.Pair{e.Identifier("..."), e.Pair{e.Identifier("b"), e.NIL}}}}},
+		{"(a ...)", e.Cons(e.Identifier("a"), e.Cons(e.Identifier("..."), e.NIL))},
+		{"(a ... b)", e.Cons(e.Identifier("a"), e.Cons(e.Identifier("..."), e.Cons(e.Identifier("b"), e.NIL)))},
+		{"(a c ... b)", e.Cons(e.Identifier("a"), e.Cons(e.Identifier("c"), e.Cons(e.Identifier("..."), e.Cons(e.Identifier("b"), e.NIL))))},
 	}
 
 	for _, c := range cases {
@@ -251,9 +251,9 @@ func TestParseLists(t *testing.T) {
 		out e.Expr
 	}{
 		{"()", e.NIL},
-		{"(foo)", &e.Pair{e.Identifier("foo"), e.NIL}},
-		{"(bar foo)", &e.Pair{e.Identifier("bar"), &e.Pair{e.Identifier("foo"), e.NIL}}},
-		{"(1 #f)", &e.Pair{e.Integer(1), &e.Pair{e.Boolean(false), e.NIL}}},
+		{"(foo)", e.Cons(e.Identifier("foo"), e.NIL)},
+		{"(bar foo)", e.Cons(e.Identifier("bar"), e.Cons(e.Identifier("foo"), e.NIL))},
+		{"(1 #f)", e.Cons(e.Integer(1), e.Cons(e.Boolean(false), e.NIL))},
 	}
 
 	for _, c := range cases {
@@ -289,12 +289,12 @@ func TestParsePairs(t *testing.T) {
 		in  string
 		out *e.Pair
 	}{
-		{"(a . b)", &e.Pair{e.Identifier("a"), e.Identifier("b")}},
+		{"(a . b)", e.Cons(e.Identifier("a"), e.Identifier("b"))},
 
-		{"(`bar` . `foo`)", &e.Pair{e.String("bar"), e.String("foo")}},
-		{"(1 . #f)", &e.Pair{e.Integer(1), e.Boolean(false)}},
-		{"(1 2 . #f)", &e.Pair{e.Integer(1), &e.Pair{e.Integer(2), e.Boolean(false)}}},
-		{"(a b c . d)", &e.Pair{e.Identifier("a"), &e.Pair{e.Identifier("b"), &e.Pair{e.Identifier("c"), e.Identifier("d")}}}},
+		{"(`bar` . `foo`)", e.Cons(e.String("bar"), e.String("foo"))},
+		{"(1 . #f)", e.Cons(e.Integer(1), e.Boolean(false))},
+		{"(1 2 . #f)", e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Boolean(false)))},
+		{"(a b c . d)", e.Cons(e.Identifier("a"), e.Cons(e.Identifier("b"), e.Cons(e.Identifier("c"), e.Identifier("d"))))},
 	}
 
 	for _, c := range cases {
@@ -324,7 +324,7 @@ func TestParseTwoSymbols(t *testing.T) {
 		in  string
 		out e.Expr
 	}{
-		{"'foo 'mmm", e.Pair{e.Quote{e.Identifier("foo")}, e.Pair{e.Quote{e.Identifier("mmm")}, e.NIL}}},
+		{"'foo 'mmm", e.Cons(e.Quote{e.Identifier("foo")}, e.Cons(e.Quote{e.Identifier("mmm")}, e.NIL))},
 	}
 
 	for _, c := range cases {
@@ -353,9 +353,9 @@ func TestParseIgnoresInitialHashbangLine(t *testing.T) {
 		{"#!/usr/bin/ghoul\n", e.NIL},
 		{"\n#!/usr/bin/ghoul\n", e.NIL},
 		{";; foo bar \n#!/usr/bin/ghoul\n", e.NIL},
-		{"#!/usr/bin/ghoul\n77", e.Pair{e.Integer(77), e.NIL}},
-		{"\n#!/usr/bin/ghoul\n`foo`", e.Pair{e.String("foo"), e.NIL}},
-		{";; foo bar \n#!/usr/bin/ghoul\n(bar)", e.Pair{e.Pair{e.Identifier("bar"), e.NIL}, e.NIL}},
+		{"#!/usr/bin/ghoul\n77", e.Cons(e.Integer(77), e.NIL)},
+		{"\n#!/usr/bin/ghoul\n`foo`", e.Cons(e.String("foo"), e.NIL)},
+		{";; foo bar \n#!/usr/bin/ghoul\n(bar)", e.Cons(e.Cons(e.Identifier("bar"), e.NIL), e.NIL)},
 	}
 
 	for _, c := range cases {

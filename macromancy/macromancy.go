@@ -49,7 +49,7 @@ func (m *Macromancer) transform(expr e.Expr) e.Expr {
 
 		t := m.transform(l.Tail())
 
-		return &e.Pair{h, t}
+		return e.Cons(h, t)
 
 	} else {
 		return expr

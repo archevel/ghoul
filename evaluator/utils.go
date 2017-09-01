@@ -21,9 +21,9 @@ func tail(expr e.List) (list e.List, ok bool) {
 func list(expr e.Expr, exprs ...e.Expr) e.List {
 	var tail e.List = e.NIL
 	for i := len(exprs) - 1; i >= 0; i-- {
-		tail = &e.Pair{exprs[i], tail}
+		tail = e.Cons(exprs[i], tail)
 	}
-	return &e.Pair{expr, tail}
+	return e.Cons(expr, tail)
 }
 
 func wrappNonList(expr e.Expr) e.List {
@@ -35,7 +35,7 @@ func wrappNonList(expr e.Expr) e.List {
 }
 
 func cons(expr e.Expr, list e.List) e.List {
-	return &e.Pair{expr, list}
+	return e.Cons(expr, list)
 }
 
 func isTruthy(truth e.Expr) bool {

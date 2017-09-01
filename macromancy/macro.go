@@ -38,7 +38,7 @@ func walkAndReplace(toWalk e.Expr, bound bindings) e.Expr {
 
 	if list, ok := toWalk.(e.List); ok && list != e.NIL {
 		h := list.Head()
-		return &e.Pair{walkAndReplace(h, bound), walkAndReplace(list.Tail(), bound)}
+		return e.Cons(walkAndReplace(h, bound), walkAndReplace(list.Tail(), bound))
 	}
 
 	return toWalk

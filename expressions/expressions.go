@@ -143,6 +143,10 @@ type Pair struct {
 	T Expr
 }
 
+func Cons(fst Expr, snd Expr) *Pair {
+	return &Pair{fst, snd}
+}
+
 func (p Pair) Head() Expr {
 	return p.H
 }

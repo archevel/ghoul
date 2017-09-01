@@ -109,23 +109,23 @@ func TestMacrosBindCorrectlyCommonPatterns(t *testing.T) {
 			e.Identifier("z"): e.Integer(3),
 		}},
 		{"(numbers 1 2 3)", "(numbers . x)", bindings{
-			e.Identifier("x"): e.Pair{e.Integer(1), e.Pair{e.Integer(2), e.Pair{e.Integer(3), e.NIL}}},
+			e.Identifier("x"): e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL))),
 		}},
 		{"(numbers 1 2 . 3)", "(numbers . x)", bindings{
-			e.Identifier("x"): e.Pair{e.Integer(1), e.Pair{e.Integer(2), e.Integer(3)}},
+			e.Identifier("x"): e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3))),
 		}},
 		{"(numbers 1 2 3)", "(numbers x . y)", bindings{
 			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.Pair{e.Integer(2), e.Pair{e.Integer(3), e.NIL}},
+			e.Identifier("y"): e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL)),
 		}},
 		{"(numbers 1 2 . 3)", "(numbers x . y)", bindings{
 			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.Pair{e.Integer(2), e.Integer(3)},
+			e.Identifier("y"): e.Cons(e.Integer(2), e.Integer(3)),
 		}},
 		{"(numbers 1 2 3)", "(numbers x y . z)", bindings{
 			e.Identifier("x"): e.Integer(1),
 			e.Identifier("y"): e.Integer(2),
-			e.Identifier("z"): e.Pair{e.Integer(3), e.NIL},
+			e.Identifier("z"): e.Cons(e.Integer(3), e.NIL),
 		}},
 		{"(numbers 1 2 . 3)", "(numbers x y . z)", bindings{
 			e.Identifier("x"): e.Integer(1),
@@ -141,8 +141,8 @@ func TestMacrosBindCorrectlyCommonPatterns(t *testing.T) {
 
 		{"(define (love foo za ba) foo bar 1)", "(define (f . a_1) . a_2)", bindings{
 			e.Identifier("f"):   e.Identifier("love"),
-			e.Identifier("a_1"): e.Pair{e.Identifier("foo"), e.Pair{e.Identifier("za"), e.Pair{e.Identifier("ba"), e.NIL}}},
-			e.Identifier("a_2"): e.Pair{e.Identifier("foo"), e.Pair{e.Identifier("bar"), e.Pair{e.Integer(1), e.NIL}}},
+			e.Identifier("a_1"): e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("za"), e.Cons(e.Identifier("ba"), e.NIL))),
+			e.Identifier("a_2"): e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("bar"), e.Cons(e.Integer(1), e.NIL))),
 		}},
 	}
 
@@ -158,14 +158,14 @@ func TestMacrosBindCorrectlyWithElipsisPattern(t *testing.T) {
 		expectedBindings bindings
 	}{
 		{"(numbers 1 2 3)", "(numbers ...)", bindings{
-			e.Identifier("..."): e.Pair{e.Integer(1), e.Pair{e.Integer(2), e.Pair{e.Integer(3), e.NIL}}},
+			e.Identifier("..."): e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL))),
 		}},
 		{"(numbers 1 2 3)", "(numbers x ...)", bindings{
 			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Pair{e.Integer(2), e.Pair{e.Integer(3), e.NIL}},
+			e.Identifier("..."): e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL)),
 		}},
 		{"(numbers 1 2 . 3)", "(numbers ...)", bindings{
-			e.Identifier("..."): e.Pair{e.Integer(1), e.Pair{e.Integer(2), e.Integer(3)}},
+			e.Identifier("..."): e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3))),
 		}},
 
 		// tail bindings
@@ -177,7 +177,7 @@ func TestMacrosBindCorrectlyWithElipsisPattern(t *testing.T) {
 		}},
 		{"(numbers 1 2 3)", "(numbers x ... y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Pair{e.Integer(2), e.NIL},
+			e.Identifier("..."): e.Cons(e.Integer(2), e.NIL),
 			e.Identifier("y"):   e.Integer(3),
 		}},
 		{"(numbers 1 2 3)", "(numbers x ... z y)", bindings{
@@ -190,7 +190,7 @@ func TestMacrosBindCorrectlyWithElipsisPattern(t *testing.T) {
 		// tail bindings with pair code
 		{"(numbers 1 2 . 3)", "(numbers x ... y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Pair{e.Integer(2), e.NIL},
+			e.Identifier("..."): e.Cons(e.Integer(2), e.NIL),
 			e.Identifier("y"):   e.Integer(3),
 		}},
 		{"(numbers 1 2 . 3)", "(numbers x ... z y)", bindings{
@@ -209,27 +209,27 @@ func TestMacrosBindCorrectlyWithElipsisPattern(t *testing.T) {
 		// final is dot patterns
 		{"(numbers 1 2 3)", "(numbers x ... . y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Pair{e.Integer(2), e.NIL},
-			e.Identifier("y"):   e.Pair{e.Integer(3), e.NIL},
+			e.Identifier("..."): e.Cons(e.Integer(2), e.NIL),
+			e.Identifier("y"):   e.Cons(e.Integer(3), e.NIL),
 		}},
 		{"(numbers 1 2 3)", "(numbers x ... z . y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
 			e.Identifier("..."): e.NIL,
 
 			e.Identifier("z"): e.Integer(2),
-			e.Identifier("y"): e.Pair{e.Integer(3), e.NIL},
+			e.Identifier("y"): e.Cons(e.Integer(3), e.NIL),
 		}},
 		{"(numbers 1 2 3)", "(numbers x z ... . y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
 			e.Identifier("..."): e.NIL,
 			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.Pair{e.Integer(3), e.NIL},
+			e.Identifier("y"):   e.Cons(e.Integer(3), e.NIL),
 		}},
 
 		// final is dot patterns and code has dot too
 		{"(numbers 1 2 . 3)", "(numbers x ... . y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Pair{e.Integer(2), e.NIL},
+			e.Identifier("..."): e.Cons(e.Integer(2), e.NIL),
 			e.Identifier("y"):   e.Integer(3),
 		}},
 		{"(numbers 1 2 . 3)", "(numbers x ... z . y)", bindings{
@@ -248,19 +248,19 @@ func TestMacrosBindCorrectlyWithElipsisPattern(t *testing.T) {
 		// more complex patterns
 		{"(numbers 1 2 4 . 3)", "(numbers x z ... . y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Pair{e.Integer(4), e.NIL},
+			e.Identifier("..."): e.Cons(e.Integer(4), e.NIL),
 			e.Identifier("z"):   e.Integer(2),
 			e.Identifier("y"):   e.Integer(3),
 		}},
 		{"(numbers 1 (2 4) 5 . 3)", "(numbers x z ... . y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Pair{e.Integer(5), e.NIL},
-			e.Identifier("z"):   e.Pair{e.Integer(2), e.Pair{e.Integer(4), e.NIL}},
+			e.Identifier("..."): e.Cons(e.Integer(5), e.NIL),
+			e.Identifier("z"):   e.Cons(e.Integer(2), e.Cons(e.Integer(4), e.NIL)),
 			e.Identifier("y"):   e.Integer(3),
 		}},
 		{"(numbers 1 (2 4) 5 . 3)", "(numbers x (a  b) ... . y)", bindings{
 			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Pair{e.Integer(5), e.NIL},
+			e.Identifier("..."): e.Cons(e.Integer(5), e.NIL),
 			e.Identifier("a"):   e.Integer(2),
 			e.Identifier("b"):   e.Integer(4),
 			e.Identifier("y"):   e.Integer(3),

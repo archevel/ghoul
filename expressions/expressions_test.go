@@ -151,12 +151,12 @@ func TestPairRepresentation(t *testing.T) {
 		in  Expr
 		out string
 	}{
-		{Pair{String("foo"), String("foo")}, `("foo" . "foo")`},
-		{Pair{String("foo"), NIL}, `("foo")`},
-		{Pair{Quote{String("foo\n\tzip")}, NIL}, "('\"foo\n\tzip\")"},
-		{Pair{Integer(0), NIL}, "(0)"},
-		{Pair{Float(0.01), NIL}, "(0.01)"},
-		{&Pair{Float(0.01), &Pair{Integer(1), &Pair{String("gargamell"), NIL}}}, `(0.01 1 "gargamell")`},
+		{Cons(String("foo"), String("foo")), `("foo" . "foo")`},
+		{Cons(String("foo"), NIL), `("foo")`},
+		{Cons(Quote{String("foo\n\tzip")}, NIL), "('\"foo\n\tzip\")"},
+		{Cons(Integer(0), NIL), "(0)"},
+		{Cons(Float(0.01), NIL), "(0.01)"},
+		{Cons(Float(0.01), Cons(Integer(1), Cons(String("gargamell"), NIL))), `(0.01 1 "gargamell")`},
 	}
 
 	for _, c := range cases {
@@ -199,12 +199,12 @@ var equivCases = []struct {
 	{NIL, Boolean(false), false},
 	{NIL, Boolean(true), false},
 	{NIL, String(""), false},
-	{NIL, Pair{NIL, NIL}, false},
+	{NIL, Cons(NIL, NIL), false},
 	{NIL, NIL, true},
-	{Pair{Identifier("sum"), NIL}, Pair{Identifier("sum"), NIL}, true},
-	{&Pair{Identifier("gr"), NIL}, &Pair{Identifier("gr"), NIL}, true},
+	{Cons(Identifier("sum"), NIL), Cons(Identifier("sum"), NIL), true},
+	{*Cons(Identifier("gr"), NIL), Cons(Identifier("gr"), NIL), true},
 
-	{Pair{Identifier("sum"), NIL}, &Pair{Identifier("sum"), NIL}, true},
+	{Cons(Identifier("sum"), NIL), *Cons(Identifier("sum"), NIL), true},
 	{&Quote{Identifier("ludlum")}, &Quote{Identifier("ludlum")}, true},
 	{Quote{Identifier("dare")}, &Quote{Identifier("dare")}, true},
 	{Quote{Identifier("hudlum")}, Quote{Identifier("hudlum")}, true},
@@ -236,36 +236,36 @@ func TestPairExpressionEquiv(t *testing.T) {
 		var pairA List
 		var pairB List
 		var actual bool
-		pairA = Pair{c.a, c.b}
-		pairB = Pair{c.a, c.b}
+		pairA = Cons(c.a, c.b)
+		pairB = Cons(c.a, c.b)
 		actual = pairA.Equiv(pairB)
 		if !actual {
 			t.Errorf("%v Equiv %v, expected to be equal but was not", pairA.Repr(), pairB.Repr())
 		}
 
-		pairA = Pair{c.b, c.a}
-		pairB = Pair{c.a, c.b}
+		pairA = Cons(c.b, c.a)
+		pairB = Cons(c.a, c.b)
 		actual = pairA.Equiv(pairB)
 		if actual != c.eq {
 			t.Errorf("%v Equiv %v was %v, expected %v", pairA.Repr(), pairB.Repr(), actual, c.eq)
 		}
 
-		pairA = Pair{c.b, Pair{c.a, Pair{c.b, NIL}}}
-		pairB = Pair{c.a, Pair{c.b, Pair{c.a, NIL}}}
+		pairA = Cons(c.b, Cons(c.a, Cons(c.b, NIL)))
+		pairB = Cons(c.a, Cons(c.b, Cons(c.a, NIL)))
 		actual = pairA.Equiv(pairB)
 		if actual != c.eq {
 			t.Errorf("%v Equiv %v was %v, expected %v", pairA.Repr(), pairB.Repr(), actual, c.eq)
 		}
 
-		pairA = Pair{c.a, Pair{c.b, Pair{Integer(1), NIL}}}
-		pairB = Pair{c.a, Pair{c.b, NIL}}
+		pairA = Cons(c.a, Cons(c.b, Cons(Integer(1), NIL)))
+		pairB = Cons(c.a, Cons(c.b, NIL))
 		actual = pairA.Equiv(pairB)
 		if actual {
 			t.Errorf("%v Equiv %v was equal, expected they would not be", pairA.Repr(), pairB.Repr())
 		}
 
-		pairA = Pair{c.a, Pair{c.b, NIL}}
-		pairB = Pair{c.a, Pair{c.b, Pair{Integer(1), NIL}}}
+		pairA = Cons(c.a, Cons(c.b, NIL))
+		pairB = Cons(c.a, Cons(c.b, Cons(Integer(1), NIL)))
 		actual = pairA.Equiv(pairB)
 		if actual {
 			t.Errorf("%v Equiv %v was equal, expected they would not be", pairA.Repr(), pairB.Repr())

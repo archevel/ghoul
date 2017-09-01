@@ -37,7 +37,7 @@ func TestEvaluatesToLastExpression(t *testing.T) {
 		{"1\n", e.Integer(1)},
 		{"`foo`\n\"bar\"", e.String("bar")},
 		{"2.0 33.1", e.Float(33.1)},
-		{"'a\n\n'(99 1)", e.Pair{e.Integer(99), e.Pair{e.Integer(1), e.NIL}}},
+		{"'a\n\n'(99 1)", e.Cons(e.Integer(99), e.Cons(e.Integer(1), e.NIL))},
 		{"'foo 'mmm", e.Identifier("mmm")},
 	}
 
@@ -213,7 +213,7 @@ func TestQuoteYieldsQuoted(t *testing.T) {
 		{"'42.7", e.Float(42.7)},
 		{"'a", e.Identifier("a")},
 		{"'`a raw string`", e.String("a raw string")},
-		{"'(99 . 1)", e.Pair{e.Integer(99), e.Integer(1)}},
+		{"'(99 . 1)", e.Cons(e.Integer(99), e.Integer(1))},
 		{"'foo", e.Identifier("foo")},
 	}
 
