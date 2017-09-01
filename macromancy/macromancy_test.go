@@ -75,6 +75,7 @@ func TestMacromancerCanExpandToNewMacro(t *testing.T) {
 
 	runMacroTest(t, code, expected)
 }
+
 func TestMacromancerMacroAlteringMacrosWork(t *testing.T) {
 	code := `(define-syntax define-syntax 
   (syntax-rules () (((define-syntax (x . pat ) . bdy) (define-syntax x (syntax-rules () (((x . pat) bdy))))))))
@@ -84,6 +85,13 @@ func TestMacromancerMacroAlteringMacrosWork(t *testing.T) {
 (foo alpha)
 `
 	expected := `(biz alpha laa)`
+	runMacroTest(t, code, expected)
+}
+
+func TestMacromancerHandlesPairedMacro(t *testing.T) {
+	code := `((define-syntax foo (syntax-rules () (((foo x) (x biz))))) . foo) (foo bar)`
+	expected := `foo (bar biz)`
+
 	runMacroTest(t, code, expected)
 }
 
@@ -100,13 +108,9 @@ func runMacroTest(t *testing.T, code string, expected string) {
 		t.Errorf("Failed to parse expected: %s\n", expected)
 	}
 
-	mancedCode, err := transformer.Transform(parsedCode.Expressions)
+	mancedCode := transformer.Transform(parsedCode.Expressions)
 
-	if err != nil {
-		t.Errorf(`Got error: "%s" when mancing code %s`, err, code)
-	}
-
-	if err == nil && !mancedCode.Equiv(parsedExpected.Expressions) {
+	if !mancedCode.Equiv(parsedExpected.Expressions) {
 		t.Errorf("Expected code:\n'%s'\n\n to yield:\n '%s'\n\n after macromancy transform, but got: \n'%s'", parsedCode.Expressions.Repr(), parsedExpected.Expressions.Repr(), mancedCode.Repr())
 	}
 }

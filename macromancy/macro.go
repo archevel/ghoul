@@ -24,10 +24,8 @@ func (m Macro) Matches(expr e.Expr) (bool, bindings) {
 	return false, nil
 }
 
-func (m Macro) Expand(bound bindings) (e.Expr, error) {
-	toWalk := m.Body
-	res := walkAndReplace(toWalk, bound)
-	return res, nil
+func (m Macro) Expand(bound bindings) e.Expr {
+	return walkAndReplace(m.Body, bound)
 }
 
 func walkAndReplace(toWalk e.Expr, bound bindings) e.Expr {
