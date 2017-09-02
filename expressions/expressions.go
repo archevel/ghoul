@@ -135,6 +135,8 @@ func (e Identifier) Equiv(expr Expr) bool {
 type List interface {
 	First() Expr
 	Second() Expr
+	Head() Expr
+	Tail() (List, bool)
 	Expr
 }
 
@@ -153,6 +155,15 @@ func (p Pair) First() Expr {
 
 func (p Pair) Second() Expr {
 	return p.T
+}
+
+func (p Pair) Head() Expr {
+	return p.H
+}
+
+func (p Pair) Tail() (List, bool) {
+	t, ok := p.T.(List)
+	return t, ok
 }
 
 func (p Pair) Repr() string {
@@ -200,8 +211,8 @@ func pairEquiv(x List, y List) bool {
 	for eq && xOk && yOk && (x != y) {
 		eq = x.First().Equiv(y.First())
 
-		xTmp, xOk = x.Second().(List)
-		yTmp, yOk = y.Second().(List)
+		xTmp, xOk = x.Tail()
+		yTmp, yOk = y.Tail()
 		if xOk && yOk {
 			x = xTmp
 			y = yTmp
@@ -225,6 +236,14 @@ func (e nilList) First() Expr {
 
 func (e nilList) Second() Expr {
 	return NIL
+}
+
+func (e nilList) Head() Expr {
+	return NIL
+}
+
+func (e nilList) Tail() (List, bool) {
+	return NIL, true
 }
 
 func (e nilList) Repr() string {

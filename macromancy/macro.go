@@ -138,13 +138,13 @@ func splitListAt(endCount int, codeList e.List) (e.Expr, e.Expr) {
 	}
 
 	for i := 0; i < splitIndex; i++ {
-		if sp, ok := splitPoint.Second().(e.List); ok {
+		if sp, ok := splitPoint.Tail(); ok {
 			splitPoint = sp
 		} else {
 			break
 		}
 	}
-	ending, ok = splitPoint.Second().(e.List)
+	ending, ok = splitPoint.Tail()
 	if splitPoint != e.NIL && (ok || endCount == 1) {
 		ending = splitPoint.Second()
 		splitPoint.(*e.Pair).T = e.NIL
@@ -158,7 +158,7 @@ func listLength(list e.List) (int, bool) {
 	ok := false
 	for list != e.NIL {
 		count = count + 1
-		list, ok = list.Second().(e.List)
+		list, ok = list.Tail()
 		if !ok {
 			return count + 1, false
 		}

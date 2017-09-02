@@ -272,8 +272,8 @@ func TestParseLists(t *testing.T) {
 				t.Errorf("List element missmatch, expected: %s was: %s in %s", expectedList.First().Repr(), actualList.First().Repr(), lp.First().Repr())
 			}
 
-			actualList = actualList.Second().(e.List)
-			expectedList = expectedList.Second().(e.List)
+			actualList, _ = actualList.Tail()
+			expectedList, _ = expectedList.Tail()
 		}
 
 		if actualList != expectedList && expectedList != e.NIL {
@@ -400,7 +400,7 @@ func TestParserRegistersPositionOfPairs(t *testing.T) {
 		var last e.List
 		for expr != e.NIL {
 			last = expr
-			expr = last.Second().(e.List)
+			expr, _ = last.Tail()
 		}
 
 		lastPos, ok := lex.PairSrcPositions[*last.(*e.Pair)]
@@ -433,7 +433,7 @@ func TestInnerPairsHavePositionsRegistered(t *testing.T) {
 		var last e.List
 		for expr != e.NIL {
 			last = expr
-			expr = last.Second().(e.List)
+			expr, _ = last.Tail()
 		}
 
 		lastPos, ok := lex.PairSrcPositions[*last.(*e.Pair)]

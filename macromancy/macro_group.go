@@ -27,13 +27,13 @@ func NewMacroGroup(code e.Expr) (*MacroGroup, error) {
 	if !codeOk {
 		return nil, errors.New("Invalid syntax definition.")
 	}
-	syntaxDefList, syntaxDefOk := codeList.Second().(e.List)
+	syntaxDefList, syntaxDefOk := codeList.Tail()
 	if !syntaxDefOk {
 		return nil, errors.New("Invalid syntax definition.")
 	}
 	matchId, matchIdOk := syntaxDefList.First().(e.Identifier)
 	if !matchIdOk {
-		return nil, errors.New("Identifier for macro group '" + code.(e.List).Second().(e.List).First().Repr() + "' is invalid.")
+		return nil, errors.New("Identifier for macro group '" + syntaxDefList.First().Repr() + "' is invalid.")
 	}
 
 	rules, rulesErr := extractRulesList(syntaxDefList)
@@ -50,7 +50,7 @@ func NewMacroGroup(code e.Expr) (*MacroGroup, error) {
 }
 
 func extractRulesList(syntaxDefList e.List) (e.List, error) {
-	syntaxRulesList, syntaxRulesListOk := syntaxDefList.Second().(e.List)
+	syntaxRulesList, syntaxRulesListOk := syntaxDefList.Tail()
 	if !syntaxRulesListOk {
 		return nil, errors.New("Invalid syntax-rules.")
 	}
@@ -60,12 +60,12 @@ func extractRulesList(syntaxDefList e.List) (e.List, error) {
 		return nil, errors.New("Invalid syntax-rules.")
 	}
 
-	litsAndRules, litsAndRulesOk := syntaxRules.Second().(e.List)
+	litsAndRules, litsAndRulesOk := syntaxRules.Tail()
 	if !litsAndRulesOk || e.NIL.Equiv(litsAndRules.Second()) {
 		return nil, errors.New("Invalid rules in syntax definition.")
 	}
 
-	rules, rulesOk := litsAndRules.Second().(e.List)
+	rules, rulesOk := litsAndRules.Tail()
 	if !rulesOk {
 		return nil, errors.New("Invalid rules in syntax definition.")
 	}
@@ -79,12 +79,12 @@ func extractMacros(rules e.List) ([]Macro, error) {
 	rulesOk := false
 	for rules != e.NIL {
 		r, rOk := rules.First().(e.List)
-		rules, rulesOk = rules.Second().(e.List)
+		rules, rulesOk = rules.Tail()
 		if !rOk || !rulesOk {
 			return nil, errors.New("Invalid rule definition.")
 		}
 		pat := r.First()
-		bdyList, bdyOk := r.Second().(e.List)
+		bdyList, bdyOk := r.Tail()
 
 		if !bdyOk || e.NIL.Equiv(bdyList) {
 			return nil, errors.New("Invalid rule definition.")

@@ -42,35 +42,35 @@ func prepareEvaluator() *ev.Evaluator {
 
 	env.Register("eq?", func(args e.List) (e.Expr, error) {
 		fst := args.First()
-		t, _ := args.Second().(e.List)
+		t, _ := args.Tail()
 		snd := t.First()
 		return e.Boolean(fst.Equiv(snd)), nil
 	})
 
 	env.Register("and", func(args e.List) (e.Expr, error) {
 		fst := args.First().(e.Boolean)
-		t, _ := args.Second().(e.List)
+		t, _ := args.Tail()
 		snd := t.First().(e.Boolean)
 		return e.Boolean(fst && snd), nil
 	})
 
 	env.Register("<", func(args e.List) (e.Expr, error) {
 		fst := args.First().(e.Integer)
-		t, _ := args.Second().(e.List)
+		t, _ := args.Tail()
 		snd := t.First().(e.Integer)
 		return e.Boolean(fst < snd), nil
 	})
 
 	env.Register("mod", func(args e.List) (e.Expr, error) {
 		fst := args.First().(e.Integer)
-		t, _ := args.Second().(e.List)
+		t, _ := args.Tail()
 		snd := t.First().(e.Integer)
 		return e.Integer(fst % snd), nil
 	})
 
 	env.Register("+", func(args e.List) (e.Expr, error) {
 		fst := args.First().(e.Integer)
-		t, _ := args.Second().(e.List)
+		t, _ := args.Tail()
 		snd := t.First().(e.Integer)
 		return e.Integer(fst + snd), nil
 	})

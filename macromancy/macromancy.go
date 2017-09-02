@@ -73,7 +73,7 @@ func (m *Macromancer) expandMacrosAgainst(subList e.List) e.Expr {
 }
 
 func tail(l e.List) (e.List, bool) {
-	t, ok := l.Second().(e.List)
+	t, ok := l.Tail()
 	return t, ok
 }
 

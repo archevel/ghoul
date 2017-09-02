@@ -14,8 +14,7 @@ func headList(expr e.List) (list e.List, ok bool) {
 }
 
 func tail(expr e.List) (list e.List, ok bool) {
-	list, ok = expr.Second().(e.List)
-	return
+	return expr.Tail()
 }
 
 func list(expr e.Expr, exprs ...e.Expr) e.List {
