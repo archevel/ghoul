@@ -33,8 +33,8 @@ func TestParseInteger(t *testing.T) {
 			t.Errorf("Parser failed to parse \"%s\"", c.in)
 		}
 
-		if lp.Head() != c.out {
-			t.Errorf("Parsed \"%s\", expected %v but got %T%v", c.in, c.out, lp.Head(), lp.Head())
+		if lp.First() != c.out {
+			t.Errorf("Parsed \"%s\", expected %v but got %T%v", c.in, c.out, lp.First(), lp.First())
 		}
 	}
 
@@ -67,7 +67,7 @@ func TestParseFloat(t *testing.T) {
 			t.Errorf("Parser failed to parse \"%s\"", c.in)
 		}
 
-		if lp.Head() != c.out {
+		if lp.First() != c.out {
 			t.Errorf("Parsed \"%s\", expected %v but got %v", c.in, c.out, lp)
 		}
 	}
@@ -91,7 +91,7 @@ func TestParseBoolean(t *testing.T) {
 			t.Errorf("Parser failed to parse \"%s\"", c.in)
 		}
 
-		if lp.Head() != c.out {
+		if lp.First() != c.out {
 			t.Errorf("Parsed \"%s\", expected %v but got %v", c.in, c.out, lp)
 		}
 	}
@@ -118,7 +118,7 @@ func TestParseString(t *testing.T) {
 		if res != 0 {
 			t.Errorf("Parser failed to parse \"%s\"", c.in)
 		}
-		actual := string(lp.Head().(e.String))
+		actual := string(lp.First().(e.String))
 
 		if actual != c.out {
 			t.Errorf("Test #%v:Parsed \"%s\", expected %v but got %v", i, c.in, c.out, lp)
@@ -149,7 +149,7 @@ func TestParseIdententifiers(t *testing.T) {
 			t.Errorf("Parser failed to parse \"%s\"", c.in)
 		}
 
-		if lp.Head() != c.out {
+		if lp.First() != c.out {
 			t.Errorf("Parsed \"%s\", expected %v but got %v", c.in, c.out, lp)
 		}
 	}
@@ -168,7 +168,7 @@ func TestParseSpecialIdentifiers(t *testing.T) {
 			t.Errorf("Parser failed to parse \"%s\"", c)
 		}
 
-		if lp.Head() != e.Identifier(c) {
+		if lp.First() != e.Identifier(c) {
 			t.Errorf("Parsed \"%s\", expected %v but got %v", c, c, lp)
 		}
 	}
@@ -192,8 +192,8 @@ func TestParseElipsis(t *testing.T) {
 			t.Errorf("Parser failed to parse \"%s\"", c)
 		}
 
-		if !c.out.Equiv(lp.Head()) {
-			t.Errorf("Could not parse elipsis. Expected %s, but got %s", c.out.Repr(), lp.Head().Repr())
+		if !c.out.Equiv(lp.First()) {
+			t.Errorf("Could not parse elipsis. Expected %s, but got %s", c.out.Repr(), lp.First().Repr())
 		}
 
 	}
@@ -210,9 +210,9 @@ func TestParseQuotedSpecialIdentifiers(t *testing.T) {
 		if res != 0 {
 			t.Errorf("Parser failed to parse \"%s\"", c)
 		}
-		q, ok := lp.Head().(*e.Quote)
+		q, ok := lp.First().(*e.Quote)
 		if !ok {
-			t.Errorf("Parsed \"'%s\", expected a quoted expression, but got %T", c, lp.Head())
+			t.Errorf("Parsed \"'%s\", expected a quoted expression, but got %T", c, lp.First())
 		}
 
 		if q.Quoted != e.Identifier(c) {
@@ -231,12 +231,12 @@ func TestParseNestedQuotes(t *testing.T) {
 	if res != 0 {
 		t.Errorf("Parser failed to parse \"%s\"", c)
 	}
-	q, ok := lp.Head().(*e.Quote)
+	q, ok := lp.First().(*e.Quote)
 
 	q2, ok2 := q.Quoted.(*e.Quote)
 
 	if !ok || !ok2 {
-		t.Errorf("Parsed \"'%s\", expected a quoted expression, but got %T", c, lp.Head())
+		t.Errorf("Parsed \"'%s\", expected a quoted expression, but got %T", c, lp.First())
 	}
 
 	if q2.Quoted != e.Identifier("c") {
@@ -264,16 +264,16 @@ func TestParseLists(t *testing.T) {
 			t.Errorf("Parser failed to parse \"%s\"", c.in)
 		}
 
-		var actualList = lp.Head().(e.List)
+		var actualList = lp.First().(e.List)
 		var expectedList = c.out.(e.List)
 
 		for actualList != e.NIL || expectedList != e.NIL {
-			if actualList.Head() != expectedList.Head() {
-				t.Errorf("List element missmatch, expected: %s was: %s in %s", expectedList.Head().Repr(), actualList.Head().Repr(), lp.Head().Repr())
+			if actualList.First() != expectedList.First() {
+				t.Errorf("List element missmatch, expected: %s was: %s in %s", expectedList.First().Repr(), actualList.First().Repr(), lp.First().Repr())
 			}
 
-			actualList = actualList.Tail().(e.List)
-			expectedList = expectedList.Tail().(e.List)
+			actualList = actualList.Second().(e.List)
+			expectedList = expectedList.Second().(e.List)
 		}
 
 		if actualList != expectedList && expectedList != e.NIL {
@@ -305,14 +305,14 @@ func TestParsePairs(t *testing.T) {
 			t.Fatalf("Parser failed to parse \"%s\"", c.in)
 		}
 
-		actual := lp.Head().(*e.Pair)
+		actual := lp.First().(*e.Pair)
 
-		if !actual.Head().Equiv(c.out.Head()) {
-			t.Errorf("Got %v as head, expected %v", actual.Head().Repr(), c.out.Head().Repr())
+		if !actual.First().Equiv(c.out.First()) {
+			t.Errorf("Got %v as head, expected %v", actual.First().Repr(), c.out.First().Repr())
 		}
 
-		if !actual.Tail().Equiv(c.out.Tail()) {
-			t.Errorf("Got %v as tail, expected %v", actual.Tail().Repr(), c.out.Tail().Repr())
+		if !actual.Second().Equiv(c.out.Second()) {
+			t.Errorf("Got %v as tail, expected %v", actual.Second().Repr(), c.out.Second().Repr())
 		}
 
 	}
@@ -400,7 +400,7 @@ func TestParserRegistersPositionOfPairs(t *testing.T) {
 		var last e.List
 		for expr != e.NIL {
 			last = expr
-			expr = last.Tail().(e.List)
+			expr = last.Second().(e.List)
 		}
 
 		lastPos, ok := lex.PairSrcPositions[*last.(*e.Pair)]
@@ -429,11 +429,11 @@ func TestInnerPairsHavePositionsRegistered(t *testing.T) {
 			t.Fatal("Parser failed to parse \"%s\"", c.in)
 		}
 
-		expr := lex.lpair.Head().(e.List)
+		expr := lex.lpair.First().(e.List)
 		var last e.List
 		for expr != e.NIL {
 			last = expr
-			expr = last.Tail().(e.List)
+			expr = last.Second().(e.List)
 		}
 
 		lastPos, ok := lex.PairSrcPositions[*last.(*e.Pair)]

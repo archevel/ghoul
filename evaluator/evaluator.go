@@ -247,7 +247,7 @@ func prepareScope(paramExpr e.Expr, args e.List, definitionEnv *environment) con
 			param := head(paramList)
 			pl, ok := tail(paramList)
 			if !ok {
-				variadicParam = paramList.Tail()
+				variadicParam = paramList.Second()
 				paramList = e.NIL
 			} else {
 				paramList = pl

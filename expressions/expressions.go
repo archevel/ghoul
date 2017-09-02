@@ -133,8 +133,8 @@ func (e Identifier) Equiv(expr Expr) bool {
 }
 
 type List interface {
-	Head() Expr
-	Tail() Expr
+	First() Expr
+	Second() Expr
 	Expr
 }
 
@@ -147,11 +147,11 @@ func Cons(fst Expr, snd Expr) *Pair {
 	return &Pair{fst, snd}
 }
 
-func (p Pair) Head() Expr {
+func (p Pair) First() Expr {
 	return p.H
 }
 
-func (p Pair) Tail() Expr {
+func (p Pair) Second() Expr {
 	return p.T
 }
 
@@ -162,8 +162,8 @@ func (p Pair) Repr() string {
 	var l List = p
 
 	for l != NIL {
-		buffer.WriteString(l.Head().Repr())
-		t := l.Tail()
+		buffer.WriteString(l.First().Repr())
+		t := l.Second()
 
 		if t != NIL {
 			buffer.WriteRune(' ')
@@ -198,10 +198,10 @@ func pairEquiv(x List, y List) bool {
 	eq := true
 	xOk, yOk := true, true
 	for eq && xOk && yOk && (x != y) {
-		eq = x.Head().Equiv(y.Head())
+		eq = x.First().Equiv(y.First())
 
-		xTmp, xOk = x.Tail().(List)
-		yTmp, yOk = y.Tail().(List)
+		xTmp, xOk = x.Second().(List)
+		yTmp, yOk = y.Second().(List)
 		if xOk && yOk {
 			x = xTmp
 			y = yTmp
@@ -209,7 +209,7 @@ func pairEquiv(x List, y List) bool {
 	}
 
 	if eq && (x != y) {
-		eq = x.Tail().Equiv(y.Tail())
+		eq = x.Second().Equiv(y.Second())
 	}
 
 	return eq
@@ -219,11 +219,11 @@ type nilList bool
 
 const NIL nilList = false
 
-func (e nilList) Head() Expr {
+func (e nilList) First() Expr {
 	return NIL
 }
 
-func (e nilList) Tail() Expr {
+func (e nilList) Second() Expr {
 	return NIL
 }
 

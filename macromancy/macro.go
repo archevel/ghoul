@@ -37,8 +37,8 @@ func walkAndReplace(toWalk e.Expr, bound bindings) e.Expr {
 	}
 
 	if list, ok := toWalk.(e.List); ok && list != e.NIL {
-		h := list.Head()
-		return e.Cons(walkAndReplace(h, bound), walkAndReplace(list.Tail(), bound))
+		h := list.First()
+		return e.Cons(walkAndReplace(h, bound), walkAndReplace(list.Second(), bound))
 	}
 
 	return toWalk
@@ -79,20 +79,20 @@ func matchHeadAndTail(macroList e.List, codeList e.List, bound bindings, hasElip
 		return false, nil
 	}
 
-	if id, ok := macroList.Head().(e.Identifier); ok && id.Equiv(e.Identifier("...")) {
+	if id, ok := macroList.First().(e.Identifier); ok && id.Equiv(e.Identifier("...")) {
 		return matchElipsis(macroList, macroLength, codeList, bound)
 	} else {
-		headMatch, bound := matchWalk(macroList.Head(), codeList.Head(), bound, hasElipsis)
+		headMatch, bound := matchWalk(macroList.First(), codeList.First(), bound, hasElipsis)
 		if headMatch {
-			return matchWalk(macroList.Tail(), codeList.Tail(), bound, hasElipsis)
+			return matchWalk(macroList.Second(), codeList.Second(), bound, hasElipsis)
 		}
 	}
 	return false, nil
 }
 
 func matchElipsis(macroList e.List, macroLength int, codeList e.List, bound bindings) (bool, bindings) {
-	macHead := macroList.Head()
-	if macroList.Tail() == e.NIL {
+	macHead := macroList.First()
+	if macroList.Second() == e.NIL {
 		return matchWalk(macHead, codeList, bound, true)
 	}
 
@@ -100,16 +100,16 @@ func matchElipsis(macroList e.List, macroLength int, codeList e.List, bound bind
 	bindToMacHead, rest := splitListAt(followingPatternCount, codeList)
 	_, bound = matchWalk(macHead, bindToMacHead, bound, true)
 
-	return matchWalk(macroList.Tail(), rest, bound, true)
+	return matchWalk(macroList.Second(), rest, bound, true)
 }
 
 func matchFinalCodeExpression(macroList e.List, code e.Expr, bound bindings, hasElipsis bool) (bool, bindings) {
-	if macroList != e.NIL && macroList.Tail() == e.NIL {
-		return matchWalk(macroList.Head(), code, bound, hasElipsis)
+	if macroList != e.NIL && macroList.Second() == e.NIL {
+		return matchWalk(macroList.First(), code, bound, hasElipsis)
 	}
-	if macroList.Head().Equiv(e.Identifier("...")) {
-		bound[macroList.Head().(e.Identifier)] = e.NIL
-		return matchWalk(macroList.Tail(), code, bound, hasElipsis)
+	if macroList.First().Equiv(e.Identifier("...")) {
+		bound[macroList.First().(e.Identifier)] = e.NIL
+		return matchWalk(macroList.Second(), code, bound, hasElipsis)
 	}
 	return false, nil
 }
@@ -117,8 +117,8 @@ func matchFinalCodeExpression(macroList e.List, code e.Expr, bound bindings, has
 func idAndRest(expr e.Expr) (e.Identifier, e.Expr) {
 	identifier := expr
 	if list, ok := expr.(e.List); ok {
-		identifier = list.Head().(e.Identifier)
-		return identifier.(e.Identifier), list.Tail()
+		identifier = list.First().(e.Identifier)
+		return identifier.(e.Identifier), list.Second()
 
 	}
 	return identifier.(e.Identifier), nil
@@ -138,15 +138,15 @@ func splitListAt(endCount int, codeList e.List) (e.Expr, e.Expr) {
 	}
 
 	for i := 0; i < splitIndex; i++ {
-		if sp, ok := splitPoint.Tail().(e.List); ok {
+		if sp, ok := splitPoint.Second().(e.List); ok {
 			splitPoint = sp
 		} else {
 			break
 		}
 	}
-	ending, ok = splitPoint.Tail().(e.List)
+	ending, ok = splitPoint.Second().(e.List)
 	if splitPoint != e.NIL && (ok || endCount == 1) {
-		ending = splitPoint.Tail()
+		ending = splitPoint.Second()
 		splitPoint.(*e.Pair).T = e.NIL
 	}
 
@@ -158,7 +158,7 @@ func listLength(list e.List) (int, bool) {
 	ok := false
 	for list != e.NIL {
 		count = count + 1
-		list, ok = list.Tail().(e.List)
+		list, ok = list.Second().(e.List)
 		if !ok {
 			return count + 1, false
 		}

@@ -41,46 +41,46 @@ func prepareEvaluator() *ev.Evaluator {
 	env := ev.NewEnvironment()
 
 	env.Register("eq?", func(args e.List) (e.Expr, error) {
-		fst := args.Head()
-		t, _ := args.Tail().(e.List)
-		snd := t.Head()
+		fst := args.First()
+		t, _ := args.Second().(e.List)
+		snd := t.First()
 		return e.Boolean(fst.Equiv(snd)), nil
 	})
 
 	env.Register("and", func(args e.List) (e.Expr, error) {
-		fst := args.Head().(e.Boolean)
-		t, _ := args.Tail().(e.List)
-		snd := t.Head().(e.Boolean)
+		fst := args.First().(e.Boolean)
+		t, _ := args.Second().(e.List)
+		snd := t.First().(e.Boolean)
 		return e.Boolean(fst && snd), nil
 	})
 
 	env.Register("<", func(args e.List) (e.Expr, error) {
-		fst := args.Head().(e.Integer)
-		t, _ := args.Tail().(e.List)
-		snd := t.Head().(e.Integer)
+		fst := args.First().(e.Integer)
+		t, _ := args.Second().(e.List)
+		snd := t.First().(e.Integer)
 		return e.Boolean(fst < snd), nil
 	})
 
 	env.Register("mod", func(args e.List) (e.Expr, error) {
-		fst := args.Head().(e.Integer)
-		t, _ := args.Tail().(e.List)
-		snd := t.Head().(e.Integer)
+		fst := args.First().(e.Integer)
+		t, _ := args.Second().(e.List)
+		snd := t.First().(e.Integer)
 		return e.Integer(fst % snd), nil
 	})
 
 	env.Register("+", func(args e.List) (e.Expr, error) {
-		fst := args.Head().(e.Integer)
-		t, _ := args.Tail().(e.List)
-		snd := t.Head().(e.Integer)
+		fst := args.First().(e.Integer)
+		t, _ := args.Second().(e.List)
+		snd := t.First().(e.Integer)
 		return e.Integer(fst + snd), nil
 	})
 
 	env.Register("println", func(args e.List) (e.Expr, error) {
-		fst, ok := args.Head().(e.String)
+		fst, ok := args.First().(e.String)
 		if ok {
 			fmt.Println(fst)
 		} else {
-			fmt.Println(args.Head().Repr())
+			fmt.Println(args.First().Repr())
 		}
 		return e.NIL, nil
 	})

@@ -14,7 +14,7 @@ type MacroGroup struct {
 func (mg MacroGroup) Matches(code e.Expr) []Macro {
 	id, ok := code.(e.Identifier)
 	if codeList, codeOk := code.(e.List); !ok && codeOk {
-		id, _ = codeList.Head().(e.Identifier)
+		id, _ = codeList.First().(e.Identifier)
 	}
 	if mg.matchId.Equiv(id) {
 		return mg.macros
@@ -27,13 +27,13 @@ func NewMacroGroup(code e.Expr) (*MacroGroup, error) {
 	if !codeOk {
 		return nil, errors.New("Invalid syntax definition.")
 	}
-	syntaxDefList, syntaxDefOk := codeList.Tail().(e.List)
+	syntaxDefList, syntaxDefOk := codeList.Second().(e.List)
 	if !syntaxDefOk {
 		return nil, errors.New("Invalid syntax definition.")
 	}
-	matchId, matchIdOk := syntaxDefList.Head().(e.Identifier)
+	matchId, matchIdOk := syntaxDefList.First().(e.Identifier)
 	if !matchIdOk {
-		return nil, errors.New("Identifier for macro group '" + code.(e.List).Tail().(e.List).Head().Repr() + "' is invalid.")
+		return nil, errors.New("Identifier for macro group '" + code.(e.List).Second().(e.List).First().Repr() + "' is invalid.")
 	}
 
 	rules, rulesErr := extractRulesList(syntaxDefList)
@@ -41,7 +41,7 @@ func NewMacroGroup(code e.Expr) (*MacroGroup, error) {
 		return nil, rulesErr
 	}
 
-	macros, err := extractMacros(rules.Head().(e.List))
+	macros, err := extractMacros(rules.First().(e.List))
 	if err != nil {
 		return nil, err
 	}
@@ -50,22 +50,22 @@ func NewMacroGroup(code e.Expr) (*MacroGroup, error) {
 }
 
 func extractRulesList(syntaxDefList e.List) (e.List, error) {
-	syntaxRulesList, syntaxRulesListOk := syntaxDefList.Tail().(e.List)
+	syntaxRulesList, syntaxRulesListOk := syntaxDefList.Second().(e.List)
 	if !syntaxRulesListOk {
 		return nil, errors.New("Invalid syntax-rules.")
 	}
 
-	syntaxRules, syntaxRulesOk := syntaxRulesList.Head().(e.List)
-	if !syntaxRulesOk || !e.Identifier("syntax-rules").Equiv(syntaxRules.Head()) || e.NIL.Equiv(syntaxRules.Tail()) {
+	syntaxRules, syntaxRulesOk := syntaxRulesList.First().(e.List)
+	if !syntaxRulesOk || !e.Identifier("syntax-rules").Equiv(syntaxRules.First()) || e.NIL.Equiv(syntaxRules.Second()) {
 		return nil, errors.New("Invalid syntax-rules.")
 	}
 
-	litsAndRules, litsAndRulesOk := syntaxRules.Tail().(e.List)
-	if !litsAndRulesOk || e.NIL.Equiv(litsAndRules.Tail()) {
+	litsAndRules, litsAndRulesOk := syntaxRules.Second().(e.List)
+	if !litsAndRulesOk || e.NIL.Equiv(litsAndRules.Second()) {
 		return nil, errors.New("Invalid rules in syntax definition.")
 	}
 
-	rules, rulesOk := litsAndRules.Tail().(e.List)
+	rules, rulesOk := litsAndRules.Second().(e.List)
 	if !rulesOk {
 		return nil, errors.New("Invalid rules in syntax definition.")
 	}
@@ -78,18 +78,18 @@ func extractMacros(rules e.List) ([]Macro, error) {
 	macros := []Macro{}
 	rulesOk := false
 	for rules != e.NIL {
-		r, rOk := rules.Head().(e.List)
-		rules, rulesOk = rules.Tail().(e.List)
+		r, rOk := rules.First().(e.List)
+		rules, rulesOk = rules.Second().(e.List)
 		if !rOk || !rulesOk {
 			return nil, errors.New("Invalid rule definition.")
 		}
-		pat := r.Head()
-		bdyList, bdyOk := r.Tail().(e.List)
+		pat := r.First()
+		bdyList, bdyOk := r.Second().(e.List)
 
 		if !bdyOk || e.NIL.Equiv(bdyList) {
 			return nil, errors.New("Invalid rule definition.")
 		}
-		macros = append(macros, Macro{pat, bdyList.Head()})
+		macros = append(macros, Macro{pat, bdyList.First()})
 
 	}
 	return macros, nil

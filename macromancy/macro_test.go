@@ -31,7 +31,7 @@ func TestMacrosCanMatchAnExpression(t *testing.T) {
 			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
 		}
 
-		macro := Macro{pattern.Expressions.Head(), nil}
+		macro := Macro{pattern.Expressions.First(), nil}
 
 		codeOk, code := parser.Parse(strings.NewReader(c.in))
 
@@ -39,7 +39,7 @@ func TestMacrosCanMatchAnExpression(t *testing.T) {
 			t.Fatal("Parsing code failed")
 		}
 
-		if ok, _ := macro.Matches(code.Expressions.Head()); !ok {
+		if ok, _ := macro.Matches(code.Expressions.First()); !ok {
 			t.Errorf(`Macro %s did not match %s`, c.pattern, c.in)
 		}
 
@@ -63,7 +63,7 @@ func TestMacrosCanPatternMatch(t *testing.T) {
 			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
 		}
 
-		macro := Macro{pattern.Expressions.Head(), nil}
+		macro := Macro{pattern.Expressions.First(), nil}
 
 		codeOk, code := parser.Parse(strings.NewReader(c.in))
 
@@ -71,7 +71,7 @@ func TestMacrosCanPatternMatch(t *testing.T) {
 			t.Fatal("Parsing code failed")
 		}
 
-		if ok, _ := macro.Matches(code.Expressions.Head()); !ok {
+		if ok, _ := macro.Matches(code.Expressions.First()); !ok {
 			t.Errorf(`Macro %s did not match %s`, c.pattern, c.in)
 		}
 
@@ -293,14 +293,14 @@ func TestMacrosDoesNotMatchNonMatchingPatterns(t *testing.T) {
 			t.Fatal("Parsing pattern failed")
 		}
 
-		macro := Macro{pattern.Expressions.Head(), nil}
+		macro := Macro{pattern.Expressions.First(), nil}
 
 		parseOk, parseRes := parser.Parse(strings.NewReader(c.in))
 		if parseOk != 0 {
 			t.Fatal("Parsing code failed")
 		}
 
-		if ok, _ := macro.Matches(parseRes.Expressions.Head()); ok {
+		if ok, _ := macro.Matches(parseRes.Expressions.First()); ok {
 			t.Errorf(`Macro %s matched code "%s" which it shouldn't`, c.pattern, c.in)
 		}
 
@@ -332,7 +332,7 @@ func TestMacroExpansion(t *testing.T) {
 			t.Fatal("Parsing pattern failed")
 		}
 
-		macro := Macro{nil, body.Expressions.Head()}
+		macro := Macro{nil, body.Expressions.First()}
 
 		expanded := macro.Expand(c.bound)
 
@@ -348,8 +348,8 @@ func ExampleSwapMacro() {
 	_, body := parser.Parse(strings.NewReader("(let ((tmp x)) (set! x y) (set! y tmp))"))
 	_, code := parser.Parse(strings.NewReader("(swap foo bar)"))
 
-	macro := Macro{pattern.Expressions.(e.List).Head(), body.Expressions.(e.List).Head()}
-	_, bound := macro.Matches(code.Expressions.(e.List).Head())
+	macro := Macro{pattern.Expressions.(e.List).First(), body.Expressions.(e.List).First()}
+	_, bound := macro.Matches(code.Expressions.(e.List).First())
 
 	res := macro.Expand(bound)
 	fmt.Println(res.Repr())
@@ -379,7 +379,7 @@ func TestMacroTransform(t *testing.T) {
 			t.Fatal("Parsing pattern failed")
 		}
 
-		macro := Macro{pattern.Expressions.Head(), body.Expressions.Head()}
+		macro := Macro{pattern.Expressions.First(), body.Expressions.First()}
 
 		codeOk, code := parser.Parse(strings.NewReader(c.in))
 
@@ -387,7 +387,7 @@ func TestMacroTransform(t *testing.T) {
 			t.Fatal("Parsing code failed")
 		}
 
-		bindOk, bound := macro.Matches(code.Expressions.(e.List).Head())
+		bindOk, bound := macro.Matches(code.Expressions.(e.List).First())
 
 		if !bindOk {
 			t.Errorf("Could not bind %s to patterns in %s", c.in, c.pattern)
@@ -408,14 +408,14 @@ func runBindingTest(t *testing.T, in string, patternStr string, bound bindings) 
 		t.Fatalf("Parsing pattern '%s' failed", pattern)
 	}
 
-	macro := Macro{pattern.Expressions.Head(), nil}
+	macro := Macro{pattern.Expressions.First(), nil}
 
 	parseOk, parseRes := parser.Parse(strings.NewReader(in))
 
 	if parseOk != 0 {
 		t.Fatalf("Parsing code %s failed", in)
 	}
-	_, bindings := macro.Matches(parseRes.Expressions.Head())
+	_, bindings := macro.Matches(parseRes.Expressions.First())
 	if len(bindings) != len(bound) {
 		t.Errorf(`Macro %s did not bind corretly for %s. Expected %d bindings got %d`,
 			patternStr, in, len(bound), len(bindings))

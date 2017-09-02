@@ -5,16 +5,16 @@ import (
 )
 
 func head(expr e.List) e.Expr {
-	return expr.Head()
+	return expr.First()
 }
 
 func headList(expr e.List) (list e.List, ok bool) {
-	list, ok = expr.Head().(e.List)
+	list, ok = expr.First().(e.List)
 	return
 }
 
 func tail(expr e.List) (list e.List, ok bool) {
-	list, ok = expr.Tail().(e.List)
+	list, ok = expr.Second().(e.List)
 	return
 }
 

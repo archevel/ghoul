@@ -25,11 +25,11 @@ func (m *Macromancer) Transform(inList e.List) e.Expr {
 
 func (m *Macromancer) transform(expr e.Expr) e.Expr {
 	if l, ok := expr.(e.List); ok && l != e.NIL {
-		h := l.Head()
+		h := l.First()
 		if sl, ok := subList(l); ok {
 			newH := m.expandMacrosAgainst(sl)
 			h = newH
-			if sl, ok := h.(e.List); ok && e.Identifier("define-syntax").Equiv(sl.Head()) {
+			if sl, ok := h.(e.List); ok && e.Identifier("define-syntax").Equiv(sl.First()) {
 				mg, err := NewMacroGroup(sl)
 				if err == nil {
 					m.macroGroups = append(m.macroGroups, mg)
@@ -39,7 +39,7 @@ func (m *Macromancer) transform(expr e.Expr) e.Expr {
 					newT := m.expandMacrosAgainst(t)
 					return m.transform(newT)
 				} else {
-					return m.transform(l.Tail())
+					return m.transform(l.Second())
 				}
 			}
 
@@ -47,7 +47,7 @@ func (m *Macromancer) transform(expr e.Expr) e.Expr {
 
 		h = m.transform(h)
 
-		t := m.transform(l.Tail())
+		t := m.transform(l.Second())
 
 		return e.Cons(h, t)
 
@@ -73,11 +73,11 @@ func (m *Macromancer) expandMacrosAgainst(subList e.List) e.Expr {
 }
 
 func tail(l e.List) (e.List, bool) {
-	t, ok := l.Tail().(e.List)
+	t, ok := l.Second().(e.List)
 	return t, ok
 }
 
 func subList(l e.List) (e.List, bool) {
-	h, ok := l.Head().(e.List)
+	h, ok := l.First().(e.List)
 	return h, ok
 }

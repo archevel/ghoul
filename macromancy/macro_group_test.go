@@ -31,7 +31,7 @@ func TestMacroGroupMatchingIdentifier(t *testing.T) {
 
 		group := MacroGroup{e.Identifier(c.identifier), c.macros}
 
-		if len(group.Matches(code.Expressions.Head())) != len(c.macros) {
+		if len(group.Matches(code.Expressions.First())) != len(c.macros) {
 			t.Errorf("Expected match of '%s' with '%s' to yield %v", c.in, c.identifier, c.macros)
 		}
 	}
@@ -66,7 +66,7 @@ func TestBuildMacroGroupFromCode(t *testing.T) {
 			t.Fatal("Parsing code failed")
 		}
 
-		actual, err := NewMacroGroup(code.Expressions.Head())
+		actual, err := NewMacroGroup(code.Expressions.First())
 
 		if err != nil {
 			t.Errorf("Got unexpected error '%s' when creating new macro group from '%s'", err, c.in)
@@ -124,7 +124,7 @@ func TestFailingCodeForBuildingMacroGroups(t *testing.T) {
 			t.Fatal("Parsing code failed")
 		}
 
-		_, err := NewMacroGroup(code.Expressions.Head())
+		_, err := NewMacroGroup(code.Expressions.First())
 
 		if err == nil {
 			t.Errorf("Expected error '%s', but got nil when building macro group from '%s'", c.errMsg, c.in)
