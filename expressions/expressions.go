@@ -257,3 +257,26 @@ func (e nilList) Equiv(expr Expr) bool {
 func (e nilList) String() string {
 	return e.Repr()
 }
+
+type Foreign struct {
+	value interface{}
+}
+
+func Wrapp(val interface{}) *Foreign {
+	return &Foreign{val}
+}
+
+func (f Foreign) Repr() string {
+	return fmt.Sprintf("#<foreign:%#v>", f.value)
+}
+
+func (f Foreign) Equiv(e Expr) bool {
+	switch f2 := e.(type) {
+	case Foreign:
+		return f.value == f2.value
+	case *Foreign:
+		return f.value == f2.value
+	default:
+		return false
+	}
+}

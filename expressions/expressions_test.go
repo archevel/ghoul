@@ -171,6 +171,53 @@ func TestPairRepresentation(t *testing.T) {
 	}
 }
 
+type testStructA struct {
+	value string
+}
+
+var testA = testStructA{"a"}
+
+type testStructB struct {
+	num int64
+}
+
+var testB = testStructB{23}
+
+type testStructC struct {
+	something interface{}
+}
+
+var testC = testStructC{nil}
+
+func TestForeignRepresentation(t *testing.T) {
+	cases := []struct {
+		in  Expr
+		out string
+	}{
+		{Wrapp(testA), "#<foreign:expressions.testStructA{value:\"a\"}>"},
+		{Wrapp(testStructA{"b"}), "#<foreign:expressions.testStructA{value:\"b\"}>"},
+		{Wrapp(testB), "#<foreign:expressions.testStructB{num:23}>"},
+		{Wrapp(testC), "#<foreign:expressions.testStructC{something:interface {}(nil)}>"},
+		{Wrapp(&testA), "#<foreign:&expressions.testStructA{value:\"a\"}>"},
+		{Wrapp(&testStructA{"b"}), "#<foreign:&expressions.testStructA{value:\"b\"}>"},
+		{Wrapp(&testB), "#<foreign:&expressions.testStructB{num:23}>"},
+		{Wrapp(&testC), "#<foreign:&expressions.testStructC{something:interface {}(nil)}>"},
+		{Wrapp(nil), "#<foreign:<nil>>"},
+		{Wrapp([]testStructA{testStructA{"a"}}), "#<foreign:[]expressions.testStructA{expressions.testStructA{value:\"a\"}}>"},
+	}
+
+	for _, c := range cases {
+
+		p := c.in
+
+		actual := p.Repr()
+
+		if actual != c.out {
+			t.Errorf("Input was %v. Expected:\n\t'%s'\n\nbut got:\n\t'%s'", c.in, c.out, actual)
+		}
+	}
+}
+
 var equivCases = []struct {
 	a  Expr
 	b  Expr
@@ -203,11 +250,38 @@ var equivCases = []struct {
 	{NIL, NIL, true},
 	{Cons(Identifier("sum"), NIL), Cons(Identifier("sum"), NIL), true},
 	{*Cons(Identifier("gr"), NIL), Cons(Identifier("gr"), NIL), true},
-
 	{Cons(Identifier("sum"), NIL), *Cons(Identifier("sum"), NIL), true},
+	{*Cons(Identifier("min"), NIL), *Cons(Identifier("min"), NIL), true},
 	{&Quote{Identifier("ludlum")}, &Quote{Identifier("ludlum")}, true},
 	{Quote{Identifier("dare")}, &Quote{Identifier("dare")}, true},
 	{Quote{Identifier("hudlum")}, Quote{Identifier("hudlum")}, true},
+	{Wrapp(testA), Wrapp(testA), true},
+	{*Wrapp(testA), Wrapp(testA), true},
+	{Wrapp(testA), *Wrapp(testA), true},
+	{*Wrapp(testA), *Wrapp(testA), true},
+	{Wrapp(testB), Wrapp(testA), false},
+	{Wrapp(testB), Wrapp(testStructB{23}), true},
+	{Wrapp(testB), Wrapp(testStructB{99}), false},
+	{Wrapp(testStructC{testB}), Wrapp(testStructC{testStructB{23}}), true},
+	{Wrapp(testStructC{&testB}), Wrapp(testStructC{&testB}), true},
+	{Wrapp(testStructC{&testB}), Wrapp(testStructC{&testStructB{23}}), false},
+	{Wrapp(&testStructC{testB}), Wrapp(&testStructC{testB}), false},
+	{Wrapp(testStructC{testB}), Wrapp(testStructC{&testStructB{23}}), false},
+	{*Wrapp(testStructC{testB}), Wrapp(testStructC{testStructB{23}}), true},
+	{*Wrapp(testStructC{&testB}), Wrapp(testStructC{&testB}), true},
+	{*Wrapp(testStructC{&testB}), Wrapp(testStructC{&testStructB{23}}), false},
+	{*Wrapp(&testStructC{testB}), Wrapp(&testStructC{testB}), false},
+	{*Wrapp(testStructC{testB}), Wrapp(testStructC{&testStructB{23}}), false},
+	{Wrapp(testStructC{testB}), *Wrapp(testStructC{testStructB{23}}), true},
+	{Wrapp(testStructC{&testB}), *Wrapp(testStructC{&testB}), true},
+	{Wrapp(testStructC{&testB}), *Wrapp(testStructC{&testStructB{23}}), false},
+	{Wrapp(&testStructC{testB}), *Wrapp(&testStructC{testB}), false},
+	{Wrapp(testStructC{testB}), *Wrapp(testStructC{&testStructB{23}}), false},
+	{*Wrapp(testStructC{testB}), *Wrapp(testStructC{testStructB{23}}), true},
+	{*Wrapp(testStructC{&testB}), *Wrapp(testStructC{&testB}), true},
+	{*Wrapp(testStructC{&testB}), *Wrapp(testStructC{&testStructB{23}}), false},
+	{*Wrapp(&testStructC{testB}), *Wrapp(&testStructC{testB}), false},
+	{*Wrapp(testStructC{testB}), *Wrapp(testStructC{&testStructB{23}}), false},
 }
 
 func TestSimpleExpressionEquiv(t *testing.T) {
