@@ -4,17 +4,9 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 )
 
-func head(expr e.List) e.Expr {
-	return expr.First()
-}
-
 func headList(expr e.List) (list e.List, ok bool) {
 	list, ok = expr.First().(e.List)
 	return
-}
-
-func tail(expr e.List) (list e.List, ok bool) {
-	return expr.Tail()
 }
 
 func list(expr e.Expr, exprs ...e.Expr) e.List {
@@ -44,8 +36,8 @@ func isTruthy(truth e.Expr) bool {
 
 func maybeSplitExpr(expr e.Expr) (e.Expr, e.List, bool) {
 	if list, ok := expr.(e.List); ok {
-		t, isList := tail(list)
-		return head(list), t, isList
+		t, isList := list.Tail()
+		return list.Head(), t, isList
 	}
 	return nil, nil, false
 }

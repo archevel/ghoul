@@ -121,7 +121,7 @@ func TestLambdasAreMonadicFunctions(t *testing.T) {
 		_, parsed := p.Parse(r)
 
 		call := func(args e.List) (e.Expr, error) {
-			funExpr, ok := head(args).(e.Function)
+			funExpr, ok := args.Head().(e.Function)
 			if !ok {
 				t.Errorf("Given %s. Expected %s to be a Function", c.in, funExpr.Repr())
 			}
@@ -329,20 +329,20 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 
 		maxConts = math.Max(float64(len(*((*ghoul).conts))), maxConts)
 		maxScopes = math.Max(float64(len(*((*ghoul).env))), maxScopes)
-		return head(args), nil
+		return args.Head(), nil
 	}, env)
 
 	RegisterFuncAs("eq?", func(args e.List) (e.Expr, error) {
-		fst := head(args)
-		t, _ := tail(args)
-		snd := head(t)
+		fst := args.Head()
+		t, _ := args.Tail()
+		snd := t.Head()
 		return e.Boolean(fst.Equiv(snd)), nil
 	}, env)
 
 	RegisterFuncAs("+", func(args e.List) (e.Expr, error) {
-		fst := head(args).(e.Integer)
-		t, _ := tail(args)
-		snd := head(t).(e.Integer)
+		fst := args.Head().(e.Integer)
+		t, _ := args.Tail()
+		snd := t.Head().(e.Integer)
 		return e.Integer(fst + snd), nil
 	}, env)
 

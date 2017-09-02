@@ -68,14 +68,14 @@ func (ev *Evaluator) popContinuation() continuation {
 
 func sexprSeqEvalContinuationFor(exprs e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
-		t, ok := tail(exprs)
+		t, ok := exprs.Tail()
 		if ok && t != e.NIL {
 			ev.pushContinuation(sexprSeqEvalContinuationFor(t, maybeTailCall))
 		} else if !ok {
 			return nil, NewEvaluationError("Malformed expresion sequence", exprs)
 		}
 
-		ev.pushContinuation(sexprEvalContinuationFor(head(exprs), exprs, maybeTailCall && t == e.NIL))
+		ev.pushContinuation(sexprEvalContinuationFor(exprs.Head(), exprs, maybeTailCall && t == e.NIL))
 		return e.NIL, nil
 	}
 }
@@ -140,19 +140,19 @@ func makeIdentificationLookupContinuationFor(ident e.Identifier, parent e.List) 
 }
 func assignmentContinuationFor(assignment e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
-		valueExpr, val_ok := tail(assignment)
+		valueExpr, val_ok := assignment.Tail()
 		if !val_ok {
 			return e.NIL, NewEvaluationError("Malformed assignment", assignment)
 		}
-		nilTail, nil_ok := tail(valueExpr)
+		nilTail, nil_ok := valueExpr.Tail()
 		if val_ok && nil_ok && valueExpr != e.NIL && nilTail == e.NIL {
 			ev.pushContinuation(func(value e.Expr, ev *Evaluator) (e.Expr, error) {
 				var env *environment = ev.env
 
-				ret, err := assign(head(assignment), value, env)
+				ret, err := assign(assignment.Head(), value, env)
 				return ret, err
 			})
-			ev.pushContinuation(sexprEvalContinuationFor(head(valueExpr), valueExpr, maybeTailCall))
+			ev.pushContinuation(sexprEvalContinuationFor(valueExpr.Head(), valueExpr, maybeTailCall))
 			return e.NIL, nil
 
 		} else {
@@ -170,14 +170,14 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 
 		alternative, ok := headList(conds)
 		if !ok {
-			return nil, NewEvaluationError("Bad syntax: Malformed cond clause: "+head(conds).Repr(), conds)
+			return nil, NewEvaluationError("Bad syntax: Malformed cond clause: "+conds.Head().Repr(), conds)
 		}
 
 		if alternative == e.NIL {
 			return nil, NewEvaluationError("Bad syntax: Missing condition", conds)
 		}
 
-		consequent, ok := tail(alternative)
+		consequent, ok := alternative.Tail()
 		if !ok {
 			return nil, NewEvaluationError("Bad syntax: Malformed cond clause: "+alternative.Repr(), alternative)
 		}
@@ -186,18 +186,18 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 			return nil, NewEvaluationError("Bad syntax: Missing consequent", alternative)
 		}
 
-		predExpr := head(alternative)
+		predExpr := alternative.Head()
 		if predExpr.Equiv(ELSE_SPECIAL_FORM) {
 			predExpr = e.Boolean(true)
 		}
 
 		nextPredOrConsequent := func(truthy e.Expr, ev *Evaluator) (e.Expr, error) {
 			if isTruthy(truthy) {
-				ev.pushContinuation(sexprEvalContinuationFor(head(consequent), conds, maybeTailCall))
+				ev.pushContinuation(sexprEvalContinuationFor(consequent.Head(), conds, maybeTailCall))
 				return e.NIL, nil
 			}
 
-			tailConds, ok := tail(conds)
+			tailConds, ok := conds.Tail()
 			if !ok {
 				return nil, NewEvaluationError("Bad syntax: Malformed cond, expected list not pair", conds)
 			}
@@ -217,12 +217,12 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 func lambdaContinuationFor(lambda e.List) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		var env *environment = ev.env
-		if body, ok := tail(lambda); ok {
+		if body, ok := lambda.Tail(); ok {
 			fun := func(args e.List) (e.Expr, error) {
 				// evaluate body
 				ev.pushContinuation(sexprSeqEvalContinuationFor(body, true))
 				// bind params in new scope
-				ev.pushContinuation(prepareScope(head(lambda), args, env))
+				ev.pushContinuation(prepareScope(lambda.Head(), args, env))
 
 				return e.NIL, nil
 			}
@@ -242,10 +242,10 @@ func prepareScope(paramExpr e.Expr, args e.List, definitionEnv *environment) con
 		var variadicParam e.Expr = paramExpr
 
 		for ok && paramList != e.NIL && args != e.NIL {
-			arg := head(args)
-			args, _ = tail(args)
-			param := head(paramList)
-			pl, ok := tail(paramList)
+			arg := args.Head()
+			args, _ = args.Tail()
+			param := paramList.Head()
+			pl, ok := paramList.Tail()
 			if !ok {
 				variadicParam = paramList.Second()
 				paramList = e.NIL
@@ -306,15 +306,15 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 		}
 		ev.pushContinuation(applyFunc)
 
-		resolveFunc := sexprEvalContinuationFor(head(callable), callable, false)
+		resolveFunc := sexprEvalContinuationFor(callable.Head(), callable, false)
 		ev.pushContinuation(resolveFunc)
 
-		funcArgs, ok := tail(callable)
+		funcArgs, ok := callable.Tail()
 		for ok && funcArgs != e.NIL {
-			anArg := head(funcArgs)
+			anArg := funcArgs.Head()
 			ev.pushContinuation(collectArgs)
 			ev.pushContinuation(sexprEvalContinuationFor(anArg, callable, false))
-			funcArgs, ok = tail(funcArgs)
+			funcArgs, ok = funcArgs.Tail()
 			if !ok {
 				return e.NIL, NewEvaluationError("Bad syntax in procedure application", funcArgs)
 			}
@@ -325,7 +325,7 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 
 func defineContinuationFor(def e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
-		valueExpr, val_ok := tail(def)
+		valueExpr, val_ok := def.Tail()
 		if !val_ok {
 			return nil, NewEvaluationError("Bad syntax: invalid binding format", def)
 		}
@@ -333,13 +333,13 @@ func defineContinuationFor(def e.List, maybeTailCall bool) continuation {
 		if valueExpr == e.NIL {
 			return nil, NewEvaluationError("Bad syntax: missing value in binding", def)
 		}
-		if t, ok := tail(valueExpr); ok && t != e.NIL {
+		if t, ok := valueExpr.Tail(); ok && t != e.NIL {
 
 			return nil, NewEvaluationError("Bad syntax: multiple values in binding", def)
 		}
 
-		ev.pushContinuation(bindVar(head(def)))
-		ev.pushContinuation(sexprEvalContinuationFor(head(valueExpr), valueExpr, maybeTailCall))
+		ev.pushContinuation(bindVar(def.Head()))
+		ev.pushContinuation(sexprEvalContinuationFor(valueExpr.Head(), valueExpr, maybeTailCall))
 		return e.NIL, nil
 	}
 }
