@@ -14,7 +14,7 @@ Ghoul is a lisp interpreter that aims to be simple to understand while being a b
 
 
 ## Notes:
-TODO: Add a Foreign expression type that can be used for arbitrary structs  
+~~TODO: Add a Foreign expression type that can be used for arbitrary structs~~  
 TODO: Write "wraith" - tool for wrapping Go code for Ghoul use  
 TODO: Wrap Golang standard library so it is callable from ghoul  
 TODO: Implement module system so that code can be included when required (as opposed to including it all upfront).  
@@ -24,6 +24,7 @@ TODO: Use `do` instead of `begin`?
 TODO: Use `def` instead of `define`?  
 ~~TODO: Implement macros in the macromancy pakage!~~  
 TODO: Make macro elipsis associate to preceeding `identifier` so more complex code patterns can be expanded.   
+TODO: Add keyword literals to macro matching 
 TODO: Implement support for multiple elipsis in macro matching and in expansion bodies.  
 TODO: Ensure macros propagate source location to expanded code  
 TODO: Implement pathological macros (like in racket macro docs 16.1), e.g. (swap tmp other).  
@@ -35,4 +36,3 @@ TODO: Make `Pair` interface have a `First() Expr` and `Second() Expr` method.
 TODO: Replace `cond` with `match` keyword and have it use pattern matching.  
 TODO: Implement a symbol table and use integers instead of strings to compare/find the right values  
 TODO: Add logging (to lowest log level) essentially everywhere and make sure it is disabled in `ghoul` command unless some param is given.  
-
