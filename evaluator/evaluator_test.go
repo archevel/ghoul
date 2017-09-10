@@ -320,7 +320,8 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 	_, parsed := p.Parse(r)
 
 	env := NewEnvironment()
-	ghoul := NewEvaluator(logging.NoLogger, env)
+	evaluator := New(logging.NoLogger, env)
+
 	var maxConts float64 = 0
 	var maxScopes float64 = 0
 	calls := 0
@@ -328,8 +329,8 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 	RegisterFuncAs("checkSize", func(args e.List) (e.Expr, error) {
 		calls++
 
-		maxConts = math.Max(float64(len(*((*ghoul).conts))), maxConts)
-		maxScopes = math.Max(float64(len(*((*ghoul).env))), maxScopes)
+		maxConts = math.Max(float64(len(*((*evaluator).conts))), maxConts)
+		maxScopes = math.Max(float64(len(*((*evaluator).env))), maxScopes)
 		return args.Head(), nil
 	}, env)
 
@@ -347,7 +348,7 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 		return e.Integer(fst + snd), nil
 	}, env)
 
-	res, err := ghoul.Evaluate(parsed.Expressions)
+	res, err := evaluator.Evaluate(parsed.Expressions)
 	out := e.Integer(100)
 
 	if err != nil {

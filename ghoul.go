@@ -89,5 +89,5 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 		}
 		return e.NIL, nil
 	})
-	return ev.NewEvaluator(logger, env)
+	return ev.New(logger, env)
 }

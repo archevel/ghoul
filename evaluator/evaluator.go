@@ -16,17 +16,18 @@ type continuation func(arg e.Expr, ev *Evaluator) (e.Expr, error)
 type contStack []continuation
 
 func Evaluate(exprs e.Expr, env *environment) (res e.Expr, err error) {
-	evaluator := Evaluator{env, nil}
+	evaluator := New(logging.StandardLogger, env)
 	return evaluator.Evaluate(exprs)
 }
 
-func NewEvaluator(logger logging.Logger, env *environment) *Evaluator {
-	return &Evaluator{env, nil}
+func New(logger logging.Logger, env *environment) *Evaluator {
+	return &Evaluator{logger, env, nil}
 }
 
 type Evaluator struct {
-	env   *environment
-	conts *contStack
+	logger logging.Logger
+	env    *environment
+	conts  *contStack
 }
 
 func (ev *Evaluator) Evaluate(exprs e.Expr) (e.Expr, error) {
