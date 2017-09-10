@@ -2,6 +2,8 @@ package logging
 
 import (
 	"testing"
+
+	e "github.com/archevel/ghoul/expressions"
 )
 
 type mockWriter struct {
@@ -57,4 +59,31 @@ func TestDoesNotPanicWithNilAsWriters(t *testing.T) {
 	l := New(nil, nil)
 	l.Warn("hello")
 	l.Debug("hello")
+}
+
+func TestCanLogExpressions(t *testing.T) {
+	cases := []struct {
+		msg    string
+		exprs  []e.Expr
+		ending string
+	}{
+		{"hello: %s", []e.Expr{e.String("<name here>")}, "hello: \"<name here>\"\n"},
+		{"values: %s, %s, %s", []e.Expr{e.Integer(100), e.Float(63.9), e.Boolean(true)}, "values: 100, 63.9, #t\n"},
+	}
+	for _, c := range cases {
+		m := mockWriter{&[]string{}}
+
+		l := New(nil, m)
+
+		l.Warn(c.msg, c.exprs...)
+
+		written := *m.written
+		if len(written) != 1 {
+			t.Fatalf("Logger wrote the wrong number of times expected %d, but got %d", 1, len(*m.written))
+		}
+
+		if written[0][len(written[0])-len(c.ending):] != c.ending {
+			t.Errorf("Logger wrote the wrong message '%s'. Expected ending:\n%s\n, but got\n%s\n", written[0], c.ending, written[0][len(written[0])-len(c.ending):])
+		}
+	}
 }

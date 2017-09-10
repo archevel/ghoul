@@ -4,6 +4,8 @@ import (
 	"io"
 	"log"
 	"os"
+
+	e "github.com/archevel/ghoul/expressions"
 )
 
 var (
@@ -13,8 +15,8 @@ var (
 )
 
 type Logger interface {
-	Debug(string, ...interface{})
-	Warn(string, ...interface{})
+	Debug(string, ...e.Expr)
+	Warn(string, ...e.Expr)
 }
 
 type logger struct {
@@ -37,14 +39,23 @@ func New(debug io.Writer, warn io.Writer) Logger {
 
 }
 
-func (l logger) Debug(msg string, args ...interface{}) {
+func (l logger) Debug(msg string, args ...e.Expr) {
 	if l.debug != nil {
-		l.debug.Printf(msg, args...)
+		writeToLog(l.debug, msg, args)
 	}
 }
 
-func (l logger) Warn(msg string, args ...interface{}) {
+func (l logger) Warn(msg string, args ...e.Expr) {
 	if l.warn != nil {
-		l.warn.Printf(msg, args...)
+		writeToLog(l.warn, msg, args)
 	}
+}
+
+func writeToLog(l *log.Logger, msg string, args []e.Expr) {
+	asReprStrings := make([]interface{}, len(args))
+	for i, v := range args {
+		asReprStrings[i] = v.Repr()
+	}
+
+	l.Printf(msg, asReprStrings...)
 }
