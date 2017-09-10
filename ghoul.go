@@ -14,7 +14,7 @@ type Ghoul interface {
 	Process(exprReader io.Reader) (e.Expr, error)
 }
 
-func NewGhoul() Ghoul {
+func New() Ghoul {
 	evaluator := prepareEvaluator()
 	mancer := m.NewMacromancer()
 	return ghoul{evaluator, mancer}

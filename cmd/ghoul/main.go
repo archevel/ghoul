@@ -23,7 +23,7 @@ func runFile(path string) {
 	f, err := os.Open(path)
 
 	if err == nil {
-		g := ghoul.NewGhoul()
+		g := ghoul.New()
 		_, processErr := g.Process(f)
 		f.Close()
 		if processErr != nil {
@@ -38,7 +38,7 @@ func runFile(path string) {
 }
 
 func repl() {
-	g := ghoul.NewGhoul()
+	g := ghoul.New()
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("> ")
 	for text, readErr := reader.ReadString('\n'); readErr == nil; text, readErr = reader.ReadString('\n') {

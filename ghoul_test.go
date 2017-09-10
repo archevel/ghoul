@@ -29,7 +29,7 @@ const guidingScript = `
 
 func ExampleGuiding() {
 	r := strings.NewReader(guidingScript)
-	g := NewGhoul()
+	g := New()
 
 	g.Process(r)
 	// Output:
@@ -48,7 +48,7 @@ func ExampleGuiding() {
 }
 
 func TestFailsOnUnparsableCode(t *testing.T) {
-	g := NewGhoul()
+	g := New()
 
 	_, err := g.Process(strings.NewReader(")"))
 
@@ -58,7 +58,7 @@ func TestFailsOnUnparsableCode(t *testing.T) {
 }
 
 func TestYieldsEvaluationErrorWhenThereIsAnErrror(t *testing.T) {
-	g := NewGhoul()
+	g := New()
 	in := "(baz 1 2 3)"
 	_, err := g.Process(strings.NewReader(in))
 
@@ -68,7 +68,7 @@ func TestYieldsEvaluationErrorWhenThereIsAnErrror(t *testing.T) {
 }
 
 func TestExpandsMacrosBeforeEvaluating(t *testing.T) {
-	g := NewGhoul()
+	g := New()
 	in := "(define-syntax baz (syntax-rules () (((baz x y) (+ x y))))) (baz 1 2)"
 	expected := e.Integer(3)
 	res, err := g.Process(strings.NewReader(in))
@@ -105,7 +105,7 @@ func TestBasicBuiltInFunctions(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		g := NewGhoul()
+		g := New()
 		res, err := g.Process(strings.NewReader(c.in))
 
 		if err != nil {
@@ -119,7 +119,7 @@ func TestBasicBuiltInFunctions(t *testing.T) {
 }
 
 func ExampleTestPrintln() {
-	g := NewGhoul()
+	g := New()
 	g.Process(strings.NewReader(`(println "hello, world")`))
 
 	// Output:
