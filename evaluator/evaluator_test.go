@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	e "github.com/archevel/ghoul/expressions"
+	"github.com/archevel/ghoul/logging"
 	p "github.com/archevel/ghoul/parser"
 )
 
@@ -319,7 +320,7 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 	_, parsed := p.Parse(r)
 
 	env := NewEnvironment()
-	ghoul := &Evaluator{env, nil}
+	ghoul := NewEvaluator(logging.NoLogger, env)
 	var maxConts float64 = 0
 	var maxScopes float64 = 0
 	calls := 0

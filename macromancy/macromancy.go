@@ -2,18 +2,19 @@ package macromancy
 
 import (
 	e "github.com/archevel/ghoul/expressions"
+	"github.com/archevel/ghoul/logging"
 )
 
 type Transformer interface {
 	Transform(list e.List) e.Expr
 }
 type Macromancer struct {
+	logger      logging.Logger
 	macroGroups []*MacroGroup
 }
 
-func NewMacromancer() *Macromancer {
-
-	return &Macromancer{}
+func NewMacromancer(logger logging.Logger) *Macromancer {
+	return &Macromancer{logger, []*MacroGroup{}}
 }
 
 func (m *Macromancer) Groups() []*MacroGroup {

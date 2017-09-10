@@ -3,6 +3,13 @@ package logging
 import (
 	"io"
 	"log"
+	"os"
+)
+
+var (
+	NoLogger       = New(nil, nil)
+	StandardLogger = New(nil, os.Stderr)
+	VerboseLogger  = New(os.Stderr, os.Stderr)
 )
 
 type Logger interface {

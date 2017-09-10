@@ -6,8 +6,9 @@ import (
 
 	ev "github.com/archevel/ghoul/evaluator"
 	e "github.com/archevel/ghoul/expressions"
+	"github.com/archevel/ghoul/logging"
 	m "github.com/archevel/ghoul/macromancy"
-	parser "github.com/archevel/ghoul/parser"
+	"github.com/archevel/ghoul/parser"
 )
 
 type Ghoul interface {
@@ -15,8 +16,12 @@ type Ghoul interface {
 }
 
 func New() Ghoul {
-	evaluator := prepareEvaluator()
-	mancer := m.NewMacromancer()
+	return NewLoggingGhoul(logging.StandardLogger)
+}
+
+func NewLoggingGhoul(logger logging.Logger) Ghoul {
+	evaluator := prepareEvaluator(logger)
+	mancer := m.NewMacromancer(logger)
 	return ghoul{evaluator, mancer}
 }
 
@@ -37,7 +42,7 @@ func (g ghoul) Process(exprReader io.Reader) (e.Expr, error) {
 	return result, err
 }
 
-func prepareEvaluator() *ev.Evaluator {
+func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 	env := ev.NewEnvironment()
 
 	env.Register("eq?", func(args e.List) (e.Expr, error) {
@@ -84,5 +89,5 @@ func prepareEvaluator() *ev.Evaluator {
 		}
 		return e.NIL, nil
 	})
-	return ev.NewEvaluator(env)
+	return ev.NewEvaluator(logger, env)
 }

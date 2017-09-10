@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/archevel/ghoul/logging"
 	"github.com/archevel/ghoul/parser"
 )
 
@@ -101,7 +102,7 @@ func runMacroTest(t *testing.T, code string, expected string) {
 		t.Errorf("Failed to parse code: %s\n", code)
 	}
 
-	var transformer Transformer = NewMacromancer()
+	var transformer Transformer = NewMacromancer(logging.NoLogger)
 
 	ok, parsedExpected := parser.Parse(strings.NewReader(expected))
 	if ok != 0 {

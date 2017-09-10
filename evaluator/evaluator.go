@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	e "github.com/archevel/ghoul/expressions"
+	"github.com/archevel/ghoul/logging"
 )
 
 const COND_SPECIAL_FORM = e.Identifier("cond")
@@ -19,7 +20,7 @@ func Evaluate(exprs e.Expr, env *environment) (res e.Expr, err error) {
 	return evaluator.Evaluate(exprs)
 }
 
-func NewEvaluator(env *environment) *Evaluator {
+func NewEvaluator(logger logging.Logger, env *environment) *Evaluator {
 	return &Evaluator{env, nil}
 }
 
