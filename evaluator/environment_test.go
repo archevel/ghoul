@@ -20,7 +20,7 @@ func TestBoundFunctionsCanBeFoundByTheirId(t *testing.T) {
 	env := NewEnvironment()
 	id := e.Identifier("foo")
 	nilFunc := func(args e.List) (e.Expr, error) { return e.NIL, nil }
-	expectedFun := e.Function{&nilFunc}
+	expectedFun := Function{&nilFunc}
 	bindFuncAtBottomAs(id, expectedFun, env)
 
 	actual := (*(*env)[0])[id]
@@ -36,7 +36,7 @@ func TestBoundFunctionsResideInBottomScope(t *testing.T) {
 
 	id := e.Identifier("foo")
 	nilFunc := func(args e.List) (e.Expr, error) { return e.NIL, nil }
-	expectedFun := e.Function{&nilFunc}
+	expectedFun := Function{&nilFunc}
 	bindFuncAtBottomAs(id, expectedFun, env)
 
 	actual := (*(*env)[0])[id]

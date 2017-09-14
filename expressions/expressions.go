@@ -80,25 +80,6 @@ func (e String) Equiv(expr Expr) bool {
 	}
 }
 
-type Function struct {
-	Fun *func(args List) (Expr, error)
-}
-
-func (e Function) Repr() string {
-	return "#<procedure>"
-}
-
-func (e Function) Equiv(expr Expr) bool {
-	switch v := expr.(type) {
-	case Function:
-		return e == v
-	case *Function:
-		return e == *v
-	}
-
-	return false
-}
-
 type Quote struct {
 	Quoted Expr
 }

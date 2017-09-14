@@ -122,7 +122,7 @@ func TestLambdasAreMonadicFunctions(t *testing.T) {
 		_, parsed := p.Parse(r)
 
 		call := func(args e.List) (e.Expr, error) {
-			funExpr, ok := args.Head().(e.Function)
+			funExpr, ok := args.Head().(Function)
 			if !ok {
 				t.Errorf("Given %s. Expected %s to be a Function", c.in, funExpr.Repr())
 			}

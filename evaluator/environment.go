@@ -19,16 +19,16 @@ func NewEnvironment() *environment {
 }
 
 func (env environment) Register(name string, f func(e.List) (e.Expr, error)) {
-	bindFuncAtBottomAs(e.Identifier(name), e.Function{&f}, &env)
+	bindFuncAtBottomAs(e.Identifier(name), Function{&f}, &env)
 }
 
-func bindFuncAtBottomAs(id e.Identifier, fun e.Function, env *environment) {
+func bindFuncAtBottomAs(id e.Identifier, fun Function, env *environment) {
 	scope := bottomScope(env)
 	(*scope)[id] = fun
 }
 
 func RegisterFuncAs(name string, f func(e.List) (e.Expr, error), env *environment) {
-	bindFuncAtBottomAs(e.Identifier(name), e.Function{&f}, env)
+	bindFuncAtBottomAs(e.Identifier(name), Function{&f}, env)
 }
 
 func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {

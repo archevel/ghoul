@@ -250,7 +250,7 @@ func lambdaContinuationFor(lambda e.List) continuation {
 			}
 
 			ev.log.Debug("Yielding Function expression value for lambda")
-			return e.Function{&fun}, nil
+			return Function{&fun}, nil
 		} else {
 			ev.log.Debug("Lambda expression had malformed body: %s", lambda)
 			return e.NIL, NewEvaluationError("Malformed lambda expression", lambda)
@@ -330,7 +330,7 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 		}
 
 		applyFunc := func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
-			funExpr, ok := arg.(e.Function)
+			funExpr, ok := arg.(Function)
 			if !ok {
 				ev.log.Debug("Can not apply a non-function!")
 				return e.NIL, NewEvaluationError("Not a procedure: "+arg.Repr(), callable)
