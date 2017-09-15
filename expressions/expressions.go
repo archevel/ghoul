@@ -261,3 +261,7 @@ func (f Foreign) Equiv(e Expr) bool {
 		return false
 	}
 }
+
+func (f *Foreign) Val() interface{} {
+	return f.value
+}

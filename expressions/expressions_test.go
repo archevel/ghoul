@@ -200,6 +200,95 @@ func TestForeignRepresentation(t *testing.T) {
 	}
 }
 
+func TestForeignValue(t *testing.T) {
+
+	cases := []struct {
+		in                Expr
+		isPointer         bool
+		structName        string
+		structIntValue    int64
+		structStringValue string
+	}{
+
+		{Wrapp(testA), false, "testStructA", 0, "a"},
+		{Wrapp(testStructA{"b"}), false, "testStructA", 0, "b"},
+		{Wrapp(testB), false, "testStructB", 23, ""},
+		{Wrapp(testC), false, "testStructC", 0, ""},
+		{Wrapp(&testA), true, "testStructA", 0, "a"},
+		{Wrapp(&testStructA{"b"}), true, "testStructA", 0, "b"},
+		{Wrapp(&testB), true, "testStructB", 23, ""},
+		{Wrapp(&testC), true, "testStructC", 0, ""},
+	}
+
+	for _, c := range cases {
+
+		f := c.in.(*Foreign)
+
+		actual := f.Val()
+
+		if c.structName == "testStructA" && c.isPointer {
+			s, ok := actual.(*testStructA)
+			if !ok {
+				t.Errorf("Failed to convert wrapped value to *testStructA, was: %#v", actual)
+			}
+			if s.value != c.structStringValue {
+				t.Errorf("Got value %#v. Expected value %#v", s.value, c.structStringValue)
+			}
+		}
+
+		if c.structName == "testStructA" && !c.isPointer {
+			s, ok := actual.(testStructA)
+			if !ok {
+				t.Errorf("Failed to convert wrapped value to *testStructA, was: %#v", actual)
+			}
+			if s.value != c.structStringValue {
+				t.Errorf("Got value %#v. Expected value %#v", s.value, c.structStringValue)
+			}
+		}
+
+		if c.structName == "testStructB" && c.isPointer {
+			s, ok := actual.(*testStructB)
+			if !ok {
+				t.Errorf("Failed to convert wrapped value to *testStructA, was: %#v", actual)
+			}
+			if s.num != c.structIntValue {
+				t.Errorf("Got value %#v. Expected value %#v", s.num, c.structIntValue)
+			}
+		}
+
+		if c.structName == "testStructB" && !c.isPointer {
+			s, ok := actual.(testStructB)
+			if !ok {
+				t.Errorf("Failed to convert wrapped value to *testStructA, was: %#v", actual)
+			}
+			if s.num != c.structIntValue {
+				t.Errorf("Got value %#v. Expected value %#v", s.num, c.structIntValue)
+			}
+		}
+
+		if c.structName == "testStructC" && c.isPointer {
+			s, ok := actual.(*testStructC)
+			if !ok {
+				t.Errorf("Failed to convert wrapped value to *testStructA, was: %#v", actual)
+			}
+			if s.something != nil {
+				t.Errorf("Got value %#v. Expected nil", s.something)
+			}
+		}
+
+		if c.structName == "testStructC" && !c.isPointer {
+			s, ok := actual.(testStructC)
+			if !ok {
+				t.Errorf("Failed to convert wrapped value to *testStructA, was: %#v", actual)
+			}
+			if s.something != nil {
+				t.Errorf("Got value %#v. Expected nil", s.something)
+			}
+		}
+	}
+
+}
+
 var equivCases = []struct {
 	a  Expr
 	b  Expr
