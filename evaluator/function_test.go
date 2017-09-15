@@ -7,7 +7,7 @@ import (
 )
 
 func TestFunctionRepr(t *testing.T) {
-	argFun := func(expr e.List) (e.Expr, error) { return expr, nil }
+	argFun := func(expr e.List, ev *Evaluator) (e.Expr, error) { return expr, nil }
 
 	cases := []struct {
 		in  Function
@@ -25,8 +25,8 @@ func TestFunctionRepr(t *testing.T) {
 }
 
 func TestFunctionEquiv(t *testing.T) {
-	funA := func(args e.List) (e.Expr, error) { return args, nil }
-	funB := func(args e.List) (e.Expr, error) { return args, nil }
+	funA := func(args e.List, ev *Evaluator) (e.Expr, error) { return args, nil }
+	funB := func(args e.List, ev *Evaluator) (e.Expr, error) { return args, nil }
 	funcA := Function{&funA}
 	funcB := Function{&funB}
 

@@ -3,7 +3,7 @@ package evaluator
 import e "github.com/archevel/ghoul/expressions"
 
 type Function struct {
-	Fun *func(args e.List) (e.Expr, error)
+	Fun *func(e.List, *Evaluator) (e.Expr, error)
 }
 
 func (e Function) Repr() string {

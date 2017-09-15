@@ -16,7 +16,7 @@ type Ghoul interface {
 }
 
 func New() Ghoul {
-	return NewLoggingGhoul(logging.StandardLogger)
+	return NewLoggingGhoul(logging.VerboseLogger)
 }
 
 func NewLoggingGhoul(logger logging.Logger) Ghoul {
@@ -45,42 +45,42 @@ func (g ghoul) Process(exprReader io.Reader) (e.Expr, error) {
 func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 	env := ev.NewEnvironment()
 
-	env.Register("eq?", func(args e.List) (e.Expr, error) {
+	env.Register("eq?", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		fst := args.First()
 		t, _ := args.Tail()
 		snd := t.First()
 		return e.Boolean(fst.Equiv(snd)), nil
 	})
 
-	env.Register("and", func(args e.List) (e.Expr, error) {
+	env.Register("and", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		fst := args.First().(e.Boolean)
 		t, _ := args.Tail()
 		snd := t.First().(e.Boolean)
 		return e.Boolean(fst && snd), nil
 	})
 
-	env.Register("<", func(args e.List) (e.Expr, error) {
+	env.Register("<", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		fst := args.First().(e.Integer)
 		t, _ := args.Tail()
 		snd := t.First().(e.Integer)
 		return e.Boolean(fst < snd), nil
 	})
 
-	env.Register("mod", func(args e.List) (e.Expr, error) {
+	env.Register("mod", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		fst := args.First().(e.Integer)
 		t, _ := args.Tail()
 		snd := t.First().(e.Integer)
 		return e.Integer(fst % snd), nil
 	})
 
-	env.Register("+", func(args e.List) (e.Expr, error) {
+	env.Register("+", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		fst := args.First().(e.Integer)
 		t, _ := args.Tail()
 		snd := t.First().(e.Integer)
 		return e.Integer(fst + snd), nil
 	})
 
-	env.Register("println", func(args e.List) (e.Expr, error) {
+	env.Register("println", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		fst, ok := args.First().(e.String)
 		if ok {
 			fmt.Println(fst)

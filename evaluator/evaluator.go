@@ -241,7 +241,7 @@ func lambdaContinuationFor(lambda e.List) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		var env *environment = ev.env
 		if body, ok := lambda.Tail(); ok {
-			fun := func(args e.List) (e.Expr, error) {
+			fun := func(args e.List, ev *Evaluator) (e.Expr, error) {
 				ev.log.Debug("Pushing evaluation of lambda body and preparation of the lambdas scope")
 				ev.pushContinuation(sexprSeqEvalContinuationFor(body, true))
 				ev.pushContinuation(prepareScope(lambda.Head(), args, env))
@@ -338,7 +338,7 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 			proc := funExpr.Fun
 
 			ev.log.Debug("Applying function with arguments collected")
-			res, err := (*proc)(argList)
+			res, err := (*proc)(argList, ev)
 			return res, err
 		}
 		ev.log.Debug("Pushing function application and function resolution")

@@ -19,7 +19,7 @@ func TestNewEnvironmentHasOneScope(t *testing.T) {
 func TestBoundFunctionsCanBeFoundByTheirId(t *testing.T) {
 	env := NewEnvironment()
 	id := e.Identifier("foo")
-	nilFunc := func(args e.List) (e.Expr, error) { return e.NIL, nil }
+	nilFunc := func(args e.List, ev *Evaluator) (e.Expr, error) { return e.NIL, nil }
 	expectedFun := Function{&nilFunc}
 	bindFuncAtBottomAs(id, expectedFun, env)
 
@@ -35,7 +35,7 @@ func TestBoundFunctionsResideInBottomScope(t *testing.T) {
 	env = newEnvWithEmptyScope(env)
 
 	id := e.Identifier("foo")
-	nilFunc := func(args e.List) (e.Expr, error) { return e.NIL, nil }
+	nilFunc := func(args e.List, ev *Evaluator) (e.Expr, error) { return e.NIL, nil }
 	expectedFun := Function{&nilFunc}
 	bindFuncAtBottomAs(id, expectedFun, env)
 

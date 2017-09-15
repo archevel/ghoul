@@ -121,13 +121,13 @@ func TestLambdasAreMonadicFunctions(t *testing.T) {
 		r := strings.NewReader(c.in)
 		_, parsed := p.Parse(r)
 
-		call := func(args e.List) (e.Expr, error) {
+		call := func(args e.List, ev *Evaluator) (e.Expr, error) {
 			funExpr, ok := args.Head().(Function)
 			if !ok {
 				t.Errorf("Given %s. Expected %s to be a Function", c.in, funExpr.Repr())
 			}
 			fun := funExpr.Fun
-			return (*fun)(c.args)
+			return (*fun)(c.args, ev)
 		}
 		RegisterFuncAs("call", call, env)
 		res, _ := Evaluate(parsed.Expressions, env)
@@ -326,7 +326,7 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 	var maxScopes float64 = 0
 	calls := 0
 
-	RegisterFuncAs("checkSize", func(args e.List) (e.Expr, error) {
+	RegisterFuncAs("checkSize", func(args e.List, ev *Evaluator) (e.Expr, error) {
 		calls++
 
 		maxConts = math.Max(float64(len(*((*evaluator).conts))), maxConts)
@@ -334,14 +334,14 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 		return args.Head(), nil
 	}, env)
 
-	RegisterFuncAs("eq?", func(args e.List) (e.Expr, error) {
+	RegisterFuncAs("eq?", func(args e.List, ev *Evaluator) (e.Expr, error) {
 		fst := args.Head()
 		t, _ := args.Tail()
 		snd := t.Head()
 		return e.Boolean(fst.Equiv(snd)), nil
 	}, env)
 
-	RegisterFuncAs("+", func(args e.List) (e.Expr, error) {
+	RegisterFuncAs("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
 		fst := args.Head().(e.Integer)
 		t, _ := args.Tail()
 		snd := t.Head().(e.Integer)
