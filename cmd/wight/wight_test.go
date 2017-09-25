@@ -249,26 +249,26 @@ func TestStructAndInterfaceTemplate(t *testing.T) {
 	var arg99 Ball
 
 	switch f := args.Head().(type) {
-		case e.Foreign: fallthrough
-			switch v := f.Val().(type) {
-			case *Ball:
-				arg99 = *v
-			case Ball:
-				arg99 = v
-			default:
-				return nil, errors.New("Could not converrt arg99 to Ball")
-			}
-	case *e.Foreign: 
-			switch v := f.Val().(type) {
-			case *Ball:
-				arg99 = *v
-			case Ball:
-				arg99 = v
-			default:
-				return nil, errors.New("Could not converrt arg99 to Ball")
-			}
+	case e.Foreign:
+		switch v := f.Val().(type) {
+		case *Ball:
+			arg99 = *v
+		case Ball:
+			arg99 = v
 		default:
-			return nil, errors.New("Could not converrt arg99 to Ball")				
+			return nil, errors.New("Could not converrt arg99 to Ball")
+		}
+	case *e.Foreign:
+		switch v := f.Val().(type) {
+		case *Ball:
+			arg99 = *v
+		case Ball:
+			arg99 = v
+		default:
+			return nil, errors.New("Could not converrt arg99 to Ball")
+		}
+	default:
+		return nil, errors.New("Could not converrt arg99 to Ball")
 	}
 `
 	buffer := new(bytes.Buffer)
@@ -285,6 +285,69 @@ func TestStructAndInterfaceTemplate(t *testing.T) {
 	}
 }
 
+func TestWrapResult(t *testing.T) {
+	var expected = "\n\tres0, res1, res2 := AFunc(arg0, arg1)\n" +
+		"\tresultList := e.Cons(e.ToExpr(res0), e.Cons(e.ToExpr(res1), e.Cons(e.ToExpr(res2), e.NIL)))\n" +
+		"\treturn resultList, nil\n"
+
+	buffer := new(bytes.Buffer)
+	w := bufio.NewWriter(buffer)
+	err := WrapResult("AFunc", 2, 3, w)
+	w.Flush()
+	if err != nil {
+		t.Errorf("Got unexpected error: %s", err)
+	}
+
+	actual := buffer.String()
+	if actual != expected {
+		t.Errorf("Converting result failed. Wanted:\n%s\n, got: \n%s", expected, actual)
+	}
+}
+
 func TestFunctionArgTemplate(t *testing.T) {
+	/*	var expected = `
+			var arg9 func(int) int
+
+			switch f := args.Head().(type) {
+			case e.Foreign:
+				switch v := f.Val().(type) {
+				case *func(int) int:
+					arg9 = *v
+				case func(int) int:
+					arg9 = v
+				default:
+					return nil, errors.New("Could not converrt arg9 to func(int) int")
+				}
+			case *e.Foreign:
+				switch v := f.Val().(type) {
+				case *func(int) int:
+					arg9 = *v
+				case func(int) int:
+					arg9 = v
+				default:
+					return nil, errors.New("Could not converrt arg9 to func(int) int")
+				}
+			case e.Function:
+			case *e.Function:
+				arg9 = func(p1 int) int {
+					args := e.NIL
+					TODO!!!!!
+				}
+			default:
+				return nil, errors.New("Could not converrt arg9 to func(int) int")
+			}
+		`
+			buffer := new(bytes.Buffer)
+			w := bufio.NewWriter(buffer)
+			err := ConvertArg(9, "func(int) int", "Function", w)
+			w.Flush()
+			if err != nil {
+				t.Errorf("Got unexpected error: %s", err)
+			}
+
+			actual := buffer.String()
+			if actual != expected {
+				t.Errorf("Converting argumenet failed. Wanted:\n%s\n, got: \n%s", expected, actual)
+			}*/
 	t.Log("Not implemented...")
 }

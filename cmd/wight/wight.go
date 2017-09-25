@@ -91,26 +91,26 @@ var StructAndInterfaceTemplate, saitErr = template.New("StructAndInterfaceTempla
 	var arg{{.N}} {{.Type}}
 
 	switch f := args.Head().(type) {
-		case e.Foreign: fallthrough
-			switch v := f.Val().(type) {
-			case *{{.Type}}:
-				arg{{.N}} = *v
-			case {{.Type}}:
-				arg{{.N}} = v
-			default:
-				return nil, errors.New("Could not converrt arg{{.N}} to {{.Type}}")
-			}
-	case *e.Foreign: 
-			switch v := f.Val().(type) {
-			case *{{.Type}}:
-				arg{{.N}} = *v
-			case {{.Type}}:
-				arg{{.N}} = v
-			default:
-				return nil, errors.New("Could not converrt arg{{.N}} to {{.Type}}")
-			}
+	case e.Foreign:
+		switch v := f.Val().(type) {
+		case *{{.Type}}:
+			arg{{.N}} = *v
+		case {{.Type}}:
+			arg{{.N}} = v
 		default:
-			return nil, errors.New("Could not converrt arg{{.N}} to {{.Type}}")				
+			return nil, errors.New("Could not converrt arg{{.N}} to {{.Type}}")
+		}
+	case *e.Foreign:
+		switch v := f.Val().(type) {
+		case *{{.Type}}:
+			arg{{.N}} = *v
+		case {{.Type}}:
+			arg{{.N}} = v
+		default:
+			return nil, errors.New("Could not converrt arg{{.N}} to {{.Type}}")
+		}
+	default:
+		return nil, errors.New("Could not converrt arg{{.N}} to {{.Type}}")
 	}
 `)
 
@@ -133,6 +133,42 @@ func ConvertArg(n int, wantedType string, builtInType string, w io.Writer) error
 	} else {
 		return StructAndInterfaceTemplate.Execute(w, vals)
 	}
+}
+
+var funcMap = template.FuncMap{
+	"inc": func(i int) int { return i + 1 },
+}
+
+var WrapResultTemplate, wrErr = template.New("WrapResultTemplate").Funcs(funcMap).Parse(
+	"\n\t{{$ResultListLength := len .ResultList}}" +
+		"{{$ParamListLength := len .ParamList}}" +
+		"{{range $i,$_ := .ResultList}}res{{$i}}" +
+		"{{if not (eq ($ResultListLength) (inc $i))}},{{end}} " +
+		"{{end}}:= {{.FuncName}}" +
+		"({{range $i,$_ := .ParamList}}arg{{$i}}" +
+		"{{if not (eq ($ParamListLength) (inc $i))}}, {{end}}" +
+		"{{end}})" +
+		"\n\tresultList := " +
+		"{{range $i,$_ := .ResultList}}e.Cons(e.ToExpr(res{{$i}}), {{end}}" +
+		"e.NIL{{range $i,$_ := .ResultList}}){{end}}" +
+		"\n\treturn resultList, nil\n")
+
+type ResultTemplateValues struct {
+	FuncName   string
+	ParamList  []int
+	ResultList []int
+}
+
+func WrapResult(funcName string, paramCount int, resultCount int, w io.Writer) error {
+	if wrErr != nil {
+		return wrErr
+	}
+	vals := ResultTemplateValues{
+		funcName,
+		make([]int, paramCount),
+		make([]int, resultCount),
+	}
+	return WrapResultTemplate.Execute(w, vals)
 }
 
 func main() {
