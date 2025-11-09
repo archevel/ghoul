@@ -34,7 +34,7 @@ func (e Boolean) Equiv(expr Expr) bool {
 type Integer int64
 
 func (e Integer) Repr() string {
-	return fmt.Sprintf("%d", e)
+	return strconv.FormatInt(int64(e), 10)
 }
 
 func (e Integer) Equiv(expr Expr) bool {
@@ -68,7 +68,7 @@ func (e Float) Equiv(expr Expr) bool {
 type String string
 
 func (e String) Repr() string {
-	return fmt.Sprintf(`"%s"`, e)
+	return `"` + string(e) + `"`
 }
 
 func (e String) Equiv(expr Expr) bool {
@@ -85,7 +85,7 @@ type Quote struct {
 }
 
 func (e Quote) Repr() string {
-	return fmt.Sprintf("'%s", e.Quoted.Repr())
+	return "'" + e.Quoted.Repr()
 }
 
 func (e Quote) Equiv(expr Expr) bool {
