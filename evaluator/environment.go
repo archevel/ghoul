@@ -46,7 +46,10 @@ func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, er
 
 func assign(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
 
-	ident := variable.(e.Identifier)
+	ident, ok := variable.(e.Identifier)
+	if !ok {
+		return nil, fmt.Errorf("set!: variable must be an identifier, got %T", variable)
+	}
 
 	for i := len(*env) - 1; i >= 0; i-- {
 		scope := (*env)[i]

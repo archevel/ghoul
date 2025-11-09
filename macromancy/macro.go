@@ -1,6 +1,8 @@
 package macromancy
 
 import (
+	"fmt"
+
 	e "github.com/archevel/ghoul/expressions"
 )
 
@@ -12,8 +14,14 @@ type Macro struct {
 }
 
 func (m Macro) Matches(expr e.Expr) (bool, bindings) {
-	macId, macPat := idAndRest(m.Pattern)
-	codeId, code := idAndRest(expr)
+	macId, macPat, err := idAndRest(m.Pattern)
+	if err != nil {
+		return false, nil
+	}
+	codeId, code, err := idAndRest(expr)
+	if err != nil {
+		return false, nil
+	}
 	if macId.Equiv(codeId) {
 		if macPat == nil && code == nil {
 			return true, bindings{}
@@ -108,20 +116,28 @@ func matchFinalCodeExpression(macroList e.List, code e.Expr, bound bindings, has
 		return matchWalk(macroList.First(), code, bound, hasElipsis)
 	}
 	if macroList.First().Equiv(e.Identifier("...")) {
-		bound[macroList.First().(e.Identifier)] = e.NIL
+		if id, ok := macroList.First().(e.Identifier); ok {
+			bound[id] = e.NIL
+		}
 		return matchWalk(macroList.Second(), code, bound, hasElipsis)
 	}
 	return false, nil
 }
 
-func idAndRest(expr e.Expr) (e.Identifier, e.Expr) {
+func idAndRest(expr e.Expr) (e.Identifier, e.Expr, error) {
 	identifier := expr
 	if list, ok := expr.(e.List); ok {
-		identifier = list.First().(e.Identifier)
-		return identifier.(e.Identifier), list.Second()
-
+		id, ok := list.First().(e.Identifier)
+		if !ok {
+			return "", nil, fmt.Errorf("macro pattern must contain identifiers, got %T", list.First())
+		}
+		return id, list.Second(), nil
 	}
-	return identifier.(e.Identifier), nil
+	id, ok := identifier.(e.Identifier)
+	if !ok {
+		return "", nil, fmt.Errorf("macro pattern must contain identifiers, got %T", identifier)
+	}
+	return id, nil, nil
 }
 
 func splitListAt(endCount int, codeList e.List) (e.Expr, e.Expr) {
@@ -147,7 +163,9 @@ func splitListAt(endCount int, codeList e.List) (e.Expr, e.Expr) {
 	ending, ok = splitPoint.Tail()
 	if splitPoint != e.NIL && (ok || endCount == 1) {
 		ending = splitPoint.Second()
-		splitPoint.(*e.Pair).T = e.NIL
+		if pair, ok := splitPoint.(*e.Pair); ok {
+			pair.T = e.NIL
+		}
 	}
 
 	return begining, ending
