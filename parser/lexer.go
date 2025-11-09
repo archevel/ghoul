@@ -23,7 +23,7 @@ type Position struct {
 }
 
 func (p Position) String() string {
-	return fmt.Sprintf("(%d:%d)", p.Row, p.Col)
+	return "(" + strconv.Itoa(p.Row) + ":" + strconv.Itoa(p.Col) + ")"
 }
 
 type schemeLexer struct {
