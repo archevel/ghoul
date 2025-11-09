@@ -26,9 +26,10 @@ func (h customHandler) Handle(ctx context.Context, r slog.Record) error {
 // Custom level replacer
 func levelReplacer(groups []string, attr slog.Attr) slog.Attr {
 	if attr.Key == slog.LevelKey {
-		level := attr.Value.Any().(slog.Level)
-		if level == LevelTrace {
-			return slog.Attr{Key: slog.LevelKey, Value: slog.StringValue("TRACE")}
+		if level, ok := attr.Value.Any().(slog.Level); ok {
+			if level == LevelTrace {
+				return slog.Attr{Key: slog.LevelKey, Value: slog.StringValue("TRACE")}
+			}
 		}
 	}
 	return attr
