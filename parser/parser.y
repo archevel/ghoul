@@ -97,8 +97,10 @@ func Parse(r io.Reader) (int, *ParsedExpressions) {
 
 func setLastTail(p *e.Pair, newEnd e.Expr) *e.Pair {
 	lastPair := p
-	for lastPair.Tail() != e.NIL {
-		lastPair = lastPair.Tail().(*e.Pair)
+	tail, _ := lastPair.Tail()
+	for tail != e.NIL {
+		lastPair = tail.(*e.Pair)
+		tail, _ = lastPair.Tail()
 	}
 
 	lastPair.T = newEnd

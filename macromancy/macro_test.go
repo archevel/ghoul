@@ -342,7 +342,7 @@ func TestMacroExpansion(t *testing.T) {
 	}
 }
 
-func ExampleSwapMacro() {
+func swapMacroExample() {
 
 	_, pattern := parser.Parse(strings.NewReader("(swap x y)"))
 	_, body := parser.Parse(strings.NewReader("(let ((tmp x)) (set! x y) (set! y tmp))"))
@@ -424,7 +424,7 @@ func runBindingTest(t *testing.T, in string, patternStr string, bound bindings) 
 	for k, expectedValue := range bound {
 		value := bindings[k]
 		if value == nil {
-			t.Errorf("Expected value %s for key %s in %s using %s, but got nil!", expectedValue.Repr(), k)
+			t.Errorf("Expected value %s for key %s in %s using %s, but got nil!", expectedValue.Repr(), k.Repr(), in, patternStr)
 		} else if !expectedValue.Equiv(value) {
 			t.Errorf("Expected value %s for key %s in %s using %s in bindings, got %s",
 				expectedValue.Repr(), k.Repr(), in, patternStr, value.Repr())
