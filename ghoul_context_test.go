@@ -2,6 +2,7 @@ package ghoul
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -37,9 +38,11 @@ func TestProcessWithContextCancellation(t *testing.T) {
 
 	result, err := ghoul.ProcessWithContext(ctx, reader)
 
-	// Should return context.Canceled error
-	if err != context.Canceled {
-		t.Errorf("Expected context.Canceled error, but got: %v", err)
+	// Should return chained context.Canceled error
+	if err == nil {
+		t.Error("Expected error, but got nil")
+	} else if !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context.Canceled error (possibly chained), but got: %v", err)
 	}
 
 	if result != nil {
@@ -62,8 +65,8 @@ func TestProcessWithContextTimeout(t *testing.T) {
 	result, err := ghoul.ProcessWithContext(ctx, reader)
 
 	// Should return context.DeadlineExceeded error
-	if err != context.DeadlineExceeded {
-		t.Errorf("Expected context.DeadlineExceeded error, but got: %v", err)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Expected context.DeadlineExceeded error (possibly chained), but got: %v", err)
 	}
 
 	if result != nil {

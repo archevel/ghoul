@@ -42,10 +42,16 @@ func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader) (e.
 		return nil, fmt.Errorf("failed to parse Lisp code: parse result %d", parseRes)
 	}
 
-	manced := g.macromancer.Transform(parsed.Expressions)
+	manced, err := g.macromancer.Transform(parsed.Expressions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process Lisp code: %w", err)
+	}
 	result, err := g.evaluator.EvaluateWithContext(ctx, manced)
 
-	return result, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to process Lisp code: %w", err)
+	}
+	return result, nil
 }
 
 func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
