@@ -1,6 +1,8 @@
 package evaluator
 
 import (
+	"context"
+
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
 )
@@ -16,8 +18,12 @@ type continuation func(arg e.Expr, ev *Evaluator) (e.Expr, error)
 type contStack []continuation
 
 func Evaluate(exprs e.Expr, env *environment) (res e.Expr, err error) {
+	return EvaluateWithContext(context.Background(), exprs, env)
+}
+
+func EvaluateWithContext(ctx context.Context, exprs e.Expr, env *environment) (res e.Expr, err error) {
 	evaluator := New(logging.StandardLogger, env)
-	return evaluator.Evaluate(exprs)
+	return evaluator.EvaluateWithContext(ctx, exprs)
 }
 
 func New(logger logging.Logger, env *environment) *Evaluator {
@@ -31,21 +37,37 @@ type Evaluator struct {
 }
 
 func (ev *Evaluator) Evaluate(exprs e.Expr) (e.Expr, error) {
+	return ev.EvaluateWithContext(context.Background(), exprs)
+}
+
+func (ev *Evaluator) EvaluateWithContext(ctx context.Context, exprs e.Expr) (e.Expr, error) {
 	if exprs == e.NIL {
 		return exprs, nil
 	}
 	listExpr := wrappNonList(exprs)
 	ev.conts = &contStack{sexprSeqEvalContinuationFor(listExpr, false)}
 
-	return ev.stepThroughContinuations()
+	return ev.stepThroughContinuationsWithContext(ctx)
 }
 
 func (ev *Evaluator) stepThroughContinuations() (e.Expr, error) {
+	return ev.stepThroughContinuationsWithContext(context.Background())
+}
+
+func (ev *Evaluator) stepThroughContinuationsWithContext(ctx context.Context) (e.Expr, error) {
 	var ret e.Expr = e.NIL
 	var err error
 
 	ev.log.Trace("Starting to step through continuations")
 	for len(*ev.conts) > 0 {
+		// Check for context cancellation/timeout on each iteration
+		select {
+		case <-ctx.Done():
+			ev.log.Trace("Evaluation canceled due to context")
+			return nil, ctx.Err()
+		default:
+		}
+
 		next := ev.popContinuation()
 		ret, err = next(ret, ev)
 
@@ -53,7 +75,6 @@ func (ev *Evaluator) stepThroughContinuations() (e.Expr, error) {
 			ev.log.Trace("Continuation returned an error!")
 			return nil, err
 		}
-
 	}
 
 	ev.log.Trace("Nothing left to evaluate. Returning %s", ret)

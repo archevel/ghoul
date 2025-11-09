@@ -1,6 +1,7 @@
 package ghoul
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -13,6 +14,7 @@ import (
 
 type Ghoul interface {
 	Process(exprReader io.Reader) (e.Expr, error)
+	ProcessWithContext(ctx context.Context, exprReader io.Reader) (e.Expr, error)
 }
 
 func New() Ghoul {
@@ -31,13 +33,17 @@ type ghoul struct {
 }
 
 func (g ghoul) Process(exprReader io.Reader) (e.Expr, error) {
+	return g.ProcessWithContext(context.Background(), exprReader)
+}
+
+func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader) (e.Expr, error) {
 	parseRes, parsed := parser.Parse(exprReader)
 	if parseRes != 0 {
 		return nil, fmt.Errorf("failed to parse Lisp code: parse result %d", parseRes)
 	}
 
 	manced := g.macromancer.Transform(parsed.Expressions)
-	result, err := g.evaluator.Evaluate(manced)
+	result, err := g.evaluator.EvaluateWithContext(ctx, manced)
 
 	return result, err
 }
