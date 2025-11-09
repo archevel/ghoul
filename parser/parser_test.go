@@ -393,7 +393,7 @@ func TestParserRegistersPositionOfPairs(t *testing.T) {
 		res := yyParse(lex)
 
 		if res != 0 {
-			t.Fatal("Parser failed to parse \"%s\"", c.in)
+			t.Fatalf("Parser failed to parse \"%s\"", c.in)
 		}
 
 		expr := lex.lpair
@@ -426,7 +426,7 @@ func TestInnerPairsHavePositionsRegistered(t *testing.T) {
 		res := yyParse(lex)
 
 		if res != 0 {
-			t.Fatal("Parser failed to parse \"%s\"", c.in)
+			t.Fatalf("Parser failed to parse \"%s\"", c.in)
 		}
 
 		expr := lex.lpair.First().(e.List)

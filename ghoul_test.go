@@ -27,7 +27,7 @@ const guidingScript = `
 (do-fizz-buzz-to 10)
 `
 
-func ExampleGuiding() {
+func guidingExample() {
 	r := strings.NewReader(guidingScript)
 	g := New()
 
@@ -63,7 +63,7 @@ func TestYieldsEvaluationErrorWhenThereIsAnErrror(t *testing.T) {
 	_, err := g.Process(strings.NewReader(in))
 
 	if err == nil {
-		t.Error("Got nil for error when processing '%s'", in)
+		t.Errorf("Got nil for error when processing '%s'", in)
 	}
 }
 
@@ -118,7 +118,7 @@ func TestBasicBuiltInFunctions(t *testing.T) {
 	}
 }
 
-func ExampleTestPrintln() {
+func testPrintlnExample() {
 	g := New()
 	g.Process(strings.NewReader(`(println "hello, world")`))
 

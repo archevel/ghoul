@@ -19,7 +19,7 @@ func TestFunctionRepr(t *testing.T) {
 	for _, c := range cases {
 		actual := c.in.Repr()
 		if actual != c.out {
-			t.Errorf("Input was %f. Expected %s but got %s", c.in, c.out, actual)
+			t.Errorf("Input was %v. Expected %s but got %s", c.in, c.out, actual)
 		}
 	}
 }

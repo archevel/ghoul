@@ -97,7 +97,7 @@ func TestStringRepresentation(t *testing.T) {
 		actual := s.Repr()
 
 		if actual != c.out {
-			t.Errorf("Input was %f. Expected %s but got %s", c.in, c.out, actual)
+			t.Errorf("Input was %s. Expected %s but got %s", c.in, c.out, actual)
 		}
 
 	}
