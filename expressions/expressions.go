@@ -240,10 +240,10 @@ func (e nilList) String() string {
 }
 
 type Foreign struct {
-	value interface{}
+	value any
 }
 
-func Wrapp(val interface{}) *Foreign {
+func Wrapp(val any) *Foreign {
 	return &Foreign{val}
 }
 

@@ -166,7 +166,7 @@ type testStructB struct {
 var testB = testStructB{23}
 
 type testStructC struct {
-	something interface{}
+	something any
 }
 
 var testC = testStructC{nil}
