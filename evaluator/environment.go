@@ -1,7 +1,7 @@
 package evaluator
 
 import (
-	"errors"
+	"fmt"
 
 	e "github.com/archevel/ghoul/expressions"
 )
@@ -35,7 +35,7 @@ func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, er
 
 	id, id_ok := variable.(e.Identifier)
 	if !id_ok {
-		return nil, errors.New("Bad syntax: no valid identifier given")
+		return nil, fmt.Errorf("define: bad syntax, no valid identifier given in %s", variable.Repr())
 	}
 
 	scope := currentScope(env)
@@ -57,7 +57,7 @@ func assign(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
 		}
 	}
 
-	return nil, errors.New("assignment disallowed")
+	return nil, fmt.Errorf("set!: assignment disallowed for identifier %s", string(ident))
 }
 
 func lookupIdentifier(ident e.Identifier, env *environment) (e.Expr, error) {
@@ -69,7 +69,7 @@ func lookupIdentifier(ident e.Identifier, env *environment) (e.Expr, error) {
 		}
 	}
 
-	return nil, errors.New("undefined identifier: " + string(ident))
+	return nil, fmt.Errorf("undefined identifier: %s", string(ident))
 
 }
 

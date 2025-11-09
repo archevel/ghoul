@@ -33,7 +33,7 @@ type ghoul struct {
 func (g ghoul) Process(exprReader io.Reader) (e.Expr, error) {
 	parseRes, parsed := parser.Parse(exprReader)
 	if parseRes != 0 {
-		return nil, fmt.Errorf("Failed to parse code")
+		return nil, fmt.Errorf("failed to parse Lisp code: parse result %d", parseRes)
 	}
 
 	manced := g.macromancer.Transform(parsed.Expressions)
@@ -53,30 +53,57 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 	})
 
 	env.Register("and", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
-		fst := args.First().(e.Boolean)
+		fst, ok := args.First().(e.Boolean)
+		if !ok {
+			return nil, fmt.Errorf("and: first argument must be boolean, got %T", args.First())
+		}
 		t, _ := args.Tail()
-		snd := t.First().(e.Boolean)
+		snd, ok := t.First().(e.Boolean)
+		if !ok {
+			return nil, fmt.Errorf("and: second argument must be boolean, got %T", t.First())
+		}
 		return e.Boolean(fst && snd), nil
 	})
 
 	env.Register("<", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
-		fst := args.First().(e.Integer)
+		fst, ok := args.First().(e.Integer)
+		if !ok {
+			return nil, fmt.Errorf("<: first argument must be integer, got %T", args.First())
+		}
 		t, _ := args.Tail()
-		snd := t.First().(e.Integer)
+		snd, ok := t.First().(e.Integer)
+		if !ok {
+			return nil, fmt.Errorf("<: second argument must be integer, got %T", t.First())
+		}
 		return e.Boolean(fst < snd), nil
 	})
 
 	env.Register("mod", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
-		fst := args.First().(e.Integer)
+		fst, ok := args.First().(e.Integer)
+		if !ok {
+			return nil, fmt.Errorf("mod: first argument must be integer, got %T", args.First())
+		}
 		t, _ := args.Tail()
-		snd := t.First().(e.Integer)
+		snd, ok := t.First().(e.Integer)
+		if !ok {
+			return nil, fmt.Errorf("mod: second argument must be integer, got %T", t.First())
+		}
+		if snd == 0 {
+			return nil, fmt.Errorf("mod: division by zero")
+		}
 		return e.Integer(fst % snd), nil
 	})
 
 	env.Register("+", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
-		fst := args.First().(e.Integer)
+		fst, ok := args.First().(e.Integer)
+		if !ok {
+			return nil, fmt.Errorf("+: first argument must be integer, got %T", args.First())
+		}
 		t, _ := args.Tail()
-		snd := t.First().(e.Integer)
+		snd, ok := t.First().(e.Integer)
+		if !ok {
+			return nil, fmt.Errorf("+: second argument must be integer, got %T", t.First())
+		}
 		return e.Integer(fst + snd), nil
 	})
 

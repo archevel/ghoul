@@ -1,7 +1,7 @@
 package macromancy
 
 import (
-	"errors"
+	"fmt"
 
 	e "github.com/archevel/ghoul/expressions"
 )
@@ -25,15 +25,15 @@ func (mg MacroGroup) Matches(code e.Expr) []Macro {
 func NewMacroGroup(code e.Expr) (*MacroGroup, error) {
 	codeList, codeOk := code.(e.List)
 	if !codeOk {
-		return nil, errors.New("Invalid syntax definition.")
+		return nil, fmt.Errorf("invalid syntax definition: expected (define-syntax <identifier> <transformer>), got %s", code.Repr())
 	}
 	syntaxDefList, syntaxDefOk := codeList.Tail()
 	if !syntaxDefOk {
-		return nil, errors.New("Invalid syntax definition.")
+		return nil, fmt.Errorf("invalid syntax definition: expected list with syntax transformer, got %s", codeList.Repr())
 	}
 	matchId, matchIdOk := syntaxDefList.First().(e.Identifier)
 	if !matchIdOk {
-		return nil, errors.New("Identifier for macro group '" + syntaxDefList.First().Repr() + "' is invalid.")
+		return nil, fmt.Errorf("invalid identifier %s for macro group: must be an identifier", syntaxDefList.First().Repr())
 	}
 
 	rules, rulesErr := extractRulesList(syntaxDefList)
@@ -52,22 +52,30 @@ func NewMacroGroup(code e.Expr) (*MacroGroup, error) {
 func extractRulesList(syntaxDefList e.List) (e.List, error) {
 	syntaxRulesList, syntaxRulesListOk := syntaxDefList.Tail()
 	if !syntaxRulesListOk {
-		return nil, errors.New("Invalid syntax-rules.")
+		return nil, fmt.Errorf("invalid syntax-rules: expected syntax-rules form, got %s", syntaxDefList.Repr())
 	}
 
 	syntaxRules, syntaxRulesOk := syntaxRulesList.First().(e.List)
 	if !syntaxRulesOk || !e.Identifier("syntax-rules").Equiv(syntaxRules.First()) || e.NIL.Equiv(syntaxRules.Second()) {
-		return nil, errors.New("Invalid syntax-rules.")
+		if syntaxRulesOk {
+			return nil, fmt.Errorf("invalid syntax-rules: malformed syntax-rules structure in %s", syntaxRules.Repr())
+		} else {
+			return nil, fmt.Errorf("invalid syntax-rules: expected syntax-rules form, got %s", syntaxRulesList.First().Repr())
+		}
 	}
 
 	litsAndRules, litsAndRulesOk := syntaxRules.Tail()
 	if !litsAndRulesOk || e.NIL.Equiv(litsAndRules.Second()) {
-		return nil, errors.New("Invalid rules in syntax definition.")
+		if litsAndRulesOk {
+			return nil, fmt.Errorf("invalid rules in syntax definition: missing rules list in %s", litsAndRules.Repr())
+		} else {
+			return nil, fmt.Errorf("invalid rules in syntax definition: expected literals and rules, got %s", syntaxRules.Repr())
+		}
 	}
 
 	rules, rulesOk := litsAndRules.Tail()
 	if !rulesOk {
-		return nil, errors.New("Invalid rules in syntax definition.")
+		return nil, fmt.Errorf("invalid rules in syntax definition: expected rules after literals, got %s", litsAndRules.Repr())
 	}
 
 	return rules, nil
@@ -78,16 +86,20 @@ func extractMacros(rules e.List) ([]Macro, error) {
 	macros := []Macro{}
 	rulesOk := false
 	for rules != e.NIL {
-		r, rOk := rules.First().(e.List)
+		first := rules.First()
+		r, rOk := first.(e.List)
 		rules, rulesOk = rules.Tail()
-		if !rOk || !rulesOk {
-			return nil, errors.New("Invalid rule definition.")
+		if !rOk {
+			return nil, fmt.Errorf("invalid rule definition: expected list for rule, got %T at position %d", first, len(macros))
+		}
+		if !rulesOk {
+			return nil, fmt.Errorf("invalid rule definition: malformed rules list at position %d", len(macros))
 		}
 		pat := r.First()
 		bdyList, bdyOk := r.Tail()
 
 		if !bdyOk || e.NIL.Equiv(bdyList) {
-			return nil, errors.New("Invalid rule definition.")
+			return nil, fmt.Errorf("invalid rule definition: rule must have pattern and body, got %s", r.Repr())
 		}
 		macros = append(macros, Macro{pat, bdyList.First()})
 

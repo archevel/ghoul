@@ -26,7 +26,7 @@ func TestVariableDefinitionsWithBadSyntax(t *testing.T) {
 	}{
 		{`(define x)`, "Bad syntax: missing value in binding"},
 		{`(define x 1 1)`, "Bad syntax: multiple values in binding"},
-		{`(define "x" 1)`, "Bad syntax: no valid identifier given"},
+		{`(define "x" 1)`, "define: bad syntax, no valid identifier given in \"x\""},
 		{`(define . x)`, "Malformed expression"},
 		{`(define . (x . 1))`, "Bad syntax: invalid binding format"},
 		{`(define x (define y 1 1))`, "Bad syntax: multiple values in binding"},
@@ -161,7 +161,7 @@ func TestCallToNonCallableResultsInError(t *testing.T) {
 func TestAssignmentFailsForUndefinedVariables(t *testing.T) {
 
 	in := `(set! x 5)`
-	expectedErrorMessage := "assignment disallowed"
+	expectedErrorMessage := "set!: assignment disallowed for identifier x"
 	testInputResultsInError(in, expectedErrorMessage, t)
 }
 
