@@ -1,12 +1,14 @@
 package macromancy
 
 import (
+	"fmt"
+
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
 )
 
 type Transformer interface {
-	Transform(list e.List) e.Expr
+	Transform(list e.List) (e.Expr, error)
 }
 type Macromancer struct {
 	logger      logging.Logger
@@ -20,11 +22,11 @@ func NewMacromancer(logger logging.Logger) *Macromancer {
 func (m *Macromancer) Groups() []*MacroGroup {
 	return m.macroGroups
 }
-func (m *Macromancer) Transform(inList e.List) e.Expr {
+func (m *Macromancer) Transform(inList e.List) (e.Expr, error) {
 	return m.transform(inList)
 }
 
-func (m *Macromancer) transform(expr e.Expr) e.Expr {
+func (m *Macromancer) transform(expr e.Expr) (e.Expr, error) {
 	if l, ok := expr.(e.List); ok && l != e.NIL {
 		h := l.First()
 		if sl, ok := subList(l); ok {
@@ -32,9 +34,10 @@ func (m *Macromancer) transform(expr e.Expr) e.Expr {
 			h = newH
 			if sl, ok := h.(e.List); ok && e.Identifier("define-syntax").Equiv(sl.First()) {
 				mg, err := NewMacroGroup(sl)
-				if err == nil {
-					m.macroGroups = append(m.macroGroups, mg)
+				if err != nil {
+					return nil, fmt.Errorf("failed to extract macros for syntax definition: %w", err)
 				}
+				m.macroGroups = append(m.macroGroups, mg)
 
 				if t, ok := tail(l); ok {
 					newT := m.expandMacrosAgainst(t)
@@ -46,14 +49,20 @@ func (m *Macromancer) transform(expr e.Expr) e.Expr {
 
 		}
 
-		h = m.transform(h)
+		h, err := m.transform(h)
+		if err != nil {
+			return nil, err
+		}
 
-		t := m.transform(l.Second())
+		t, err := m.transform(l.Second())
+		if err != nil {
+			return nil, err
+		}
 
-		return e.Cons(h, t)
+		return e.Cons(h, t), nil
 
 	} else {
-		return expr
+		return expr, nil
 	}
 }
 

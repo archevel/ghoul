@@ -109,7 +109,10 @@ func runMacroTest(t *testing.T, code string, expected string) {
 		t.Errorf("Failed to parse expected: %s\n", expected)
 	}
 
-	mancedCode := transformer.Transform(parsedCode.Expressions)
+	mancedCode, err := transformer.Transform(parsedCode.Expressions)
+	if err != nil {
+		t.Fatalf("Transform failed: %v", err)
+	}
 
 	if !mancedCode.Equiv(parsedExpected.Expressions) {
 		t.Errorf("Expected code:\n'%s'\n\n to yield:\n '%s'\n\n after macromancy transform, but got: \n'%s'", parsedCode.Expressions.Repr(), parsedExpected.Expressions.Repr(), mancedCode.Repr())
