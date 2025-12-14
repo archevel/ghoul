@@ -15,7 +15,7 @@ Ghoul is a lisp interpreter that aims to be simple to understand while being a b
 
 ## Notes:
 ~~TODO: Add a Foreign expression type that can be used for arbitrary structs~~  
-TODO: Write "wraith" - tool for wrapping Go code for Ghoul use  
+~~TODO: Write "wraith" - tool for wrapping Go code for Ghoul use~~  
 TODO: Wrap Golang standard library so it is callable from ghoul  
 TODO: Implement module system so that code can be included when required (as opposed to including it all upfront).  
 TODO: Make error messages contain line and column of failed expression. Derived expressions should as far as possible point to their original version.  

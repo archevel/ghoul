@@ -15,6 +15,7 @@ import (
 type Ghoul interface {
 	Process(exprReader io.Reader) (e.Expr, error)
 	ProcessWithContext(ctx context.Context, exprReader io.Reader) (e.Expr, error)
+	RegisterFunction(name string, fn func(args e.List, ev *ev.Evaluator) (e.Expr, error))
 }
 
 func New() Ghoul {
@@ -52,6 +53,10 @@ func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader) (e.
 		return nil, fmt.Errorf("failed to process Lisp code: %w", err)
 	}
 	return result, nil
+}
+
+func (g ghoul) RegisterFunction(name string, fn func(args e.List, ev *ev.Evaluator) (e.Expr, error)) {
+	g.evaluator.GetEnvironment().Register(name, fn)
 }
 
 func prepareEvaluator(logger logging.Logger) *ev.Evaluator {

@@ -40,6 +40,10 @@ func (ev *Evaluator) Evaluate(exprs e.Expr) (e.Expr, error) {
 	return ev.EvaluateWithContext(context.Background(), exprs)
 }
 
+func (ev *Evaluator) GetEnvironment() *environment {
+	return ev.env
+}
+
 func (ev *Evaluator) EvaluateWithContext(ctx context.Context, exprs e.Expr) (e.Expr, error) {
 	if exprs == e.NIL {
 		return exprs, nil
