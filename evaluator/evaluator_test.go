@@ -516,6 +516,75 @@ func TestLookupFallbackDoesNotApplyToUnmarked(t *testing.T) {
 	}
 }
 
+func TestResolveCallableHeadWithScopedIdentifier(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		fst := args.First().(e.Integer)
+		t, _ := args.Tail()
+		snd := t.First().(e.Integer)
+		return e.Integer(fst + snd), nil
+	})
+
+	// Call (+ 1 2) where + is a ScopedIdentifier — should resolve via fallback
+	si := e.ScopedIdentifier{Name: e.Identifier("+"), Marks: map[uint64]bool{1: true}}
+	expr := e.Cons(si, e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.NIL)))
+
+	evaluator := New(logging.StandardLogger, env)
+	result, err := evaluator.Evaluate(e.Cons(expr, e.NIL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.Integer(3)) {
+		t.Errorf("expected 3, got %s", result.Repr())
+	}
+}
+
+func TestResolveCallableHeadWithScopedSyntaxTransformer(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		fst := args.First().(e.Integer)
+		t, _ := args.Tail()
+		snd := t.First().(e.Integer)
+		return e.Integer(fst + snd), nil
+	})
+
+	// Bind a SyntaxTransformer under a ScopedIdentifier
+	si := e.ScopedIdentifier{Name: e.Identifier("my-add"), Marks: map[uint64]bool{1: true}}
+	transformer := SyntaxTransformer{
+		Transform: func(code e.List, mark uint64) (e.Expr, error) {
+			// (my-add x y) -> (+ x y)
+			tail, _ := code.Tail()
+			return e.Cons(e.Identifier("+"), tail), nil
+		},
+	}
+	bindIdentifier(si, transformer, env)
+
+	// Call via the same ScopedIdentifier
+	expr := e.Cons(si, e.Cons(e.Integer(3), e.Cons(e.Integer(4), e.NIL)))
+
+	evaluator := New(logging.StandardLogger, env)
+	result, err := evaluator.Evaluate(e.Cons(expr, e.NIL))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.Integer(7)) {
+		t.Errorf("expected 7, got %s", result.Repr())
+	}
+}
+
+func TestResolveCallableHeadWithNonIdentifier(t *testing.T) {
+	env := NewEnvironment()
+	// A list whose head is an integer — not resolvable as a transformer,
+	// falls through to normal function call which will fail
+	expr := e.Cons(e.Cons(e.Integer(1), e.NIL), e.NIL)
+
+	evaluator := New(logging.StandardLogger, env)
+	_, err := evaluator.Evaluate(e.Cons(expr, e.NIL))
+	if err == nil {
+		t.Error("expected error when calling a non-procedure")
+	}
+}
+
 func TestSyntaxTransformerReprAndEquiv(t *testing.T) {
 	st := SyntaxTransformer{Transform: func(code e.List, mark uint64) (e.Expr, error) { return e.NIL, nil }}
 	if st.Repr() != "#<syntax-transformer>" {

@@ -370,6 +370,68 @@ func TestCollectIdentifiersWithScopedEllipsis(t *testing.T) {
 	}
 }
 
+func TestExtractPatternVarsWithLiteralsScopedIdentifier(t *testing.T) {
+	// Pattern has ScopedIdentifiers (from a meta-macro expansion)
+	// and one of them matches a literal
+	pattern := e.Cons(e.Identifier("mac"),
+		e.Cons(e.ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}},
+			e.Cons(e.ScopedIdentifier{Name: "arrow", Marks: map[uint64]bool{1: true}},
+				e.Cons(e.ScopedIdentifier{Name: "y", Marks: map[uint64]bool{1: true}}, e.NIL))))
+	literals := map[e.Identifier]bool{e.Identifier("arrow"): true}
+
+	vars := ExtractPatternVarsWithLiterals(pattern, literals)
+
+	if !vars[e.Identifier("x")] || !vars[e.Identifier("y")] {
+		t.Error("x and y should be pattern variables")
+	}
+	if vars[e.Identifier("arrow")] {
+		t.Error("arrow is a literal, should not be a pattern variable even as ScopedIdentifier")
+	}
+}
+
+func TestExtractPatternVarsWithLiteralsScopedEllipsis(t *testing.T) {
+	pattern := e.Cons(e.Identifier("mac"),
+		e.Cons(e.ScopedIdentifier{Name: "...", Marks: map[uint64]bool{1: true}}, e.NIL))
+	literals := map[e.Identifier]bool{}
+
+	vars := ExtractPatternVarsWithLiterals(pattern, literals)
+
+	if vars[e.Identifier("...")] {
+		t.Error("ellipsis should not be a pattern variable even as ScopedIdentifier with literals")
+	}
+}
+
+func TestExtractPatternVarsWithNilLiterals(t *testing.T) {
+	pattern := e.Cons(e.Identifier("mac"),
+		e.Cons(e.Identifier("x"), e.Cons(e.Identifier("y"), e.NIL)))
+
+	vars := ExtractPatternVarsWithLiterals(pattern, nil)
+
+	if !vars[e.Identifier("x")] || !vars[e.Identifier("y")] {
+		t.Error("with nil literals, all identifiers should be pattern variables")
+	}
+}
+
+func TestExtractPatternVarsWithLiteralsNonListPattern(t *testing.T) {
+	vars := ExtractPatternVarsWithLiterals(e.Identifier("foo"), nil)
+	if len(vars) != 0 {
+		t.Error("non-list pattern should return empty vars")
+	}
+}
+
+func TestExtractPatternVarsWithLiteralsNestedScopedIdentifier(t *testing.T) {
+	// Nested list with ScopedIdentifiers
+	inner := e.Cons(e.ScopedIdentifier{Name: "a", Marks: map[uint64]bool{1: true}},
+		e.Cons(e.ScopedIdentifier{Name: "b", Marks: map[uint64]bool{1: true}}, e.NIL))
+	pattern := e.Cons(e.Identifier("mac"), e.Cons(inner, e.NIL))
+
+	vars := ExtractPatternVarsWithLiterals(pattern, nil)
+
+	if !vars[e.Identifier("a")] || !vars[e.Identifier("b")] {
+		t.Error("nested ScopedIdentifiers should be extracted as pattern variables")
+	}
+}
+
 func TestSyntaxObjectEquivWithPlainExpr(t *testing.T) {
 	so := SyntaxObject{Datum: e.Integer(42), Marks: NewMarkSet()}
 
