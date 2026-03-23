@@ -120,6 +120,20 @@ func lookupIdentifier(ident e.Expr, env *environment) (e.Expr, error) {
 		}
 	}
 
+	// A macro-introduced reference to an existing binding (e.g. a built-in)
+	// carries marks from expansion but the binding was created without marks.
+	// Fall back to name-only lookup so these references resolve correctly.
+	if key.MarksKey != "" {
+		plainKey := scopeKey{Name: key.Name, MarksKey: ""}
+		for i := len(*env) - 1; i >= 0; i-- {
+			scope := (*env)[i]
+			res, ok := (*scope)[plainKey]
+			if ok {
+				return res, nil
+			}
+		}
+	}
+
 	return nil, fmt.Errorf("undefined identifier: %s", key.Name)
 }
 

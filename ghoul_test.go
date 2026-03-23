@@ -296,6 +296,52 @@ func TestMacroExpandingToDefineSyntax(t *testing.T) {
 	}
 }
 
+func TestGeneralTransformerHygienePassthroughIdentifiers(t *testing.T) {
+	// A general transformer that passes input identifiers through.
+	// Those identifiers must NOT get marked — only transformer-introduced ones should.
+	g := New()
+	in := `
+(define-syntax passthrough
+  (lambda (stx)
+    (car (cdr stx))))
+(define x 42)
+(passthrough x)
+`
+	expected := e.Integer(42)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestGeneralTransformerHygieneIntroducedBinding(t *testing.T) {
+	// Transformer introduces a binding named "x".
+	// User also has "x". They should not conflict.
+	g := New()
+	in := `
+(define-syntax bind-x-to-99
+  (lambda (stx)
+    (list 'begin (list 'define 'x 99) (car (cdr stx)))))
+(define x 42)
+(bind-x-to-99 x)
+`
+	// The transformer produces: (begin (define x 99) x)
+	// With correct hygiene: the 'x in (define x 99) is introduced by the transformer
+	// and gets marked, while the x from user input passes through unmarked.
+	// So user's x (42) is returned, not 99.
+	expected := e.Integer(42)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
 func testPrintlnExample() {
 	g := New()
 	g.Process(strings.NewReader(`(println "hello, world")`))

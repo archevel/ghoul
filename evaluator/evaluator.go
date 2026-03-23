@@ -167,6 +167,20 @@ func sexprEvalContinuationFor(expr e.Expr, parent e.List, maybeTailCall bool) co
 	}
 }
 
+// specialFormName extracts the identifier name from h for special form
+// matching, ignoring hygiene marks. Special forms are language primitives,
+// not bindings, so a macro-introduced "begin" should still be recognized.
+func specialFormName(h e.Expr) e.Identifier {
+	switch v := h.(type) {
+	case e.Identifier:
+		return v
+	case e.ScopedIdentifier:
+		return v.Name
+	default:
+		return ""
+	}
+}
+
 func chooseEvaluation(expr e.Expr, parent e.List, maybeTailCall bool) (ret e.Expr, nextCont continuation, err error) {
 	h, t, isList := maybeSplitExpr(expr)
 	if quote, ok := expr.(*e.Quote); ok {
@@ -181,26 +195,23 @@ func chooseEvaluation(expr e.Expr, parent e.List, maybeTailCall bool) (ret e.Exp
 		ret = expr
 	} else if !isList {
 		err = NewEvaluationError("Malformed expression", parent)
-	} else if DEFINE_SYNTAX_SPECIAL_FORM.Equiv(h) {
-		nextCont = defineSyntaxContinuationFor(t)
-		ret = e.NIL
-	} else if DEFINE_SPECIAL_FORM.Equiv(h) {
-		nextCont = defineContinuationFor(t, maybeTailCall)
-		ret = e.NIL
-	} else if LAMBDA_SPECIAL_FORM.Equiv(h) {
-		nextCont = lambdaContinuationFor(t)
-		ret = e.NIL
-	} else if COND_SPECIAL_FORM.Equiv(h) {
-		nextCont = conditionalContinuationFor(t, maybeTailCall)
-		ret = e.NIL
-	} else if ASSIGNMENT_SPECIAL_FORM.Equiv(h) {
-		nextCont = assignmentContinuationFor(t, maybeTailCall)
-		ret = e.NIL
-	} else if BEGIN_SPECIAL_FORM.Equiv(h) {
-		nextCont = sexprSeqEvalContinuationFor(t, maybeTailCall)
-		ret = e.NIL
 	} else {
-		nextCont = functionCallContinuationFor(expr.(e.List), maybeTailCall)
+		sfn := specialFormName(h)
+		if sfn == DEFINE_SYNTAX_SPECIAL_FORM {
+			nextCont = defineSyntaxContinuationFor(t)
+		} else if sfn == DEFINE_SPECIAL_FORM {
+			nextCont = defineContinuationFor(t, maybeTailCall)
+		} else if sfn == LAMBDA_SPECIAL_FORM {
+			nextCont = lambdaContinuationFor(t)
+		} else if sfn == COND_SPECIAL_FORM {
+			nextCont = conditionalContinuationFor(t, maybeTailCall)
+		} else if sfn == ASSIGNMENT_SPECIAL_FORM {
+			nextCont = assignmentContinuationFor(t, maybeTailCall)
+		} else if sfn == BEGIN_SPECIAL_FORM {
+			nextCont = sexprSeqEvalContinuationFor(t, maybeTailCall)
+		} else {
+			nextCont = functionCallContinuationFor(expr.(e.List), maybeTailCall)
+		}
 		ret = e.NIL
 	}
 
@@ -279,7 +290,7 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 		}
 
 		predExpr := alternative.Head()
-		if predExpr.Equiv(ELSE_SPECIAL_FORM) {
+		if specialFormName(predExpr) == ELSE_SPECIAL_FORM {
 			predExpr = e.Boolean(true)
 		}
 
@@ -404,16 +415,22 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 			if gst, ok := headVal.(GeneralSyntaxTransformer); ok {
 				ev.log.Trace("Expanding general syntax transformer")
 				mark := freshMark()
+				// Apply the mark to the input before passing it to the transformer.
+				// After the transformer returns, we apply the same mark again.
+				// Identifiers from the input get the mark twice (cancels via toggle),
+				// while identifiers introduced by the transformer get it once (stays).
 				wrapped := macromancy.WrapExpr(callable, macromancy.NewMarkSet())
+				markedInput := macromancy.ApplyMark(wrapped, mark)
 
 				ev.pushContinuation(func(result e.Expr, ev *Evaluator) (e.Expr, error) {
 					marked := macromancy.ApplyMark(result, mark)
-					ev.pushContinuation(sexprEvalContinuationFor(marked, callable, maybeTailCall))
+					resolved := macromancy.ResolveExpr(marked)
+					ev.pushContinuation(sexprEvalContinuationFor(resolved, callable, maybeTailCall))
 					return e.NIL, nil
 				})
 
 				proc := gst.Fun.Fun
-				res, err := (*proc)(e.Cons(wrapped, e.NIL), ev)
+				res, err := (*proc)(e.Cons(markedInput, e.NIL), ev)
 				if err != nil {
 					return e.NIL, NewEvaluationError(err.Error(), callable)
 				}

@@ -63,6 +63,14 @@ func ApplyMark(expr e.Expr, mark Mark) e.Expr {
 		}
 		return so
 	}
+	// Plain identifiers in the output came from the transformer itself
+	// (not from the input, which would be wrapped in SyntaxObject).
+	if id, ok := expr.(e.Identifier); ok {
+		return e.ScopedIdentifier{Name: id, Marks: map[uint64]bool{mark: true}}
+	}
+	if si, ok := expr.(e.ScopedIdentifier); ok {
+		return e.ScopedIdentifier{Name: si.Name, Marks: MarkSet(si.Marks).Toggle(mark)}
+	}
 	if expr == e.NIL {
 		return e.NIL
 	}
@@ -105,6 +113,27 @@ func collectIdentifiers(expr e.Expr, vars map[e.Identifier]bool) {
 		collectIdentifiers(list.First(), vars)
 		collectIdentifiers(list.Second(), vars)
 	}
+}
+
+// ResolveExpr strips SyntaxObject wrappers, converting marked identifiers
+// to ScopedIdentifier and unmarked ones back to plain Identifier.
+func ResolveExpr(expr e.Expr) e.Expr {
+	if so, ok := expr.(SyntaxObject); ok {
+		if id, isIdent := so.Datum.(e.Identifier); isIdent {
+			if so.Marks.IsEmpty() {
+				return id
+			}
+			return e.ScopedIdentifier{Name: id, Marks: so.Marks}
+		}
+		return so.Datum
+	}
+	if expr == e.NIL {
+		return e.NIL
+	}
+	if pair, ok := expr.(*e.Pair); ok {
+		return e.Cons(ResolveExpr(pair.H), ResolveExpr(pair.T))
+	}
+	return expr
 }
 
 func MarksEqual(a, b MarkSet) bool {
