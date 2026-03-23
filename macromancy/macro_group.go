@@ -34,7 +34,7 @@ func NewMacroGroup(code e.Expr) (*MacroGroup, error) {
 		return nil, rulesErr
 	}
 
-	macros, err := extractMacros(rules.First().(e.List), literals)
+	macros, err := extractMacros(rules, literals)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +101,10 @@ func extractMacros(rules e.List, literals map[e.Identifier]bool) ([]Macro, error
 	rulesOk := false
 	for rules != e.NIL {
 		first := rules.First()
+		if first == e.NIL {
+			rules, _ = rules.Tail()
+			continue
+		}
 		r, rOk := first.(e.List)
 		rules, rulesOk = rules.Tail()
 		if !rOk {

@@ -367,7 +367,7 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 }
 
 func TestDefineSyntaxWithSyntaxRules(t *testing.T) {
-	in := `(define-syntax add-one (syntax-rules () (((add-one x) (+ x 1))))) (add-one 5)`
+	in := `(define-syntax add-one (syntax-rules () ((add-one x) (+ x 1)))) (add-one 5)`
 	env := NewEnvironment()
 	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
 		fst := args.First().(e.Integer)
@@ -381,7 +381,7 @@ func TestDefineSyntaxWithSyntaxRules(t *testing.T) {
 func TestDefineSyntaxHygiene(t *testing.T) {
 	// The classic hygiene test: macro introduces "tmp", user also has "tmp"
 	in := `
-(define-syntax my-or (syntax-rules () (((my-or a b) (begin (define tmp a) (cond (tmp tmp) (else b)))))))
+(define-syntax my-or (syntax-rules () ((my-or a b) (begin (define tmp a) (cond (tmp tmp) (else b))))))
 (define tmp 5)
 (my-or #f tmp)
 `

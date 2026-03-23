@@ -19,14 +19,14 @@ func TestMacroTypeAssertionSafety(t *testing.T) {
 	}{
 		{
 			name:        "Non-identifier in macro pattern should not panic",
-			macroCode:   `(define-syntax bad-macro (syntax-rules () ((123 x) x)))`,
+			macroCode:   `(define-syntax bad-macro (syntax-rules () (123 x) ))`,
 			testCode:    "(bad-macro 5)",
 			expectPanic: true, // This should initially panic, then we'll fix it
 			expectError: "macro pattern must contain identifiers",
 		},
 		{
 			name:        "Non-identifier in ellipsis pattern should not panic",
-			macroCode:   `(define-syntax bad-ellipsis (syntax-rules () (("string" ...) 42)))`,
+			macroCode:   `(define-syntax bad-ellipsis (syntax-rules () ("string" ...) ))`,
 			testCode:    "(bad-ellipsis 1 2 3)",
 			expectPanic: true, // This should initially panic, then we'll fix it
 			expectError: "macro pattern ellipsis requires identifier",

@@ -16,12 +16,12 @@ func TestBuildMacroGroupFromCode(t *testing.T) {
 	}{
 		{`(define-syntax an-id (syntax-rules () () ))`, "an-id", nil},
 		{`(define-syntax foo (syntax-rules () () ))`, "foo", nil},
-		{`(define-syntax foo (syntax-rules () ((foo bar)) ))`, "foo",
+		{`(define-syntax foo (syntax-rules () (foo bar) ))`, "foo",
 			[]Macro{
 				{Pattern: e.Identifier("foo"), Body: e.Identifier("bar")},
 			},
 		},
-		{`(define-syntax foo (syntax-rules () (((foo fiz 1) (fiz foo)) (foo bar)) ))`, "foo",
+		{`(define-syntax foo (syntax-rules () ((foo fiz 1) (fiz foo)) (foo bar) ))`, "foo",
 			[]Macro{
 				{
 					Pattern: e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("fiz"), e.Cons(e.Integer(1), e.NIL))),
@@ -82,12 +82,12 @@ func TestFailingCodeForBuildingMacroGroups(t *testing.T) {
 		{`(define-syntax a (syntax-rules foo))`, "invalid rules in syntax definition: missing rules list in (foo)"},
 		{`(define-syntax a (syntax-rules . foo))`, "invalid rules in syntax definition: expected literals and rules, got (syntax-rules . foo)"},
 		{`(define-syntax a (syntax-rules () . foo))`, "invalid rules in syntax definition: expected rules after literals, got (() . foo)"},
-		{`(define-syntax a (syntax-rules () (foo bar)))`, "invalid rule definition: expected list for rule, got expressions.Identifier at position 0"},
-		{`(define-syntax a (syntax-rules () ((foo))))`, "invalid rule definition: rule must have pattern and body, got (foo)"},
-		{`(define-syntax a (syntax-rules () ((foo . bar))))`, "invalid rule definition: rule must have pattern and body, got (foo . bar)"},
-		{`(define-syntax a (syntax-rules () ((foo bar) (foo . bar))))`, "invalid rule definition: rule must have pattern and body, got (foo . bar)"},
-		{`(define-syntax a (syntax-rules () ((foo bar) foo)))`, "invalid rule definition: expected list for rule, got expressions.Identifier at position 1"},
-		{`(define-syntax a (syntax-rules () ((foo bar) . foo)))`, "invalid rule definition: malformed rules list at position 0"},
+		{`(define-syntax a (syntax-rules () foo))`, "invalid rule definition: expected list for rule, got expressions.Identifier at position 0"},
+		{`(define-syntax a (syntax-rules () (foo)))`, "invalid rule definition: rule must have pattern and body, got (foo)"},
+		{`(define-syntax a (syntax-rules () (foo . bar)))`, "invalid rule definition: rule must have pattern and body, got (foo . bar)"},
+		{`(define-syntax a (syntax-rules () (foo bar) (foo . bar)))`, "invalid rule definition: rule must have pattern and body, got (foo . bar)"},
+		{`(define-syntax a (syntax-rules () (foo bar) foo))`, "invalid rule definition: expected list for rule, got expressions.Identifier at position 1"},
+		{`(define-syntax a (syntax-rules () (foo bar) . foo))`, "invalid rule definition: malformed rules list at position 0"},
 	}
 	for _, c := range cases {
 		codeOk, code := parser.Parse(strings.NewReader(c.in))

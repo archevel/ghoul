@@ -69,7 +69,7 @@ func TestYieldsEvaluationErrorWhenThereIsAnErrror(t *testing.T) {
 
 func TestExpandsMacrosBeforeEvaluating(t *testing.T) {
 	g := New()
-	in := "(define-syntax baz (syntax-rules () (((baz x y) (+ x y))))) (baz 1 2)"
+	in := "(define-syntax baz (syntax-rules () ((baz x y) (+ x y)))) (baz 1 2)"
 	expected := e.Integer(3)
 	res, err := g.Process(strings.NewReader(in))
 
@@ -121,7 +121,7 @@ func TestBasicBuiltInFunctions(t *testing.T) {
 func TestHygienicMacroOrWithTmp(t *testing.T) {
 	g := New()
 	in := `
-(define-syntax my-or (syntax-rules () (((my-or a b) (begin (define tmp a) (cond (tmp tmp) (else b)))))))
+(define-syntax my-or (syntax-rules () ((my-or a b) (begin (define tmp a) (cond (tmp tmp) (else b))))))
 (define tmp 5)
 (my-or #f tmp)
 `
@@ -139,7 +139,7 @@ func TestHygienicMacroOrWithTmp(t *testing.T) {
 func TestHygienicMacroSwapWithTmp(t *testing.T) {
 	g := New()
 	in := `
-(define-syntax my-swap (syntax-rules () (((my-swap x y) (begin (define tmp x) (set! x y) (set! y tmp))))))
+(define-syntax my-swap (syntax-rules () ((my-swap x y) (begin (define tmp x) (set! x y) (set! y tmp)))))
 (define a 10)
 (define b 20)
 (my-swap a b)
@@ -160,7 +160,7 @@ func TestHygienicMacroSwapWithTmpVariable(t *testing.T) {
 	// User has a variable named "tmp" — the macro's tmp should not capture it
 	g := New()
 	in := `
-(define-syntax my-swap (syntax-rules () (((my-swap x y) (begin (define tmp x) (set! x y) (set! y tmp))))))
+(define-syntax my-swap (syntax-rules () ((my-swap x y) (begin (define tmp x) (set! x y) (set! y tmp)))))
 (define tmp 10)
 (define other 20)
 (my-swap tmp other)
@@ -183,7 +183,7 @@ func TestSyntaxRulesWithEllipsis(t *testing.T) {
 	// This tests that ... in pattern captures variable args
 	// and ... in template splices them back
 	in := `
-(define-syntax my-begin (syntax-rules () (((my-begin x ...) (begin x ...)))))
+(define-syntax my-begin (syntax-rules () ((my-begin x ...) (begin x ...))))
 (my-begin (define a 1) (define b 2) (+ a b))
 `
 	expected := e.Integer(3)
@@ -199,7 +199,7 @@ func TestSyntaxRulesWithEllipsis(t *testing.T) {
 func TestSyntaxRulesWithEllipsisMultipleArgs(t *testing.T) {
 	g := New()
 	in := `
-(define-syntax add-all (syntax-rules () (((add-all x y ...) (+ x (+ y ...))))))
+(define-syntax add-all (syntax-rules () ((add-all x y ...) (+ x (+ y ...)))))
 (add-all 1 2 3)
 `
 	// (add-all 1 2 3) should expand to (+ 1 (+ 2 3))
@@ -219,7 +219,7 @@ func TestSyntaxRulesLiterals(t *testing.T) {
 	// "else" is a literal — it must match exactly, not bind as a pattern variable
 	in := `
 (define-syntax my-if (syntax-rules (else)
-  (((my-if test then else alt) (cond (test then) (else alt))))))
+  ((my-if test then else alt) (cond (test then) (else alt)))))
 (my-if #t 1 else 2)
 `
 	expected := e.Integer(1)
@@ -238,7 +238,7 @@ func TestSyntaxRulesLiteralMustMatchExactly(t *testing.T) {
 	// the pattern should not match
 	in := `
 (define-syntax my-if (syntax-rules (else)
-  (((my-if test then else alt) (cond (test then) (else alt))))))
+  ((my-if test then else alt) (cond (test then) (else alt)))))
 (my-if #t 1 else 2)
 `
 	// With "else" as a literal, the pattern requires the identifier "else" at that position.
@@ -260,7 +260,7 @@ func TestSyntaxRulesLiteralPreventsBinding(t *testing.T) {
 	// matches when "arrow" appears literally at that position.
 	in := `
 (define-syntax test-lit (syntax-rules (arrow)
-  (((test-lit x arrow y) (+ x y)))))
+  ((test-lit x arrow y) (+ x y))))
 (test-lit 3 arrow 4)
 `
 	expected := e.Integer(7)
@@ -280,7 +280,7 @@ func TestSyntaxRulesLiteralRejectsNonLiteral(t *testing.T) {
 	// "arrow" would match anything as a pattern variable.
 	in := `
 (define-syntax test-lit (syntax-rules (arrow)
-  (((test-lit x arrow y) (+ x y)))))
+  ((test-lit x arrow y) (+ x y))))
 (test-lit 3 blah 4)
 `
 	// Should fail because "blah" doesn't match literal "arrow"
@@ -296,7 +296,7 @@ func TestSyntaxRulesLiteralNotBoundAsVariable(t *testing.T) {
 	// and in the pattern it should not capture the input as a variable
 	in := `
 (define-syntax my-if (syntax-rules (else)
-  (((my-if test then else alt) (cond (test then) (else alt))))))
+  ((my-if test then else alt) (cond (test then) (else alt)))))
 (my-if (eq? 1 2) 10 else 20)
 `
 	expected := e.Integer(20)
@@ -352,8 +352,8 @@ func TestNestedMacroExpansion(t *testing.T) {
 	// One macro expands to code that uses another macro
 	g := New()
 	in := `
-(define-syntax add-one (syntax-rules () (((add-one x) (+ x 1)))))
-(define-syntax add-two (syntax-rules () (((add-two x) (add-one (add-one x))))))
+(define-syntax add-one (syntax-rules () ((add-one x) (+ x 1))))
+(define-syntax add-two (syntax-rules () ((add-two x) (add-one (add-one x)))))
 (add-two 3)
 `
 	expected := e.Integer(5)
@@ -370,8 +370,8 @@ func TestNestedMacrosWithSameTmpVariable(t *testing.T) {
 	// Both macros introduce "tmp" — they should get distinct marks
 	g := New()
 	in := `
-(define-syntax save-first (syntax-rules () (((save-first a b) (begin (define tmp a) tmp)))))
-(define-syntax save-second (syntax-rules () (((save-second a b) (begin (define tmp b) (save-first tmp a))))))
+(define-syntax save-first (syntax-rules () ((save-first a b) (begin (define tmp a) tmp))))
+(define-syntax save-second (syntax-rules () ((save-second a b) (begin (define tmp b) (save-first tmp a)))))
 (save-second 10 20)
 `
 	// save-second expands to: (begin (define tmp$1 20) (save-first tmp$1 10))
@@ -392,8 +392,8 @@ func TestNestedMacrosWithUserTmpVariable(t *testing.T) {
 	// All three should be distinct
 	g := New()
 	in := `
-(define-syntax wrap-a (syntax-rules () (((wrap-a x) (begin (define tmp x) tmp)))))
-(define-syntax wrap-b (syntax-rules () (((wrap-b x) (begin (define tmp x) (wrap-a tmp))))))
+(define-syntax wrap-a (syntax-rules () ((wrap-a x) (begin (define tmp x) tmp))))
+(define-syntax wrap-b (syntax-rules () ((wrap-b x) (begin (define tmp x) (wrap-a tmp)))))
 (define tmp 99)
 (wrap-b tmp)
 `
@@ -414,7 +414,7 @@ func TestMacroExpandingToDefineSyntax(t *testing.T) {
 	// A macro that defines another macro (meta-macro)
 	g := New()
 	in := `
-(define-syntax def-adder (syntax-rules () (((def-adder name val) (define-syntax name (syntax-rules () (((name x) (+ x val)))))))))
+(define-syntax def-adder (syntax-rules () ((def-adder name val) (define-syntax name (syntax-rules () ((name x) (+ x val)))))))
 (def-adder add-five 5)
 (add-five 10)
 `
@@ -470,6 +470,86 @@ func TestGeneralTransformerHygieneIntroducedBinding(t *testing.T) {
 		t.Errorf("Got error: %s", err)
 	}
 	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestSyntaxRulesMultipleClauses(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax my-op (syntax-rules ()
+  ((my-op x y) (+ x y))
+  ((my-op x) (+ x 1))))
+(my-op 10)
+`
+	expected := e.Integer(11)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if res != nil && !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestSyntaxRulesMultipleClausesFirstMatches(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax my-op (syntax-rules ()
+  ((my-op x y) (+ x y))
+  ((my-op x) (+ x 1))))
+(my-op 3 4)
+`
+	expected := e.Integer(7)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if res != nil && !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestSyntaxRulesMultipleClausesSiblingFormat(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax my-op2 (syntax-rules ()
+  ((my-op2 x y) (+ x y))
+  ((my-op2 x) (+ x 1))))
+(my-op2 10)
+`
+	expected := e.Integer(11)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if res != nil && !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestQuotedIdentifiersInTransformerGetHygiene(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax bind-and-return
+  (lambda (stx)
+    (list 'begin
+          (list 'define 'x 99)
+          'x)))
+(define x 42)
+(bind-and-return)
+`
+	// The transformer introduces 'x via quote. With correct hygiene,
+	// the macro's x should not shadow the user's x.
+	// bind-and-return defines its own scoped x=99 and returns that,
+	// so result is 99 (the macro's own x, not the user's).
+	// The user's x=42 remains untouched.
+	expected := e.Integer(99)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if res != nil && !expected.Equiv(res) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
