@@ -4,17 +4,18 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 )
 
-// Mark is a unique identifier for a macro expansion invocation.
 type Mark = uint64
 
-// MarkSet tracks which marks apply to an identifier.
 type MarkSet map[Mark]bool
 
 func NewMarkSet() MarkSet {
 	return MarkSet{}
 }
 
-// Toggle returns a new MarkSet with the given mark toggled (added if absent, removed if present).
+// Toggle returns a new MarkSet with the given mark flipped.
+// This implements Racket's anti-mark behavior: applying the same
+// mark twice cancels it out, which is how input expressions shed
+// the macro-introduction mark while template expressions keep it.
 func (ms MarkSet) Toggle(m Mark) MarkSet {
 	result := MarkSet{}
 	for k, v := range ms {
@@ -32,9 +33,8 @@ func (ms MarkSet) IsEmpty() bool {
 	return len(ms) == 0
 }
 
-// WrapExpr recursively wraps leaf expressions in an expression tree as SyntaxObjects.
-// Pairs are preserved as Pairs (so List interface works), but their elements are wrapped.
-// NIL is preserved as-is.
+// WrapExpr wraps leaf expressions as SyntaxObjects while preserving the
+// Pair tree structure, so the List interface continues to work for traversal.
 func WrapExpr(expr e.Expr, marks MarkSet) e.Expr {
 	if expr == e.NIL {
 		return e.NIL
@@ -56,7 +56,6 @@ func copyMarks(ms MarkSet) MarkSet {
 	return result
 }
 
-// ApplyMark toggles a mark on all identifier SyntaxObjects in a tree.
 func ApplyMark(expr e.Expr, mark Mark) e.Expr {
 	if so, ok := expr.(SyntaxObject); ok {
 		if _, isIdent := so.Datum.(e.Identifier); isIdent {
@@ -73,15 +72,14 @@ func ApplyMark(expr e.Expr, mark Mark) e.Expr {
 	return expr
 }
 
-// ExtractPatternVars extracts all identifiers from a macro pattern,
-// excluding the first identifier (the macro name).
+// ExtractPatternVars returns all identifiers in a macro pattern except
+// the first one, which is the macro name rather than a variable to bind.
 func ExtractPatternVars(pattern e.Expr) map[e.Identifier]bool {
 	vars := map[e.Identifier]bool{}
 	list, ok := pattern.(e.List)
 	if !ok || list == e.NIL {
 		return vars
 	}
-	// Skip the first element (macro name)
 	rest := list.Second()
 	collectIdentifiers(rest, vars)
 	return vars
@@ -121,7 +119,6 @@ func MarksEqual(a, b MarkSet) bool {
 	return true
 }
 
-// SyntaxObject wraps an Expr with lexical context (marks) for hygiene.
 type SyntaxObject struct {
 	Datum e.Expr
 	Marks MarkSet

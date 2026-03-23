@@ -37,8 +37,6 @@ func (m Macro) Expand(bound bindings) e.Expr {
 	return walkAndReplace(m.Body, bound)
 }
 
-// ExpandHygienic expands the macro body with bindings, adding the given mark
-// to all template identifiers that are NOT pattern variables and NOT bound.
 func (m Macro) ExpandHygienic(bound bindings, mark Mark) e.Expr {
 	return walkAndReplaceHygienic(m.Body, bound, mark, m.PatternVars)
 }
@@ -47,9 +45,9 @@ func walkAndReplaceHygienic(toWalk e.Expr, bound bindings, mark Mark, patternVar
 	return walkAndReplaceHygienicImpl(toWalk, bound, mark, patternVars, nil)
 }
 
-// ExpandHygienicWithDefinitionBindings expands a macro body with hygiene,
-// but identifiers that are bound at the macro definition site (e.g., built-ins)
-// are NOT marked, so they resolve to their definition-site bindings.
+// ExpandHygienicWithDefinitionBindings skips marking identifiers that were
+// already bound at the macro's definition site, so references to built-ins
+// and special forms resolve correctly after expansion.
 func ExpandHygienicWithDefinitionBindings(body e.Expr, bound bindings, mark Mark, patternVars map[e.Identifier]bool, definitionBindings map[e.Identifier]bool) e.Expr {
 	return walkAndReplaceHygienicImpl(body, bound, mark, patternVars, definitionBindings)
 }
@@ -76,7 +74,6 @@ func walkAndReplaceHygienicImpl(toWalk e.Expr, bound bindings, mark Mark, patter
 		if definitionBindings != nil && definitionBindings[si.Name] {
 			return si
 		}
-		// Add the mark to existing marks
 		newMarks := copyMarks(si.Marks)
 		newMarks[mark] = true
 		return e.ScopedIdentifier{
@@ -207,8 +204,6 @@ func idAndRest(expr e.Expr) (e.Identifier, e.Expr, error) {
 	return id, nil, nil
 }
 
-// toIdentifier extracts a plain Identifier from an Expr,
-// handling both Identifier and ScopedIdentifier.
 func toIdentifier(expr e.Expr) e.Identifier {
 	switch v := expr.(type) {
 	case e.Identifier:

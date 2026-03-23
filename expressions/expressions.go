@@ -115,7 +115,9 @@ func (e Identifier) Equiv(expr Expr) bool {
 	}
 }
 
-// ScopedIdentifier is an identifier with hygiene marks from macro expansion.
+// ScopedIdentifier carries hygiene marks so the evaluator can distinguish
+// identifiers introduced by different macro expansions from each other
+// and from user-written code, even when they share the same name.
 type ScopedIdentifier struct {
 	Name  Identifier
 	Marks map[uint64]bool

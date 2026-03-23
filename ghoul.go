@@ -117,19 +117,15 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 		return e.Integer(fst + snd), nil
 	})
 
-	// Syntax object manipulation primitives for general macro transformers
 	env.Register("syntax->datum", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		arg := args.First()
 		if so, ok := arg.(macromancy.SyntaxObject); ok {
 			return so.Datum, nil
 		}
-		// If not a syntax object, return as-is
 		return arg, nil
 	})
 
 	env.Register("datum->syntax", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
-		// (datum->syntax context-stx datum)
-		// context-stx provides the lexical context (marks)
 		ctxArg := args.First()
 		t, _ := args.Tail()
 		datum := t.First()
@@ -142,7 +138,6 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 	})
 
 	env.Register("syntax-e", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
-		// Unwrap one level of syntax object
 		arg := args.First()
 		if so, ok := arg.(macromancy.SyntaxObject); ok {
 			return so.Datum, nil

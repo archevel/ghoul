@@ -9,11 +9,11 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 )
 
-// scopeKey is a comparable key for environment lookups.
-// It encodes both the identifier name and its hygiene marks.
+// scopeKey must be comparable for use as a map key, so marks are
+// encoded as a canonical sorted string rather than a map.
 type scopeKey struct {
 	Name     string
-	MarksKey string // canonical string of sorted mark IDs, e.g. "1,3,5"
+	MarksKey string
 }
 
 func keyFromIdentifier(id e.Identifier) scopeKey {
