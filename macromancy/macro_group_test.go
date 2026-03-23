@@ -8,35 +8,6 @@ import (
 	"github.com/archevel/ghoul/parser"
 )
 
-func TestMacroGroupMatchingIdentifier(t *testing.T) {
-
-	cases := []struct {
-		in         string
-		identifier string
-		macros     []Macro
-	}{
-		{"foo", "foo", []Macro{{}}},
-		{"bar", "foo", nil},
-		{"(() foo)", "foo", nil},
-		{"bar", "bar", []Macro{{}}},
-		{"(bar)", "bar", []Macro{{}}},
-		{"(bar a b c)", "bar", []Macro{{}}},
-	}
-	for _, c := range cases {
-
-		codeOk, code := parser.Parse(strings.NewReader(c.in))
-		if codeOk != 0 {
-			t.Fatal("Parsing code failed")
-		}
-
-		group := MacroGroup{e.Identifier(c.identifier), c.macros}
-
-		if len(group.Matches(code.Expressions.First())) != len(c.macros) {
-			t.Errorf("Expected match of '%s' with '%s' to yield %v", c.in, c.identifier, c.macros)
-		}
-	}
-}
-
 func TestBuildMacroGroupFromCode(t *testing.T) {
 	cases := []struct {
 		in             string

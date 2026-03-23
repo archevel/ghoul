@@ -15,17 +15,6 @@ func (mg MacroGroup) Macros() []Macro {
 	return mg.macros
 }
 
-func (mg MacroGroup) Matches(code e.Expr) []Macro {
-	id, ok := code.(e.Identifier)
-	if codeList, codeOk := code.(e.List); !ok && codeOk {
-		id, _ = codeList.First().(e.Identifier)
-	}
-	if mg.matchId.Equiv(id) {
-		return mg.macros
-	}
-	return nil
-}
-
 func NewMacroGroup(code e.Expr) (*MacroGroup, error) {
 	codeList, codeOk := code.(e.List)
 	if !codeOk {

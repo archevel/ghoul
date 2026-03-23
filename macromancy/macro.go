@@ -33,10 +33,6 @@ func (m Macro) Matches(expr e.Expr) (bool, bindings) {
 	return false, nil
 }
 
-func (m Macro) Expand(bound bindings) e.Expr {
-	return walkAndReplace(m.Body, bound)
-}
-
 func (m Macro) ExpandHygienic(bound bindings, mark Mark) e.Expr {
 	return walkAndReplaceHygienic(m.Body, bound, mark, m.PatternVars)
 }
@@ -88,28 +84,6 @@ func walkAndReplaceHygienicImpl(toWalk e.Expr, bound bindings, mark Mark, patter
 			walkAndReplaceHygienicImpl(h, bound, mark, patternVars, definitionBindings),
 			walkAndReplaceHygienicImpl(list.Second(), bound, mark, patternVars, definitionBindings),
 		)
-	}
-
-	return toWalk
-}
-
-func walkAndReplace(toWalk e.Expr, bound bindings) e.Expr {
-	if id, ok := toWalk.(e.Identifier); ok {
-		replacement, present := bound[id]
-		if present {
-			return replacement
-		}
-	}
-	if si, ok := toWalk.(e.ScopedIdentifier); ok {
-		replacement, present := bound[si.Name]
-		if present {
-			return replacement
-		}
-	}
-
-	if list, ok := toWalk.(e.List); ok && list != e.NIL {
-		h := list.First()
-		return e.Cons(walkAndReplace(h, bound), walkAndReplace(list.Second(), bound))
 	}
 
 	return toWalk

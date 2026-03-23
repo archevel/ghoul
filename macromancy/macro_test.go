@@ -334,7 +334,7 @@ func TestMacroExpansion(t *testing.T) {
 
 		macro := Macro{Body: body.Expressions.First()}
 
-		expanded := macro.Expand(c.bound)
+		expanded := macro.ExpandHygienic(c.bound, 0)
 
 		if expanded.Repr() != c.expectedRepr {
 			t.Errorf("Expected %s after expanding macro, but got %s", c.expectedRepr, expanded.Repr())
@@ -351,7 +351,7 @@ func swapMacroExample() {
 	macro := Macro{Pattern: pattern.Expressions.(e.List).First(), Body: body.Expressions.(e.List).First()}
 	_, bound := macro.Matches(code.Expressions.(e.List).First())
 
-	res := macro.Expand(bound)
+	res := macro.ExpandHygienic(bound, 0)
 	fmt.Println(res.Repr())
 	// Output:
 	// (let ((tmp foo)) (set! foo bar) (set! bar tmp))
@@ -393,7 +393,7 @@ func TestMacroTransform(t *testing.T) {
 			t.Errorf("Could not bind %s to patterns in %s", c.in, c.pattern)
 		}
 
-		res := macro.Expand(bound)
+		res := macro.ExpandHygienic(bound, 0)
 
 		if res.Repr() != c.out {
 			t.Errorf("Expansion of %s did not give expected result %s, instead got %+v", c.in, c.out, res.Repr())
