@@ -80,6 +80,39 @@ func ApplyMark(expr e.Expr, mark Mark) e.Expr {
 	return expr
 }
 
+func ExtractPatternVarsWithLiterals(pattern e.Expr, literals map[e.Identifier]bool) map[e.Identifier]bool {
+	vars := map[e.Identifier]bool{}
+	list, ok := pattern.(e.List)
+	if !ok || list == e.NIL {
+		return vars
+	}
+	rest := list.Second()
+	collectIdentifiersWithLiterals(rest, vars, literals)
+	return vars
+}
+
+func collectIdentifiersWithLiterals(expr e.Expr, vars map[e.Identifier]bool, literals map[e.Identifier]bool) {
+	if id, ok := expr.(e.Identifier); ok {
+		if id != e.Identifier("...") && (literals == nil || !literals[id]) {
+			vars[id] = true
+		}
+		return
+	}
+	if si, ok := expr.(e.ScopedIdentifier); ok {
+		if si.Name != e.Identifier("...") && (literals == nil || !literals[si.Name]) {
+			vars[si.Name] = true
+		}
+		return
+	}
+	if expr == e.NIL {
+		return
+	}
+	if list, ok := expr.(e.List); ok {
+		collectIdentifiersWithLiterals(list.First(), vars, literals)
+		collectIdentifiersWithLiterals(list.Second(), vars, literals)
+	}
+}
+
 // ExtractPatternVars returns all identifiers in a macro pattern except
 // the first one, which is the macro name rather than a variable to bind.
 func ExtractPatternVars(pattern e.Expr) map[e.Identifier]bool {

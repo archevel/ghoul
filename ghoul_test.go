@@ -177,6 +177,138 @@ tmp
 	}
 }
 
+func TestSyntaxRulesWithEllipsis(t *testing.T) {
+	g := New()
+	// my-list collects all arguments into a list structure via begin+define
+	// This tests that ... in pattern captures variable args
+	// and ... in template splices them back
+	in := `
+(define-syntax my-begin (syntax-rules () (((my-begin x ...) (begin x ...)))))
+(my-begin (define a 1) (define b 2) (+ a b))
+`
+	expected := e.Integer(3)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if res != nil && !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestSyntaxRulesWithEllipsisMultipleArgs(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax add-all (syntax-rules () (((add-all x y ...) (+ x (+ y ...))))))
+(add-all 1 2 3)
+`
+	// (add-all 1 2 3) should expand to (+ 1 (+ 2 3))
+	// But this requires ... to work in both pattern matching and template expansion
+	expected := e.Integer(6)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if res != nil && !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestSyntaxRulesLiterals(t *testing.T) {
+	g := New()
+	// "else" is a literal — it must match exactly, not bind as a pattern variable
+	in := `
+(define-syntax my-if (syntax-rules (else)
+  (((my-if test then else alt) (cond (test then) (else alt))))))
+(my-if #t 1 else 2)
+`
+	expected := e.Integer(1)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if res != nil && !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestSyntaxRulesLiteralMustMatchExactly(t *testing.T) {
+	g := New()
+	// "else" is a literal — when the input doesn't have "else" at that position,
+	// the pattern should not match
+	in := `
+(define-syntax my-if (syntax-rules (else)
+  (((my-if test then else alt) (cond (test then) (else alt))))))
+(my-if #t 1 else 2)
+`
+	// With "else" as a literal, the pattern requires the identifier "else" at that position.
+	// This should match because the input has "else" in the right place.
+	expected := e.Integer(1)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if res != nil && !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestSyntaxRulesLiteralPreventsBinding(t *testing.T) {
+	g := New()
+	// Without literals, "arrow" in the pattern would be a pattern variable
+	// that captures anything. With "arrow" as a literal, the pattern only
+	// matches when "arrow" appears literally at that position.
+	in := `
+(define-syntax test-lit (syntax-rules (arrow)
+  (((test-lit x arrow y) (+ x y)))))
+(test-lit 3 arrow 4)
+`
+	expected := e.Integer(7)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if res != nil && !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestSyntaxRulesLiteralRejectsNonLiteral(t *testing.T) {
+	g := New()
+	// When a non-literal identifier is in the position where a literal is expected,
+	// the pattern should NOT match. Currently without literal support,
+	// "arrow" would match anything as a pattern variable.
+	in := `
+(define-syntax test-lit (syntax-rules (arrow)
+  (((test-lit x arrow y) (+ x y)))))
+(test-lit 3 blah 4)
+`
+	// Should fail because "blah" doesn't match literal "arrow"
+	_, err := g.Process(strings.NewReader(in))
+	if err == nil {
+		t.Error("Expected error because 'blah' should not match literal 'arrow'")
+	}
+}
+
+func TestSyntaxRulesLiteralNotBoundAsVariable(t *testing.T) {
+	g := New()
+	// "else" is a literal, so in the body it should appear as itself (not substituted)
+	// and in the pattern it should not capture the input as a variable
+	in := `
+(define-syntax my-if (syntax-rules (else)
+  (((my-if test then else alt) (cond (test then) (else alt))))))
+(my-if (eq? 1 2) 10 else 20)
+`
+	expected := e.Integer(20)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if res != nil && !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
 func TestGeneralTransformerAlways42(t *testing.T) {
 	g := New()
 	in := `
