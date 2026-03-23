@@ -162,6 +162,125 @@ func TestMatchWithLiteralsRequiresExactMatch(t *testing.T) {
 	}
 }
 
+func TestExpandHygienicWithDefinitionBindingsSkipsKnownIdentifiers(t *testing.T) {
+	pattern := parseExpr(t, "(mac x)")
+	body := parseExpr(t, "(+ x 1)")
+	patternVars := ExtractPatternVars(pattern)
+
+	code := parseExpr(t, "(mac 5)")
+	macro := Macro{Pattern: pattern, Body: body, PatternVars: patternVars}
+	ok, bound := macro.Matches(code)
+	if !ok {
+		t.Fatal("should match")
+	}
+
+	defBindings := map[e.Identifier]bool{e.Identifier("+"): true}
+	result := ExpandHygienicWithDefinitionBindings(body, bound, 1, patternVars, defBindings)
+
+	list := result.(e.List)
+	plus := list.First()
+	if _, isSI := plus.(e.ScopedIdentifier); isSI {
+		t.Error("'+' is a definition binding, should remain plain Identifier")
+	}
+	if id, ok := plus.(e.Identifier); !ok || id != e.Identifier("+") {
+		t.Errorf("expected plain Identifier '+', got %T %s", plus, plus.Repr())
+	}
+}
+
+func TestExpandHygienicWithScopedIdentifierInBody(t *testing.T) {
+	// When the body contains a ScopedIdentifier that's a bound pattern var,
+	// it should be substituted
+	body := e.Cons(
+		e.ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}},
+		e.NIL,
+	)
+	bound := bindings{e.Identifier("x"): e.Integer(42)}
+	patternVars := map[e.Identifier]bool{e.Identifier("x"): true}
+
+	result := ExpandHygienicWithDefinitionBindings(body, bound, 2, patternVars, nil)
+	list := result.(e.List)
+	if !list.First().Equiv(e.Integer(42)) {
+		t.Errorf("ScopedIdentifier 'x' should be substituted with 42, got %s", list.First().Repr())
+	}
+}
+
+func TestExpandHygienicScopedIdentifierAccumulatesMarks(t *testing.T) {
+	// A ScopedIdentifier that's not bound should accumulate the expansion mark
+	body := e.ScopedIdentifier{Name: "y", Marks: map[uint64]bool{1: true}}
+	result := ExpandHygienicWithDefinitionBindings(body, bindings{}, 2, nil, nil)
+
+	si, ok := result.(e.ScopedIdentifier)
+	if !ok {
+		t.Fatalf("expected ScopedIdentifier, got %T", result)
+	}
+	if !si.Marks[1] || !si.Marks[2] {
+		t.Error("expected both marks 1 and 2")
+	}
+}
+
+func TestExpandHygienicScopedIdentifierDefinitionBinding(t *testing.T) {
+	body := e.ScopedIdentifier{Name: "begin", Marks: map[uint64]bool{1: true}}
+	defBindings := map[e.Identifier]bool{e.Identifier("begin"): true}
+	result := ExpandHygienicWithDefinitionBindings(body, bindings{}, 2, nil, defBindings)
+
+	si, ok := result.(e.ScopedIdentifier)
+	if !ok {
+		t.Fatalf("expected ScopedIdentifier, got %T", result)
+	}
+	if si.Marks[2] {
+		t.Error("definition binding should not get additional marks")
+	}
+}
+
+func TestExpandHygienicEllipsisNotBound(t *testing.T) {
+	// When ... isn't in the bindings, it should be treated as a regular
+	// template identifier and get marked
+	body := parseExpr(t, "(foo ...)")
+	result := ExpandHygienicWithDefinitionBindings(body, bindings{}, 1, nil, nil)
+
+	list := result.(e.List)
+	second := list.Second()
+	// ... should be marked since it's not bound
+	secondList, ok := second.(e.List)
+	if !ok {
+		t.Fatalf("expected list for rest, got %T: %s", second, second.Repr())
+	}
+	ellipsis := secondList.First()
+	si, isSI := ellipsis.(e.ScopedIdentifier)
+	if !isSI {
+		t.Fatalf("expected ScopedIdentifier for unbound ..., got %T", ellipsis)
+	}
+	if si.Name != e.Identifier("...") {
+		t.Errorf("expected name '...', got '%s'", si.Name)
+	}
+}
+
+func TestExpandHygienicEllipsisEmptyList(t *testing.T) {
+	// When ... is bound to NIL, splicing should produce nothing extra
+	body := parseExpr(t, "(begin x ...)")
+	bound := bindings{
+		e.Identifier("x"):   e.Integer(1),
+		e.Identifier("..."): e.NIL,
+	}
+
+	result := ExpandHygienicWithDefinitionBindings(body, bound, 1, nil, nil)
+	list := result.(e.List)
+
+	// Should be (begin 1) — just 2 elements, no extra from empty ellipsis
+	count := 0
+	for l := list; l != e.NIL; {
+		count++
+		tail, ok := l.Tail()
+		if !ok {
+			break
+		}
+		l = tail
+	}
+	if count != 2 {
+		t.Errorf("expected 2 elements (begin 1), got %d: %s", count, result.Repr())
+	}
+}
+
 func TestExpandHygienicUserVarNamedTmpDoesNotConflict(t *testing.T) {
 	// Macro: (swap x y) -> (begin (define tmp x) (set! x y) (set! y tmp))
 	pattern := parseExpr(t, "(swap x y)")

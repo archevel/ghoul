@@ -421,6 +421,124 @@ func TestGeneralTransformerCanReturnArbitraryCode(t *testing.T) {
 	testInputGivesOutputWithinEnv(in, e.Integer(42), env, t)
 }
 
+func TestDefineSyntaxErrorCases(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+	}{
+		{"missing name and transformer", `(define-syntax)`},
+		{"non-identifier name", `(define-syntax 42 (syntax-rules () (foo bar)))`},
+		{"missing transformer", `(define-syntax foo)`},
+		{"non-list transformer", `(define-syntax foo bar)`},
+		{"non-procedure general transformer", `(define-syntax foo (begin 42))`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			env := NewEnvironment()
+			r := strings.NewReader(c.in)
+			_, parsed := p.Parse(r)
+			_, err := Evaluate(parsed.Expressions, env)
+			if err == nil {
+				t.Errorf("expected error for '%s'", c.in)
+			}
+		})
+	}
+}
+
+func TestSyntaxRulesNoMatchingPattern(t *testing.T) {
+	in := `(define-syntax foo (syntax-rules () ((foo x y) (+ x y)))) (foo 1)`
+	env := NewEnvironment()
+	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		fst := args.First().(e.Integer)
+		t, _ := args.Tail()
+		snd := t.First().(e.Integer)
+		return e.Integer(fst + snd), nil
+	})
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	_, err := Evaluate(parsed.Expressions, env)
+	if err == nil {
+		t.Error("expected error for arity mismatch")
+	}
+}
+
+func TestScopedIdentifierMacroCallExpansion(t *testing.T) {
+	// Test that a ScopedIdentifier resolving to a SyntaxTransformer works
+	env := NewEnvironment()
+	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		fst := args.First().(e.Integer)
+		t, _ := args.Tail()
+		snd := t.First().(e.Integer)
+		return e.Integer(fst + snd), nil
+	})
+
+	in := `(define-syntax add1 (syntax-rules () ((add1 x) (+ x 1)))) (add1 5)`
+	testInputGivesOutputWithinEnv(in, e.Integer(6), env, t)
+}
+
+func TestLookupFallbackForMarkedIdentifiers(t *testing.T) {
+	env := NewEnvironment()
+	bindIdentifier(e.Identifier("x"), e.Integer(42), env)
+
+	// A ScopedIdentifier with marks should fall back to unmarked binding
+	si := e.ScopedIdentifier{Name: e.Identifier("x"), Marks: map[uint64]bool{99: true}}
+	result, err := lookupIdentifier(si, env)
+	if err != nil {
+		t.Fatalf("expected fallback lookup to succeed: %v", err)
+	}
+	if !result.Equiv(e.Integer(42)) {
+		t.Errorf("expected 42, got %s", result.Repr())
+	}
+}
+
+func TestLookupExactMatchTakesPriorityOverFallback(t *testing.T) {
+	env := NewEnvironment()
+	bindIdentifier(e.Identifier("x"), e.Integer(1), env)
+	si := e.ScopedIdentifier{Name: e.Identifier("x"), Marks: map[uint64]bool{5: true}}
+	bindIdentifier(si, e.Integer(2), env)
+
+	// Exact match (name+marks) should win over fallback (name only)
+	result, err := lookupIdentifier(si, env)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.Integer(2)) {
+		t.Errorf("expected exact match (2), got %s", result.Repr())
+	}
+}
+
+func TestLookupFallbackDoesNotApplyToUnmarked(t *testing.T) {
+	env := NewEnvironment()
+	// Don't bind "y" at all
+	_, err := lookupIdentifier(e.Identifier("y"), env)
+	if err == nil {
+		t.Error("expected error for undefined identifier")
+	}
+}
+
+func TestSyntaxTransformerReprAndEquiv(t *testing.T) {
+	st := SyntaxTransformer{Transform: func(code e.List, mark uint64) (e.Expr, error) { return e.NIL, nil }}
+	if st.Repr() != "#<syntax-transformer>" {
+		t.Errorf("expected '#<syntax-transformer>', got '%s'", st.Repr())
+	}
+	if st.Equiv(st) {
+		t.Error("SyntaxTransformer should never be Equiv to anything")
+	}
+	if st.Equiv(e.Integer(1)) {
+		t.Error("SyntaxTransformer should never be Equiv to anything")
+	}
+}
+
+func TestGeneralSyntaxTransformerReprAndEquiv(t *testing.T) {
+	gst := GeneralSyntaxTransformer{}
+	if gst.Repr() != "#<general-syntax-transformer>" {
+		t.Errorf("expected '#<general-syntax-transformer>', got '%s'", gst.Repr())
+	}
+	if gst.Equiv(gst) {
+		t.Error("GeneralSyntaxTransformer should never be Equiv to anything")
+	}
+}
+
 func TestScopedIdentifierLookupDuringEvaluation(t *testing.T) {
 	env := NewEnvironment()
 

@@ -66,7 +66,10 @@ func extractLiteralsAndRules(syntaxDefList e.List) (map[e.Identifier]bool, e.Lis
 		}
 	}
 
-	literals := extractLiterals(litsAndRules.First())
+	literals, litErr := extractLiterals(litsAndRules.First())
+	if litErr != nil {
+		return nil, nil, litErr
+	}
 
 	rules, rulesOk := litsAndRules.Tail()
 	if !rulesOk {
@@ -76,23 +79,25 @@ func extractLiteralsAndRules(syntaxDefList e.List) (map[e.Identifier]bool, e.Lis
 	return literals, rules, nil
 }
 
-func extractLiterals(litExpr e.Expr) map[e.Identifier]bool {
+func extractLiterals(litExpr e.Expr) (map[e.Identifier]bool, error) {
 	literals := map[e.Identifier]bool{}
 	list, ok := litExpr.(e.List)
 	if !ok {
-		return literals
+		return literals, nil
 	}
 	for list != e.NIL {
-		if id, ok := list.First().(e.Identifier); ok {
-			literals[id] = true
+		id, ok := list.First().(e.Identifier)
+		if !ok {
+			return nil, fmt.Errorf("invalid literals list: expected identifier, got %s", list.First().Repr())
 		}
+		literals[id] = true
 		tail, ok := list.Tail()
 		if !ok {
 			break
 		}
 		list = tail
 	}
-	return literals
+	return literals, nil
 }
 
 func extractMacros(rules e.List, literals map[e.Identifier]bool) ([]Macro, error) {

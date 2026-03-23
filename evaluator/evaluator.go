@@ -96,10 +96,6 @@ func (ev *Evaluator) EvaluateWithContext(ctx context.Context, exprs e.Expr) (e.E
 	return ev.stepThroughContinuationsWithContext(ctx)
 }
 
-func (ev *Evaluator) stepThroughContinuations() (e.Expr, error) {
-	return ev.stepThroughContinuationsWithContext(context.Background())
-}
-
 func (ev *Evaluator) stepThroughContinuationsWithContext(ctx context.Context) (e.Expr, error) {
 	var ret e.Expr = e.NIL
 	var err error
@@ -381,13 +377,6 @@ func prepareScope(paramExpr e.Expr, args e.List, definitionEnv *environment) con
 		ev.env = newEnv
 		return e.NIL, nil
 	}
-}
-
-func isCall(expr e.Expr) (e.List, bool) {
-	if list, ok := expr.(e.List); ok {
-		return list, true
-	}
-	return nil, false
 }
 
 func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuation {

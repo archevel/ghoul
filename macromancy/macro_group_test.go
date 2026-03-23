@@ -64,6 +64,72 @@ func TestBuildMacroGroupFromCode(t *testing.T) {
 	}
 }
 
+func TestMacroGroupMacrosAccessor(t *testing.T) {
+	code := `(define-syntax foo (syntax-rules () (foo bar)))`
+	codeOk, parsed := parser.Parse(strings.NewReader(code))
+	if codeOk != 0 {
+		t.Fatal("Parsing code failed")
+	}
+	mg, err := NewMacroGroup(parsed.Expressions.First())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	macros := mg.Macros()
+	if len(macros) != 1 {
+		t.Errorf("expected 1 macro, got %d", len(macros))
+	}
+}
+
+func TestBuildMacroGroupWithLiterals(t *testing.T) {
+	code := `(define-syntax foo (syntax-rules (bar baz) (foo 1)))`
+	codeOk, parsed := parser.Parse(strings.NewReader(code))
+	if codeOk != 0 {
+		t.Fatal("Parsing code failed")
+	}
+	mg, err := NewMacroGroup(parsed.Expressions.First())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	macros := mg.Macros()
+	if len(macros) != 1 {
+		t.Fatalf("expected 1 macro, got %d", len(macros))
+	}
+	if !macros[0].Literals[e.Identifier("bar")] || !macros[0].Literals[e.Identifier("baz")] {
+		t.Error("expected literals 'bar' and 'baz' to be set")
+	}
+}
+
+func TestBuildMacroGroupMultipleRules(t *testing.T) {
+	code := `(define-syntax foo (syntax-rules () ((foo x y) (+ x y)) ((foo x) x)))`
+	codeOk, parsed := parser.Parse(strings.NewReader(code))
+	if codeOk != 0 {
+		t.Fatal("Parsing code failed")
+	}
+	mg, err := NewMacroGroup(parsed.Expressions.First())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	macros := mg.Macros()
+	if len(macros) != 2 {
+		t.Errorf("expected 2 macros, got %d", len(macros))
+	}
+}
+
+func TestBuildMacroGroupWithNonIdentifierLiteralFails(t *testing.T) {
+	code := `(define-syntax foo (syntax-rules (42) (foo bar)))`
+	codeOk, parsed := parser.Parse(strings.NewReader(code))
+	if codeOk != 0 {
+		t.Fatal("Parsing code failed")
+	}
+	_, err := NewMacroGroup(parsed.Expressions.First())
+	if err == nil {
+		t.Error("expected error for non-identifier in literals list")
+	}
+	if err != nil && !strings.Contains(err.Error(), "expected identifier") {
+		t.Errorf("expected error about identifier, got: %v", err)
+	}
+}
+
 func TestFailingCodeForBuildingMacroGroups(t *testing.T) {
 	cases := []struct {
 		in     string

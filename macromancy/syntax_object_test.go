@@ -227,6 +227,149 @@ func TestExtractPatternVarsNested(t *testing.T) {
 	}
 }
 
+func TestApplyMarkToPlainIdentifier(t *testing.T) {
+	result := ApplyMark(e.Identifier("x"), 3)
+	si, ok := result.(e.ScopedIdentifier)
+	if !ok {
+		t.Fatalf("expected ScopedIdentifier, got %T", result)
+	}
+	if si.Name != e.Identifier("x") || !si.Marks[3] {
+		t.Errorf("expected ScopedIdentifier x with mark 3, got %v", si)
+	}
+}
+
+func TestApplyMarkToScopedIdentifier(t *testing.T) {
+	si := e.ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}}
+	result := ApplyMark(si, 2)
+	si2, ok := result.(e.ScopedIdentifier)
+	if !ok {
+		t.Fatalf("expected ScopedIdentifier, got %T", result)
+	}
+	if !si2.Marks[1] || !si2.Marks[2] {
+		t.Error("expected both marks 1 and 2")
+	}
+}
+
+func TestApplyMarkToScopedIdentifierTogglesExisting(t *testing.T) {
+	si := e.ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}}
+	result := ApplyMark(si, 1)
+	si2 := result.(e.ScopedIdentifier)
+	if len(si2.Marks) != 0 {
+		t.Error("expected mark 1 to be toggled off")
+	}
+}
+
+func TestApplyMarkToNonIdentifierSyntaxObject(t *testing.T) {
+	so := SyntaxObject{Datum: e.Integer(42), Marks: NewMarkSet()}
+	result := ApplyMark(so, 5)
+	so2 := result.(SyntaxObject)
+	if so2.Datum != e.Integer(42) {
+		t.Error("non-identifier SyntaxObject should pass through unchanged")
+	}
+}
+
+func TestApplyMarkToNonIdentifierExpr(t *testing.T) {
+	result := ApplyMark(e.Integer(42), 5)
+	if result != e.Integer(42) {
+		t.Error("non-identifier expression should pass through unchanged")
+	}
+}
+
+func TestResolveExprUnmarkedIdentifier(t *testing.T) {
+	so := SyntaxObject{Datum: e.Identifier("x"), Marks: NewMarkSet()}
+	result := ResolveExpr(so)
+	id, ok := result.(e.Identifier)
+	if !ok {
+		t.Fatalf("expected Identifier, got %T", result)
+	}
+	if id != e.Identifier("x") {
+		t.Errorf("expected 'x', got '%s'", id)
+	}
+}
+
+func TestResolveExprMarkedIdentifier(t *testing.T) {
+	so := SyntaxObject{Datum: e.Identifier("x"), Marks: NewMarkSet().Toggle(3)}
+	result := ResolveExpr(so)
+	si, ok := result.(e.ScopedIdentifier)
+	if !ok {
+		t.Fatalf("expected ScopedIdentifier, got %T", result)
+	}
+	if si.Name != e.Identifier("x") || !si.Marks[3] {
+		t.Errorf("expected ScopedIdentifier x with mark 3, got %v", si)
+	}
+}
+
+func TestResolveExprNonIdentifierSyntaxObject(t *testing.T) {
+	so := SyntaxObject{Datum: e.Integer(42), Marks: NewMarkSet()}
+	result := ResolveExpr(so)
+	if result != e.Integer(42) {
+		t.Errorf("expected Integer 42, got %s", result.Repr())
+	}
+}
+
+func TestResolveExprRecursesIntoPairs(t *testing.T) {
+	tree := e.Cons(
+		SyntaxObject{Datum: e.Identifier("a"), Marks: NewMarkSet()},
+		e.Cons(SyntaxObject{Datum: e.Identifier("b"), Marks: NewMarkSet().Toggle(1)}, e.NIL),
+	)
+	result := ResolveExpr(tree)
+	list := result.(e.List)
+	if _, ok := list.First().(e.Identifier); !ok {
+		t.Errorf("first should be plain Identifier, got %T", list.First())
+	}
+	tail, _ := list.Tail()
+	if _, ok := tail.First().(e.ScopedIdentifier); !ok {
+		t.Errorf("second should be ScopedIdentifier, got %T", tail.First())
+	}
+}
+
+func TestResolveExprPlainExprPassesThrough(t *testing.T) {
+	result := ResolveExpr(e.Integer(99))
+	if result != e.Integer(99) {
+		t.Error("plain expression should pass through")
+	}
+}
+
+func TestResolveExprNIL(t *testing.T) {
+	result := ResolveExpr(e.NIL)
+	if result != e.NIL {
+		t.Error("NIL should pass through")
+	}
+}
+
+func TestExtractPatternVarsWithLiteralsExcludesLiterals(t *testing.T) {
+	pattern := e.Cons(e.Identifier("my-mac"),
+		e.Cons(e.Identifier("x"),
+			e.Cons(e.Identifier("arrow"),
+				e.Cons(e.Identifier("y"), e.NIL))))
+	literals := map[e.Identifier]bool{e.Identifier("arrow"): true}
+	vars := ExtractPatternVarsWithLiterals(pattern, literals)
+	if !vars[e.Identifier("x")] || !vars[e.Identifier("y")] {
+		t.Error("x and y should be pattern variables")
+	}
+	if vars[e.Identifier("arrow")] {
+		t.Error("arrow is a literal, should not be a pattern variable")
+	}
+}
+
+func TestExtractPatternVarsWithScopedIdentifier(t *testing.T) {
+	pattern := e.Cons(e.Identifier("mac"),
+		e.Cons(e.ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}}, e.NIL))
+	vars := ExtractPatternVars(pattern)
+	if !vars[e.Identifier("x")] {
+		t.Error("ScopedIdentifier 'x' should be extracted as pattern variable by name")
+	}
+}
+
+func TestCollectIdentifiersWithScopedEllipsis(t *testing.T) {
+	pattern := e.Cons(e.Identifier("mac"),
+		e.Cons(e.ScopedIdentifier{Name: "...", Marks: map[uint64]bool{1: true}}, e.NIL))
+	vars := ExtractPatternVars(pattern)
+	if vars[e.Identifier("...")] {
+		t.Error("ellipsis should not be a pattern variable even as ScopedIdentifier")
+	}
+}
+
 func TestSyntaxObjectEquivWithPlainExpr(t *testing.T) {
 	so := SyntaxObject{Datum: e.Integer(42), Marks: NewMarkSet()}
 
