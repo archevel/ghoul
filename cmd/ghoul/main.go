@@ -28,26 +28,17 @@ func main() {
 }
 
 func runFile(path string, verbose bool) {
-	f, err := os.Open(path)
-
-	if err == nil {
-		var g ghoul.Ghoul
-		if verbose {
-			g = ghoul.NewLoggingGhoul(logging.VerboseLogger)
-		} else {
-			g = ghoul.New()
-		}
-		_, processErr := g.Process(f)
-		f.Close()
-		if processErr != nil {
-			fmt.Println(processErr)
-			os.Exit(1)
-		}
+	var g ghoul.Ghoul
+	if verbose {
+		g = ghoul.NewLoggingGhoul(logging.VerboseLogger)
 	} else {
-		fmt.Println(err)
+		g = ghoul.New()
+	}
+	_, processErr := g.ProcessFile(path)
+	if processErr != nil {
+		fmt.Println(processErr)
 		os.Exit(1)
 	}
-
 }
 
 func repl(verbose bool) {

@@ -31,6 +31,7 @@ type schemeLexer struct {
 	lpair            e.List
 	pos              *Position
 	PairSrcPositions map[e.Pair]Position
+	Filename         *string
 }
 
 func (l schemeLexer) SetPairSrcPosition(pair *e.Pair, pos Position) {
@@ -190,7 +191,7 @@ const SPECIAL_IDENTIFIERS = `§¶½!@£¤$%€&¥/=?+\^~*´_:,<>|«»©“”µ�
 func NewLexer(reader io.Reader) *schemeLexer {
 	s := bufio.NewScanner(reader)
 	pairSrcPositions := make(map[e.Pair]Position)
-	lexer := schemeLexer{s, e.NIL, &Position{1, 1}, pairSrcPositions}
+	lexer := schemeLexer{scanner: s, lpair: e.NIL, pos: &Position{1, 1}, PairSrcPositions: pairSrcPositions}
 	s.Split(makePositionAwareSplitter(lexer.pos))
 
 	return &lexer

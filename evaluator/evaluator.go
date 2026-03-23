@@ -69,7 +69,7 @@ func EvaluateWithContext(ctx context.Context, exprs e.Expr, env *environment) (r
 }
 
 func New(logger logging.Logger, env *environment) *Evaluator {
-	return &Evaluator{logger, env, nil}
+	return &Evaluator{log: logger, env: env}
 }
 
 type Evaluator struct {
@@ -684,7 +684,11 @@ func NewEvaluationError(msg string, errorList e.List) EvaluationError {
 
 func (err EvaluationError) Error() string {
 	if pair, ok := err.ErrorList.(*e.Pair); ok && pair.Loc != nil {
-		return fmt.Sprintf("%s: %s", pair.Loc.String(), err.msg)
+		msg := fmt.Sprintf("%s: %s", pair.Loc.String(), err.msg)
+		if ctx := pair.Loc.SourceContext(); ctx != "" {
+			msg += "\n\n" + ctx
+		}
+		return msg
 	}
 	return err.msg
 }

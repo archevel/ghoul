@@ -35,7 +35,7 @@ func TestErrorChainingInProcessing(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			reader := strings.NewReader(c.code)
-			_, err := ghoul.ProcessWithContext(ctx, reader)
+			_, err := ghoul.ProcessWithContext(ctx, reader, nil)
 
 			if err == nil {
 				t.Fatalf("Expected error for %s, but got none", c.code)
@@ -76,7 +76,7 @@ func TestMacroErrorChainingContext(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			reader := strings.NewReader(c.code)
-			_, err := ghoul.ProcessWithContext(ctx, reader)
+			_, err := ghoul.ProcessWithContext(ctx, reader, nil)
 
 			if err == nil {
 				t.Fatalf("Expected error for %s, but got none", c.code)

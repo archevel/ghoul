@@ -1,6 +1,7 @@
 package ghoul
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -551,6 +552,66 @@ func TestQuotedIdentifiersInTransformerGetHygiene(t *testing.T) {
 	}
 	if res != nil && !expected.Equiv(res) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestErrorShowsSourceContext(t *testing.T) {
+	tmpFile := t.TempDir() + "/test.ghoul"
+	os.WriteFile(tmpFile, []byte("(define x 10)\n(define y 20)\n(+ x z)\n(+ x y)\n"), 0644)
+
+	g := New()
+	_, err := g.ProcessFile(tmpFile)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "(+ x z)") {
+		t.Errorf("expected error to show source line '(+ x z)', got:\n%s", errMsg)
+	}
+	if !strings.Contains(errMsg, "^") {
+		t.Errorf("expected error to show caret pointer, got:\n%s", errMsg)
+	}
+}
+
+func TestErrorShowsSourceContextForMacro(t *testing.T) {
+	tmpFile := t.TempDir() + "/test_macro.ghoul"
+	os.WriteFile(tmpFile, []byte("(define-syntax bad (syntax-rules () ((bad x) (+ x missing))))\n(define a 5)\n(bad a)\n"), 0644)
+
+	g := New()
+	_, err := g.ProcessFile(tmpFile)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "(bad a)") {
+		t.Errorf("expected error to show macro call site '(bad a)', got:\n%s", errMsg)
+	}
+}
+
+func TestErrorWithoutFilenameShowsNoSourceContext(t *testing.T) {
+	g := New()
+	_, err := g.Process(strings.NewReader("(foo 1)"))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "^") {
+		t.Errorf("expected no source context for non-file input, got:\n%s", errMsg)
+	}
+}
+
+func TestErrorShowsFilenameInLocation(t *testing.T) {
+	tmpFile := t.TempDir() + "/myfile.ghoul"
+	os.WriteFile(tmpFile, []byte("(foo 1)\n"), 0644)
+
+	g := New()
+	_, err := g.ProcessFile(tmpFile)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "myfile.ghoul") {
+		t.Errorf("expected filename in error, got:\n%s", errMsg)
 	}
 }
 

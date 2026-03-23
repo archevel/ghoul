@@ -17,7 +17,7 @@ func TestProcessWithContextHappyPath(t *testing.T) {
 	// Test simple expression processing with context
 	reader := strings.NewReader("(+ 3 4)")
 
-	result, err := ghoul.ProcessWithContext(ctx, reader)
+	result, err := ghoul.ProcessWithContext(ctx, reader, nil)
 	if err != nil {
 		t.Fatalf("Expected no error, but got: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestProcessWithContextCancellation(t *testing.T) {
 
 	reader := strings.NewReader("(+ 1 2)")
 
-	result, err := ghoul.ProcessWithContext(ctx, reader)
+	result, err := ghoul.ProcessWithContext(ctx, reader, nil)
 
 	// Should return chained context.Canceled error
 	if err == nil {
@@ -62,7 +62,7 @@ func TestProcessWithContextTimeout(t *testing.T) {
 
 	reader := strings.NewReader("(+ 10 20)")
 
-	result, err := ghoul.ProcessWithContext(ctx, reader)
+	result, err := ghoul.ProcessWithContext(ctx, reader, nil)
 
 	// Should return context.DeadlineExceeded error
 	if !errors.Is(err, context.DeadlineExceeded) {
@@ -86,7 +86,7 @@ func TestProcessWithContextComplexProgram(t *testing.T) {
 	`
 	reader := strings.NewReader(program)
 
-	result, err := ghoul.ProcessWithContext(ctx, reader)
+	result, err := ghoul.ProcessWithContext(ctx, reader, nil)
 	if err != nil {
 		t.Fatalf("Expected no error, but got: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestProcessWithContextParseError(t *testing.T) {
 	// Test that parse errors are still returned properly with context
 	reader := strings.NewReader("(+ 1 2 3") // Missing closing paren
 
-	result, err := ghoul.ProcessWithContext(ctx, reader)
+	result, err := ghoul.ProcessWithContext(ctx, reader, nil)
 
 	// Should get parse error, not context error
 	if err == nil {

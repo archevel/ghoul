@@ -46,9 +46,9 @@ sexpr:
      {
        pair := e.Cons($1.expr, $2.expr)
        pos := Position{$1.row, $1.col}
-       pair.Loc = &e.SourcePosition{Ln: pos.Row, Col: pos.Col}
-       $$.expr = pair
 	   l := yylex.(*schemeLexer)
+       pair.Loc = &e.SourcePosition{Ln: pos.Row, Col: pos.Col, Filename: l.Filename}
+       $$.expr = pair
 	   l.SetPairSrcPosition(pair, pos)
      }
 ;
@@ -73,9 +73,9 @@ value:
      { 
        p := e.Cons($2.expr, $3.expr)
        pos := Position{$2.row, $2.col}
-       p.Loc = &e.SourcePosition{Ln: pos.Row, Col: pos.Col}
-       $$.expr = setLastTail(p, $5.expr)
 	   l := yylex.(*schemeLexer)
+       p.Loc = &e.SourcePosition{Ln: pos.Row, Col: pos.Col, Filename: l.Filename}
+       $$.expr = setLastTail(p, $5.expr)
 	   l.SetPairSrcPosition(p, pos)
      }
      | BEG_LIST sexpr END_LIST
@@ -94,7 +94,12 @@ func (pe ParsedExpressions) PositionOf(p e.Pair) (pos Position, found bool) {
 }
 
 func Parse(r io.Reader) (int, *ParsedExpressions) {
+	return ParseWithFilename(r, nil)
+}
+
+func ParseWithFilename(r io.Reader, filename *string) (int, *ParsedExpressions) {
 	lex := NewLexer(r)
+	lex.Filename = filename
 	res := yyParse(lex)
 	return res, &ParsedExpressions{lex.lpair, lex.PairSrcPositions}
 }

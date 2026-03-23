@@ -1,6 +1,10 @@
 package expressions
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
 
 func TestSourcePositionLineAndColumn(t *testing.T) {
 	pos := &SourcePosition{Ln: 3, Col: 7}
@@ -36,6 +40,138 @@ func TestConsCreatesNilLocation(t *testing.T) {
 	pair := Cons(Integer(1), NIL)
 	if pair.Loc != nil {
 		t.Error("Cons should create pair with nil Loc by default")
+	}
+}
+
+func TestSourcePositionWithFilename(t *testing.T) {
+	filename := "test.ghoul"
+	pos := &SourcePosition{Ln: 3, Col: 7, Filename: &filename}
+	if pos.String() != "test.ghoul:3:7" {
+		t.Errorf("expected 'test.ghoul:3:7', got '%s'", pos.String())
+	}
+}
+
+func TestSourcePositionWithoutFilename(t *testing.T) {
+	pos := &SourcePosition{Ln: 3, Col: 7}
+	if pos.String() != "3:7" {
+		t.Errorf("expected '3:7', got '%s'", pos.String())
+	}
+}
+
+func TestSourceContextReadsFromFile(t *testing.T) {
+	tmpFile := t.TempDir() + "/test.ghoul"
+	os.WriteFile(tmpFile, []byte("line one\nline two\nline three\n"), 0644)
+
+	pos := &SourcePosition{Ln: 2, Col: 1, Filename: &tmpFile}
+	ctx := pos.SourceContext()
+	if !strings.Contains(ctx, "line two") {
+		t.Errorf("expected 'line two' in context, got '%s'", ctx)
+	}
+}
+
+func TestSourceContextReturnsEmptyWhenNoFilename(t *testing.T) {
+	pos := &SourcePosition{Ln: 1, Col: 1}
+	if pos.SourceContext() != "" {
+		t.Error("expected empty string when no filename")
+	}
+}
+
+func TestSourceContextReturnsEmptyWhenFileNotFound(t *testing.T) {
+	filename := "/nonexistent/path/file.ghoul"
+	pos := &SourcePosition{Ln: 1, Col: 1, Filename: &filename}
+	if pos.SourceContext() != "" {
+		t.Error("expected empty string when file not found")
+	}
+}
+
+func TestSourceContextSimple(t *testing.T) {
+	lines := []string{
+		"(define x 10)",
+		"(define y 20)",
+		"(+ x z)",
+		"(+ x y)",
+	}
+	ctx := sourceContext(lines, 3, 2)
+	if !strings.Contains(ctx, "(+ x z)") {
+		t.Errorf("expected error line in context, got:\n%s", ctx)
+	}
+	if !strings.Contains(ctx, "^") {
+		t.Errorf("expected caret in context, got:\n%s", ctx)
+	}
+}
+
+func TestSourceContextShowsEnclosingExpression(t *testing.T) {
+	lines := []string{
+		"(define (fizzbuzz n)",
+		"  (cond",
+		"    ((eq? 0 (mod n 15)) \"FizzBuzz\")",
+		"    ((eq? 0 (mod n 3)) (fizz))",
+		"    ((eq? 0 (mod n 5)) \"Buzz\")",
+		"    (else n)))",
+	}
+	// Error on line 4 col 28 — inside (fizz) which is inside the cond, inside the define
+	ctx := sourceContext(lines, 4, 28)
+	// Should include lines from the enclosing define
+	if !strings.Contains(ctx, "(define (fizzbuzz n)") {
+		t.Errorf("expected enclosing define in context, got:\n%s", ctx)
+	}
+	if !strings.Contains(ctx, "(fizz)") {
+		t.Errorf("expected error line in context, got:\n%s", ctx)
+	}
+}
+
+func TestSourceContextShowsTwoLinesAfter(t *testing.T) {
+	lines := []string{
+		"(define x 10)",
+		"(foo x)",
+		"(define y 20)",
+		"(define z 30)",
+		"(define w 40)",
+	}
+	ctx := sourceContext(lines, 2, 2)
+	if !strings.Contains(ctx, "(define y 20)") {
+		t.Errorf("expected 1 line after in context, got:\n%s", ctx)
+	}
+	if !strings.Contains(ctx, "(define z 30)") {
+		t.Errorf("expected 2 lines after in context, got:\n%s", ctx)
+	}
+}
+
+func TestSourceContextNearEndOfFile(t *testing.T) {
+	lines := []string{
+		"(define x 10)",
+		"(foo x)",
+	}
+	ctx := sourceContext(lines, 2, 2)
+	if !strings.Contains(ctx, "(foo x)") {
+		t.Errorf("expected error line in context, got:\n%s", ctx)
+	}
+}
+
+func TestSourceContextNestedLambda(t *testing.T) {
+	lines := []string{
+		"(define outer",
+		"  (lambda (x)",
+		"    (define inner",
+		"      (lambda (y)",
+		"        (+ x unknown)))",
+		"    (inner 5)))",
+	}
+	// Error on line 5, inside the inner lambda
+	ctx := sourceContext(lines, 5, 12)
+	// Should walk back to at least the inner lambda definition
+	if !strings.Contains(ctx, "(define inner") {
+		t.Errorf("expected enclosing define in context, got:\n%s", ctx)
+	}
+}
+
+func TestSourceContextTopLevelError(t *testing.T) {
+	lines := []string{
+		"(foo 1)",
+	}
+	ctx := sourceContext(lines, 1, 2)
+	if !strings.Contains(ctx, "(foo 1)") {
+		t.Errorf("expected error line, got:\n%s", ctx)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 
 	ev "github.com/archevel/ghoul/evaluator"
 	e "github.com/archevel/ghoul/expressions"
@@ -14,7 +15,8 @@ import (
 
 type Ghoul interface {
 	Process(exprReader io.Reader) (e.Expr, error)
-	ProcessWithContext(ctx context.Context, exprReader io.Reader) (e.Expr, error)
+	ProcessFile(filename string) (e.Expr, error)
+	ProcessWithContext(ctx context.Context, exprReader io.Reader, filename *string) (e.Expr, error)
 	RegisterFunction(name string, fn func(args e.List, ev *ev.Evaluator) (e.Expr, error))
 }
 
@@ -32,11 +34,20 @@ type ghoul struct {
 }
 
 func (g ghoul) Process(exprReader io.Reader) (e.Expr, error) {
-	return g.ProcessWithContext(context.Background(), exprReader)
+	return g.ProcessWithContext(context.Background(), exprReader, nil)
 }
 
-func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader) (e.Expr, error) {
-	parseRes, parsed := parser.Parse(exprReader)
+func (g ghoul) ProcessFile(filename string) (e.Expr, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return g.ProcessWithContext(context.Background(), f, &filename)
+}
+
+func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader, filename *string) (e.Expr, error) {
+	parseRes, parsed := parser.ParseWithFilename(exprReader, filename)
 	if parseRes != 0 {
 		return nil, fmt.Errorf("failed to parse Lisp code: parse result %d", parseRes)
 	}
