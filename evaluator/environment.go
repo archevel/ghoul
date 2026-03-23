@@ -134,7 +134,8 @@ func lookupIdentifier(ident e.Expr, env *environment) (e.Expr, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("undefined identifier: %s", key.Name)
+	suggestion := formatSuggestion(suggestIdentifiers(key.Name, env))
+	return nil, fmt.Errorf("undefined identifier: %s%s", key.Name, suggestion)
 }
 
 func newEnvWithEmptyScope(env *environment) *environment {
