@@ -171,9 +171,9 @@ func TestAssignmentFailsForNonIdentifierVariable(t *testing.T) {
 		in                   string
 		expectedErrorMessage string
 	}{
-		{`(set! "not-an-identifier" 5)`, "set!: variable must be an identifier, got expressions.String"},
-		{`(set! 123 "value")`, "set!: variable must be an identifier, got expressions.Integer"},
-		{`(set! (foo bar) "value")`, "set!: variable must be an identifier, got *expressions.Pair"},
+		{`(set! "not-an-identifier" 5)`, "set!: expected an identifier, got string"},
+		{`(set! 123 "value")`, "set!: expected an identifier, got integer"},
+		{`(set! (foo bar) "value")`, "set!: expected an identifier, got list"},
 	}
 
 	for _, c := range cases {
@@ -252,6 +252,7 @@ a`
 }
 
 func testInputResultsInError(in string, errorMessage string, t *testing.T) {
+	t.Helper()
 	env := NewEnvironment()
 	r := strings.NewReader(in)
 
@@ -262,14 +263,65 @@ func testInputResultsInError(in string, errorMessage string, t *testing.T) {
 	}
 	res, err := Evaluate(parsed.Expressions, env)
 
-	if err == nil || err.Error() != errorMessage {
-		t.Errorf("Given %s. Expected error '%s' but got %q", in, errorMessage, err)
+	if err == nil || !strings.Contains(err.Error(), errorMessage) {
+		t.Errorf("Given %s. Expected error containing '%s' but got %q", in, errorMessage, err)
 	}
 
 	if res != nil {
 		t.Errorf("Got result when expecting error: %s", res.Repr())
 	}
 
+}
+
+func TestMacroExpansionErrorIncludesMacroName(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		fst := args.First().(e.Integer)
+		t, _ := args.Tail()
+		snd := t.First().(e.Integer)
+		return e.Integer(fst + snd), nil
+	})
+
+	in := `(define-syntax bad-mac (syntax-rules () ((bad-mac x) (+ x nonexistent))))
+(bad-mac 5)`
+
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	_, err := Evaluate(parsed.Expressions, env)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "bad-mac") {
+		t.Errorf("expected error to mention macro name 'bad-mac', got: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "2:") {
+		t.Errorf("expected error to reference line 2 (the call site), got: %s", errMsg)
+	}
+}
+
+func TestErrorMessagesIncludeSourceLocation(t *testing.T) {
+	cases := []struct {
+		in              string
+		expectedPrefix  string
+	}{
+		{`(foo 1)`, "1:2:"},
+		{"  (foo 1)", "1:4:"},
+		{"\n(foo 1)", "2:2:"},
+	}
+	for _, c := range cases {
+		env := NewEnvironment()
+		r := strings.NewReader(c.in)
+		_, parsed := p.Parse(r)
+		_, err := Evaluate(parsed.Expressions, env)
+		if err == nil {
+			t.Errorf("expected error for '%s'", c.in)
+			continue
+		}
+		if !strings.HasPrefix(err.Error(), c.expectedPrefix) {
+			t.Errorf("for '%s': expected error starting with '%s', got '%s'", c.in, c.expectedPrefix, err.Error())
+		}
+	}
 }
 
 func TestErrorIsEvaluationErrorContainingBadPair(t *testing.T) {

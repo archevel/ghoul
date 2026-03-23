@@ -91,7 +91,7 @@ func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, er
 func assign(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
 	key, ok := keyFromExpr(variable)
 	if !ok {
-		return nil, fmt.Errorf("set!: variable must be an identifier, got %T", variable)
+		return nil, fmt.Errorf("set!: expected an identifier, got %s", e.TypeName(variable))
 	}
 
 	for i := len(*env) - 1; i >= 0; i-- {

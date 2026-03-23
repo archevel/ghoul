@@ -163,12 +163,13 @@ type List interface {
 }
 
 type Pair struct {
-	H Expr
-	T Expr
+	H   Expr
+	T   Expr
+	Loc CodeLocation
 }
 
 func Cons(fst Expr, snd Expr) *Pair {
-	return &Pair{fst, snd}
+	return &Pair{H: fst, T: snd}
 }
 
 func (p Pair) First() Expr {

@@ -45,9 +45,11 @@ sexpr:
      | value sexpr
      {
        pair := e.Cons($1.expr, $2.expr)
+       pos := Position{$1.row, $1.col}
+       pair.Loc = &e.SourcePosition{Ln: pos.Row, Col: pos.Col}
        $$.expr = pair
 	   l := yylex.(*schemeLexer)
-	   l.SetPairSrcPosition(pair, Position{$1.row, $1.col})
+	   l.SetPairSrcPosition(pair, pos)
      }
 ;
 value:
@@ -70,9 +72,11 @@ value:
      | BEG_LIST value sexpr DOT value END_LIST
      { 
        p := e.Cons($2.expr, $3.expr)
+       pos := Position{$2.row, $2.col}
+       p.Loc = &e.SourcePosition{Ln: pos.Row, Col: pos.Col}
        $$.expr = setLastTail(p, $5.expr)
 	   l := yylex.(*schemeLexer)
-	   l.SetPairSrcPosition(p, Position{$2.row, $2.col})
+	   l.SetPairSrcPosition(p, pos)
      }
      | BEG_LIST sexpr END_LIST
      { $$.expr = $2.expr }

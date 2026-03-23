@@ -398,6 +398,7 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 				if err != nil {
 					return e.NIL, NewEvaluationError(err.Error(), callable)
 				}
+				setMacroLocation(expanded, callable)
 				ev.pushContinuation(sexprEvalContinuationFor(expanded, callable, maybeTailCall))
 				return e.NIL, nil
 			}
@@ -414,6 +415,7 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 				ev.pushContinuation(func(result e.Expr, ev *Evaluator) (e.Expr, error) {
 					marked := macromancy.ApplyMark(result, mark)
 					resolved := macromancy.ResolveExpr(marked)
+					setMacroLocation(resolved, callable)
 					ev.pushContinuation(sexprEvalContinuationFor(resolved, callable, maybeTailCall))
 					return e.NIL, nil
 				})
@@ -453,7 +455,13 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 
 			ev.log.Trace("Applying function with arguments collected")
 			res, err := (*proc)(argList, ev)
-			return res, err
+			if err != nil {
+				if err == context.Canceled || err == context.DeadlineExceeded {
+					return res, err
+				}
+				return res, NewEvaluationError(err.Error(), callable)
+			}
+			return res, nil
 		}
 		ev.log.Trace("Pushing function application and function resolution")
 		ev.pushContinuation(applyFunc)
@@ -506,6 +514,51 @@ func bindVar(expr e.Expr) continuation {
 		ev.log.Trace("Binding identifier: %s to: %s", expr, arg)
 		res, err := bindIdentifier(expr, arg, env)
 		return res, err
+	}
+}
+
+// setMacroLocation stamps expanded code with the macro call site's location
+// so errors in expanded code point back to where the macro was used.
+func setMacroLocation(expanded e.Expr, callSite e.List) {
+	expandedPair, ok := expanded.(*e.Pair)
+	if !ok {
+		return
+	}
+	callPair, ok := callSite.(*e.Pair)
+	if !ok {
+		return
+	}
+
+	var callLoc e.CodeLocation
+	if callPair.Loc != nil {
+		callLoc = callPair.Loc
+	} else {
+		return
+	}
+
+	macroName := ""
+	switch h := callPair.H.(type) {
+	case e.Identifier:
+		macroName = string(h)
+	case e.ScopedIdentifier:
+		macroName = string(h.Name)
+	}
+
+	loc := &e.MacroExpansionLocation{MacroName: macroName, CallSite: callLoc}
+	setLocationRecursive(expandedPair, loc)
+}
+
+// setLocationRecursive sets the location on all Pairs in a tree
+// that don't already have one.
+func setLocationRecursive(pair *e.Pair, loc e.CodeLocation) {
+	if pair.Loc == nil {
+		pair.Loc = loc
+	}
+	if child, ok := pair.H.(*e.Pair); ok {
+		setLocationRecursive(child, loc)
+	}
+	if child, ok := pair.T.(*e.Pair); ok {
+		setLocationRecursive(child, loc)
 	}
 }
 
@@ -630,5 +683,8 @@ func NewEvaluationError(msg string, errorList e.List) EvaluationError {
 }
 
 func (err EvaluationError) Error() string {
+	if pair, ok := err.ErrorList.(*e.Pair); ok && pair.Loc != nil {
+		return fmt.Sprintf("%s: %s", pair.Loc.String(), err.msg)
+	}
 	return err.msg
 }

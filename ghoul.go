@@ -65,12 +65,12 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 	env.Register("and", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		fst, ok := args.First().(e.Boolean)
 		if !ok {
-			return nil, fmt.Errorf("and: first argument must be boolean, got %T", args.First())
+			return nil, fmt.Errorf("and: expected boolean as first argument, got %s", e.TypeName(args.First()))
 		}
 		t, _ := args.Tail()
 		snd, ok := t.First().(e.Boolean)
 		if !ok {
-			return nil, fmt.Errorf("and: second argument must be boolean, got %T", t.First())
+			return nil, fmt.Errorf("and: expected boolean as second argument, got %s", e.TypeName(t.First()))
 		}
 		return e.Boolean(fst && snd), nil
 	})
@@ -78,12 +78,12 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 	env.Register("<", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		fst, ok := args.First().(e.Integer)
 		if !ok {
-			return nil, fmt.Errorf("<: first argument must be integer, got %T", args.First())
+			return nil, fmt.Errorf("<: expected integer as first argument, got %s", e.TypeName(args.First()))
 		}
 		t, _ := args.Tail()
 		snd, ok := t.First().(e.Integer)
 		if !ok {
-			return nil, fmt.Errorf("<: second argument must be integer, got %T", t.First())
+			return nil, fmt.Errorf("<: expected integer as second argument, got %s", e.TypeName(t.First()))
 		}
 		return e.Boolean(fst < snd), nil
 	})
@@ -91,12 +91,12 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 	env.Register("mod", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		fst, ok := args.First().(e.Integer)
 		if !ok {
-			return nil, fmt.Errorf("mod: first argument must be integer, got %T", args.First())
+			return nil, fmt.Errorf("mod: expected integer as first argument, got %s", e.TypeName(args.First()))
 		}
 		t, _ := args.Tail()
 		snd, ok := t.First().(e.Integer)
 		if !ok {
-			return nil, fmt.Errorf("mod: second argument must be integer, got %T", t.First())
+			return nil, fmt.Errorf("mod: expected integer as second argument, got %s", e.TypeName(t.First()))
 		}
 		if snd == 0 {
 			return nil, fmt.Errorf("mod: division by zero")
@@ -107,12 +107,12 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 	env.Register("+", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		fst, ok := args.First().(e.Integer)
 		if !ok {
-			return nil, fmt.Errorf("+: first argument must be integer, got %T", args.First())
+			return nil, fmt.Errorf("+: expected integer as first argument, got %s", e.TypeName(args.First()))
 		}
 		t, _ := args.Tail()
 		snd, ok := t.First().(e.Integer)
 		if !ok {
-			return nil, fmt.Errorf("+: second argument must be integer, got %T", t.First())
+			return nil, fmt.Errorf("+: expected integer as second argument, got %s", e.TypeName(t.First()))
 		}
 		return e.Integer(fst + snd), nil
 	})
@@ -160,7 +160,7 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 		if list, ok := arg.(e.List); ok && list != e.NIL {
 			return list.First(), nil
 		}
-		return nil, fmt.Errorf("car: argument must be a non-empty list, got %T", arg)
+		return nil, fmt.Errorf("car: expected a non-empty list, got %s", e.TypeName(arg))
 	})
 
 	env.Register("cdr", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
@@ -168,7 +168,7 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 		if list, ok := arg.(e.List); ok && list != e.NIL {
 			return list.Second(), nil
 		}
-		return nil, fmt.Errorf("cdr: argument must be a non-empty list, got %T", arg)
+		return nil, fmt.Errorf("cdr: expected a non-empty list, got %s", e.TypeName(arg))
 	})
 
 	env.Register("cons", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
