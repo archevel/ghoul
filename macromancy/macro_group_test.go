@@ -15,12 +15,12 @@ func TestMacroGroupMatchingIdentifier(t *testing.T) {
 		identifier string
 		macros     []Macro
 	}{
-		{"foo", "foo", []Macro{Macro{}}},
+		{"foo", "foo", []Macro{{}}},
 		{"bar", "foo", nil},
 		{"(() foo)", "foo", nil},
-		{"bar", "bar", []Macro{Macro{}}},
-		{"(bar)", "bar", []Macro{Macro{}}},
-		{"(bar a b c)", "bar", []Macro{Macro{}}},
+		{"bar", "bar", []Macro{{}}},
+		{"(bar)", "bar", []Macro{{}}},
+		{"(bar a b c)", "bar", []Macro{{}}},
 	}
 	for _, c := range cases {
 
@@ -47,16 +47,16 @@ func TestBuildMacroGroupFromCode(t *testing.T) {
 		{`(define-syntax foo (syntax-rules () () ))`, "foo", nil},
 		{`(define-syntax foo (syntax-rules () ((foo bar)) ))`, "foo",
 			[]Macro{
-				Macro{e.Identifier("foo"), e.Identifier("bar")},
+				{Pattern: e.Identifier("foo"), Body: e.Identifier("bar")},
 			},
 		},
 		{`(define-syntax foo (syntax-rules () (((foo fiz 1) (fiz foo)) (foo bar)) ))`, "foo",
 			[]Macro{
-				Macro{
-					e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("fiz"), e.Cons(e.Integer(1), e.NIL))),
-					e.Cons(e.Identifier("fiz"), e.Cons(e.Identifier("foo"), e.NIL)),
+				{
+					Pattern: e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("fiz"), e.Cons(e.Integer(1), e.NIL))),
+					Body:    e.Cons(e.Identifier("fiz"), e.Cons(e.Identifier("foo"), e.NIL)),
 				},
-				Macro{e.Identifier("foo"), e.Identifier("bar")},
+				{Pattern: e.Identifier("foo"), Body: e.Identifier("bar")},
 			},
 		},
 	}

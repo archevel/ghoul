@@ -2,11 +2,56 @@ package evaluator
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 
 	e "github.com/archevel/ghoul/expressions"
 )
 
-type scope map[e.Identifier]e.Expr
+// scopeKey is a comparable key for environment lookups.
+// It encodes both the identifier name and its hygiene marks.
+type scopeKey struct {
+	Name     string
+	MarksKey string // canonical string of sorted mark IDs, e.g. "1,3,5"
+}
+
+func keyFromIdentifier(id e.Identifier) scopeKey {
+	return scopeKey{Name: string(id), MarksKey: ""}
+}
+
+func keyFromScopedIdentifier(si e.ScopedIdentifier) scopeKey {
+	return scopeKey{Name: string(si.Name), MarksKey: canonicalMarks(si.Marks)}
+}
+
+func keyFromExpr(variable e.Expr) (scopeKey, bool) {
+	switch v := variable.(type) {
+	case e.Identifier:
+		return keyFromIdentifier(v), true
+	case e.ScopedIdentifier:
+		return keyFromScopedIdentifier(v), true
+	default:
+		return scopeKey{}, false
+	}
+}
+
+func canonicalMarks(marks map[uint64]bool) string {
+	if len(marks) == 0 {
+		return ""
+	}
+	ids := make([]uint64, 0, len(marks))
+	for k := range marks {
+		ids = append(ids, k)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = strconv.FormatUint(id, 10)
+	}
+	return strings.Join(parts, ",")
+}
+
+type scope map[scopeKey]e.Expr
 
 type environment []*scope
 
@@ -24,7 +69,7 @@ func (env environment) Register(name string, f func(e.List, *Evaluator) (e.Expr,
 
 func bindFuncAtBottomAs(id e.Identifier, fun Function, env *environment) {
 	scope := bottomScope(env)
-	(*scope)[id] = fun
+	(*scope)[keyFromIdentifier(id)] = fun
 }
 
 func RegisterFuncAs(name string, f func(e.List, *Evaluator) (e.Expr, error), env *environment) {
@@ -32,48 +77,50 @@ func RegisterFuncAs(name string, f func(e.List, *Evaluator) (e.Expr, error), env
 }
 
 func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
-
-	id, id_ok := variable.(e.Identifier)
-	if !id_ok {
+	key, ok := keyFromExpr(variable)
+	if !ok {
 		return nil, fmt.Errorf("define: bad syntax, no valid identifier given in %s", variable.Repr())
 	}
 
 	scope := currentScope(env)
-	(*scope)[id] = value
+	(*scope)[key] = value
 
 	return value, nil
 }
 
 func assign(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
-
-	ident, ok := variable.(e.Identifier)
+	key, ok := keyFromExpr(variable)
 	if !ok {
 		return nil, fmt.Errorf("set!: variable must be an identifier, got %T", variable)
 	}
 
 	for i := len(*env) - 1; i >= 0; i-- {
 		scope := (*env)[i]
-		_, ok := (*scope)[ident]
+		_, ok := (*scope)[key]
 		if ok {
-			(*scope)[ident] = value
+			(*scope)[key] = value
 			return value, nil
 		}
 	}
 
-	return nil, fmt.Errorf("set!: assignment disallowed for identifier %s", string(ident))
+	return nil, fmt.Errorf("set!: assignment disallowed for identifier %s", key.Name)
 }
 
-func lookupIdentifier(ident e.Identifier, env *environment) (e.Expr, error) {
+func lookupIdentifier(ident e.Expr, env *environment) (e.Expr, error) {
+	key, ok := keyFromExpr(ident)
+	if !ok {
+		return nil, fmt.Errorf("undefined identifier: %s", ident.Repr())
+	}
+
 	for i := len(*env) - 1; i >= 0; i-- {
 		scope := (*env)[i]
-		res, ok := (*scope)[ident]
+		res, ok := (*scope)[key]
 		if ok {
 			return res, nil
 		}
 	}
 
-	return nil, fmt.Errorf("undefined identifier: %s", string(ident))
-
+	return nil, fmt.Errorf("undefined identifier: %s", key.Name)
 }
 
 func newEnvWithEmptyScope(env *environment) *environment {

@@ -66,7 +66,7 @@ func TestVariableDefinitionsAreStoredInEnvironment(t *testing.T) {
 		Evaluate(parsed.Expressions, env)
 
 		frame := currentScope(env)
-		val, ok := (*frame)[e.Identifier(c.identifier)]
+		val, ok := (*frame)[keyFromIdentifier(e.Identifier(c.identifier))]
 		if !ok {
 			t.Errorf("environment had no value for '%s'", c.identifier)
 		}
@@ -363,6 +363,118 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 
 	if maxScopes != 2.0 {
 		t.Errorf("Bad maxScopes %v", maxScopes)
+	}
+}
+
+func TestDefineSyntaxWithSyntaxRules(t *testing.T) {
+	in := `(define-syntax add-one (syntax-rules () (((add-one x) (+ x 1))))) (add-one 5)`
+	env := NewEnvironment()
+	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		fst := args.First().(e.Integer)
+		t2, _ := args.Tail()
+		snd := t2.First().(e.Integer)
+		return e.Integer(fst + snd), nil
+	})
+	testInputGivesOutputWithinEnv(in, e.Integer(6), env, t)
+}
+
+func TestDefineSyntaxHygiene(t *testing.T) {
+	// The classic hygiene test: macro introduces "tmp", user also has "tmp"
+	in := `
+(define-syntax my-or (syntax-rules () (((my-or a b) (begin (define tmp a) (cond (tmp tmp) (else b)))))))
+(define tmp 5)
+(my-or #f tmp)
+`
+	env := NewEnvironment()
+	testInputGivesOutputWithinEnv(in, e.Integer(5), env, t)
+}
+
+func TestDefineSyntaxWithLambdaTransformer(t *testing.T) {
+	// A general macro transformer using a lambda
+	// The lambda receives the whole form as first arg and should return the expansion
+	in := `
+(define-syntax double
+  (lambda (stx)
+    (begin
+      (define val (+ 0 0))
+      val)))
+(double 5)
+`
+	env := NewEnvironment()
+	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		fst := args.First().(e.Integer)
+		t, _ := args.Tail()
+		snd := t.First().(e.Integer)
+		return e.Integer(fst + snd), nil
+	})
+	testInputGivesOutputWithinEnv(in, e.Integer(0), env, t)
+}
+
+func TestGeneralTransformerCanReturnArbitraryCode(t *testing.T) {
+	// A general transformer that ignores input and returns a literal
+	in := `
+(define-syntax always-42
+  (lambda (stx) 42))
+(always-42 anything here)
+`
+	env := NewEnvironment()
+	testInputGivesOutputWithinEnv(in, e.Integer(42), env, t)
+}
+
+func TestScopedIdentifierLookupDuringEvaluation(t *testing.T) {
+	env := NewEnvironment()
+
+	// Bind a ScopedIdentifier
+	si := e.ScopedIdentifier{Name: e.Identifier("x"), Marks: map[uint64]bool{1: true}}
+	bindIdentifier(si, e.Integer(42), env)
+
+	// Evaluate an expression tree that references the ScopedIdentifier
+	// (define y <scoped-x>) y
+	expr := e.Cons(
+		e.Cons(e.Identifier("define"), e.Cons(e.Identifier("y"), e.Cons(si, e.NIL))),
+		e.Cons(e.Identifier("y"), e.NIL),
+	)
+
+	evaluator := New(logging.StandardLogger, env)
+	result, err := evaluator.Evaluate(expr)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.Integer(42)) {
+		t.Errorf("expected 42, got %s", result.Repr())
+	}
+}
+
+func TestScopedIdentifierAndPlainIdentifierAreDistinct(t *testing.T) {
+	env := NewEnvironment()
+
+	// Bind plain "x" = 1
+	bindIdentifier(e.Identifier("x"), e.Integer(1), env)
+	// Bind scoped "x" with mark = 2
+	si := e.ScopedIdentifier{Name: e.Identifier("x"), Marks: map[uint64]bool{1: true}}
+	bindIdentifier(si, e.Integer(2), env)
+
+	// Evaluate plain x — should get 1
+	expr1 := e.Cons(e.Identifier("x"), e.NIL)
+	evaluator1 := New(logging.StandardLogger, env)
+	result1, err := evaluator1.Evaluate(expr1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result1.Equiv(e.Integer(1)) {
+		t.Errorf("plain x should be 1, got %s", result1.Repr())
+	}
+
+	// Evaluate scoped x — should get 2
+	expr2 := e.Cons(si, e.NIL)
+	evaluator2 := New(logging.StandardLogger, env)
+	result2, err := evaluator2.Evaluate(expr2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result2.Equiv(e.Integer(2)) {
+		t.Errorf("scoped x should be 2, got %s", result2.Repr())
 	}
 }
 

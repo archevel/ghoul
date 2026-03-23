@@ -108,9 +108,48 @@ func (e Identifier) Equiv(expr Expr) bool {
 	switch v := expr.(type) {
 	case Identifier:
 		return v == e
+	case ScopedIdentifier:
+		return v.marksEmpty() && v.Name == e
 	default:
 		return false
 	}
+}
+
+// ScopedIdentifier is an identifier with hygiene marks from macro expansion.
+type ScopedIdentifier struct {
+	Name  Identifier
+	Marks map[uint64]bool
+}
+
+func (si ScopedIdentifier) Repr() string {
+	return string(si.Name)
+}
+
+func (si ScopedIdentifier) Equiv(expr Expr) bool {
+	switch v := expr.(type) {
+	case ScopedIdentifier:
+		return si.Name == v.Name && marksEq(si.Marks, v.Marks)
+	case Identifier:
+		return si.marksEmpty() && si.Name == v
+	default:
+		return false
+	}
+}
+
+func (si ScopedIdentifier) marksEmpty() bool {
+	return len(si.Marks) == 0
+}
+
+func marksEq(a, b map[uint64]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k := range a {
+		if !b[k] {
+			return false
+		}
+	}
+	return true
 }
 
 type List interface {

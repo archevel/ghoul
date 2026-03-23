@@ -200,6 +200,48 @@ func TestForeignRepresentation(t *testing.T) {
 	}
 }
 
+func TestScopedIdentifierRepr(t *testing.T) {
+	si := ScopedIdentifier{Name: Identifier("x"), Marks: map[uint64]bool{1: true}}
+	if si.Repr() != "x" {
+		t.Errorf("expected Repr() 'x', got '%s'", si.Repr())
+	}
+}
+
+func TestScopedIdentifierEquiv(t *testing.T) {
+	si1 := ScopedIdentifier{Name: Identifier("x"), Marks: map[uint64]bool{1: true}}
+	si2 := ScopedIdentifier{Name: Identifier("x"), Marks: map[uint64]bool{1: true}}
+	si3 := ScopedIdentifier{Name: Identifier("x"), Marks: map[uint64]bool{2: true}}
+	si4 := ScopedIdentifier{Name: Identifier("y"), Marks: map[uint64]bool{1: true}}
+
+	if !si1.Equiv(si2) {
+		t.Error("same name and marks should be Equiv")
+	}
+	if si1.Equiv(si3) {
+		t.Error("same name, different marks should NOT be Equiv")
+	}
+	if si1.Equiv(si4) {
+		t.Error("different name, same marks should NOT be Equiv")
+	}
+}
+
+func TestScopedIdentifierEquivWithPlainIdentifier(t *testing.T) {
+	siEmpty := ScopedIdentifier{Name: Identifier("x"), Marks: map[uint64]bool{}}
+	siMarked := ScopedIdentifier{Name: Identifier("x"), Marks: map[uint64]bool{1: true}}
+
+	if !siEmpty.Equiv(Identifier("x")) {
+		t.Error("ScopedIdentifier with empty marks should be Equiv to plain Identifier")
+	}
+	if siMarked.Equiv(Identifier("x")) {
+		t.Error("ScopedIdentifier with marks should NOT be Equiv to plain Identifier")
+	}
+	if !Identifier("x").Equiv(siEmpty) {
+		t.Error("plain Identifier should be Equiv to ScopedIdentifier with empty marks")
+	}
+	if Identifier("x").Equiv(siMarked) {
+		t.Error("plain Identifier should NOT be Equiv to ScopedIdentifier with marks")
+	}
+}
+
 var equivCases = []struct {
 	a  Expr
 	b  Expr

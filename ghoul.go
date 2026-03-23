@@ -8,7 +8,7 @@ import (
 	ev "github.com/archevel/ghoul/evaluator"
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
-	m "github.com/archevel/ghoul/macromancy"
+	"github.com/archevel/ghoul/macromancy"
 	"github.com/archevel/ghoul/parser"
 )
 
@@ -24,13 +24,11 @@ func New() Ghoul {
 
 func NewLoggingGhoul(logger logging.Logger) Ghoul {
 	evaluator := prepareEvaluator(logger)
-	mancer := m.NewMacromancer(logger)
-	return ghoul{evaluator, mancer}
+	return ghoul{evaluator}
 }
 
 type ghoul struct {
-	evaluator   *ev.Evaluator
-	macromancer *m.Macromancer
+	evaluator *ev.Evaluator
 }
 
 func (g ghoul) Process(exprReader io.Reader) (e.Expr, error) {
@@ -43,12 +41,7 @@ func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader) (e.
 		return nil, fmt.Errorf("failed to parse Lisp code: parse result %d", parseRes)
 	}
 
-	manced, err := g.macromancer.Transform(parsed.Expressions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to process Lisp code: %w", err)
-	}
-	result, err := g.evaluator.EvaluateWithContext(ctx, manced)
-
+	result, err := g.evaluator.EvaluateWithContext(ctx, parsed.Expressions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process Lisp code: %w", err)
 	}
@@ -122,6 +115,76 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 			return nil, fmt.Errorf("+: second argument must be integer, got %T", t.First())
 		}
 		return e.Integer(fst + snd), nil
+	})
+
+	// Syntax object manipulation primitives for general macro transformers
+	env.Register("syntax->datum", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
+		arg := args.First()
+		if so, ok := arg.(macromancy.SyntaxObject); ok {
+			return so.Datum, nil
+		}
+		// If not a syntax object, return as-is
+		return arg, nil
+	})
+
+	env.Register("datum->syntax", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
+		// (datum->syntax context-stx datum)
+		// context-stx provides the lexical context (marks)
+		ctxArg := args.First()
+		t, _ := args.Tail()
+		datum := t.First()
+
+		marks := macromancy.NewMarkSet()
+		if so, ok := ctxArg.(macromancy.SyntaxObject); ok {
+			marks = so.Marks
+		}
+		return macromancy.WrapExpr(datum, marks), nil
+	})
+
+	env.Register("syntax-e", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
+		// Unwrap one level of syntax object
+		arg := args.First()
+		if so, ok := arg.(macromancy.SyntaxObject); ok {
+			return so.Datum, nil
+		}
+		return arg, nil
+	})
+
+	env.Register("identifier?", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
+		arg := args.First()
+		if so, ok := arg.(macromancy.SyntaxObject); ok {
+			_, isId := so.Datum.(e.Identifier)
+			return e.Boolean(isId), nil
+		}
+		_, isId := arg.(e.Identifier)
+		return e.Boolean(isId), nil
+	})
+
+	env.Register("car", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
+		arg := args.First()
+		if list, ok := arg.(e.List); ok && list != e.NIL {
+			return list.First(), nil
+		}
+		return nil, fmt.Errorf("car: argument must be a non-empty list, got %T", arg)
+	})
+
+	env.Register("cdr", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
+		arg := args.First()
+		if list, ok := arg.(e.List); ok && list != e.NIL {
+			return list.Second(), nil
+		}
+		return nil, fmt.Errorf("cdr: argument must be a non-empty list, got %T", arg)
+	})
+
+	env.Register("cons", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
+		fst := args.First()
+		t, _ := args.Tail()
+		snd := t.First()
+		return e.Cons(fst, snd), nil
+	})
+
+	env.Register("list", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
+		return args, nil
 	})
 
 	env.Register("println", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {

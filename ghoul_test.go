@@ -118,6 +118,184 @@ func TestBasicBuiltInFunctions(t *testing.T) {
 	}
 }
 
+func TestHygienicMacroOrWithTmp(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax my-or (syntax-rules () (((my-or a b) (begin (define tmp a) (cond (tmp tmp) (else b)))))))
+(define tmp 5)
+(my-or #f tmp)
+`
+	expected := e.Integer(5)
+	res, err := g.Process(strings.NewReader(in))
+
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestHygienicMacroSwapWithTmp(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax my-swap (syntax-rules () (((my-swap x y) (begin (define tmp x) (set! x y) (set! y tmp))))))
+(define a 10)
+(define b 20)
+(my-swap a b)
+a
+`
+	expected := e.Integer(20)
+	res, err := g.Process(strings.NewReader(in))
+
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestHygienicMacroSwapWithTmpVariable(t *testing.T) {
+	// User has a variable named "tmp" — the macro's tmp should not capture it
+	g := New()
+	in := `
+(define-syntax my-swap (syntax-rules () (((my-swap x y) (begin (define tmp x) (set! x y) (set! y tmp))))))
+(define tmp 10)
+(define other 20)
+(my-swap tmp other)
+tmp
+`
+	expected := e.Integer(20)
+	res, err := g.Process(strings.NewReader(in))
+
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s (user's tmp should be swapped), got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestGeneralTransformerAlways42(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax always-42
+  (lambda (stx) 42))
+(always-42 anything)
+`
+	expected := e.Integer(42)
+	res, err := g.Process(strings.NewReader(in))
+
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestGeneralTransformerWithListConstruction(t *testing.T) {
+	g := New()
+	// Transformer that takes (add-3 x) and produces (+ x 3)
+	in := `
+(define-syntax add-3
+  (lambda (stx)
+    (define arg (car (cdr stx)))
+    (list '+ (syntax->datum arg) 3)))
+(add-3 7)
+`
+	expected := e.Integer(10)
+	res, err := g.Process(strings.NewReader(in))
+
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestNestedMacroExpansion(t *testing.T) {
+	// One macro expands to code that uses another macro
+	g := New()
+	in := `
+(define-syntax add-one (syntax-rules () (((add-one x) (+ x 1)))))
+(define-syntax add-two (syntax-rules () (((add-two x) (add-one (add-one x))))))
+(add-two 3)
+`
+	expected := e.Integer(5)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestNestedMacrosWithSameTmpVariable(t *testing.T) {
+	// Both macros introduce "tmp" — they should get distinct marks
+	g := New()
+	in := `
+(define-syntax save-first (syntax-rules () (((save-first a b) (begin (define tmp a) tmp)))))
+(define-syntax save-second (syntax-rules () (((save-second a b) (begin (define tmp b) (save-first tmp a))))))
+(save-second 10 20)
+`
+	// save-second expands to: (begin (define tmp$1 20) (save-first tmp$1 10))
+	// save-first then expands to: (begin (define tmp$2 tmp$1) tmp$2)
+	// tmp$2 = tmp$1 = 20, so result is 20
+	expected := e.Integer(20)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestNestedMacrosWithUserTmpVariable(t *testing.T) {
+	// User has "tmp", outer macro introduces "tmp", inner macro introduces "tmp"
+	// All three should be distinct
+	g := New()
+	in := `
+(define-syntax wrap-a (syntax-rules () (((wrap-a x) (begin (define tmp x) tmp)))))
+(define-syntax wrap-b (syntax-rules () (((wrap-b x) (begin (define tmp x) (wrap-a tmp))))))
+(define tmp 99)
+(wrap-b tmp)
+`
+	// wrap-b expands to: (begin (define tmp$1 tmp) (wrap-a tmp$1))
+	// wrap-a expands to: (begin (define tmp$2 tmp$1) tmp$2)
+	// tmp$2 = tmp$1 = user's tmp = 99
+	expected := e.Integer(99)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestMacroExpandingToDefineSyntax(t *testing.T) {
+	// A macro that defines another macro (meta-macro)
+	g := New()
+	in := `
+(define-syntax def-adder (syntax-rules () (((def-adder name val) (define-syntax name (syntax-rules () (((name x) (+ x val)))))))))
+(def-adder add-five 5)
+(add-five 10)
+`
+	expected := e.Integer(15)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Errorf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
 func testPrintlnExample() {
 	g := New()
 	g.Process(strings.NewReader(`(println "hello, world")`))

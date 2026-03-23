@@ -11,6 +11,10 @@ type MacroGroup struct {
 	macros  []Macro
 }
 
+func (mg MacroGroup) Macros() []Macro {
+	return mg.macros
+}
+
 func (mg MacroGroup) Matches(code e.Expr) []Macro {
 	id, ok := code.(e.Identifier)
 	if codeList, codeOk := code.(e.List); !ok && codeOk {
@@ -101,7 +105,7 @@ func extractMacros(rules e.List) ([]Macro, error) {
 		if !bdyOk || e.NIL.Equiv(bdyList) {
 			return nil, fmt.Errorf("invalid rule definition: rule must have pattern and body, got %s", r.Repr())
 		}
-		macros = append(macros, Macro{pat, bdyList.First()})
+		macros = append(macros, Macro{Pattern: pat, Body: bdyList.First(), PatternVars: ExtractPatternVars(pat)})
 
 	}
 	return macros, nil

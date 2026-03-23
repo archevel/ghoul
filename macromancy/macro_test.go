@@ -31,7 +31,7 @@ func TestMacrosCanMatchAnExpression(t *testing.T) {
 			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
 		}
 
-		macro := Macro{pattern.Expressions.First(), nil}
+		macro := Macro{Pattern: pattern.Expressions.First()}
 
 		codeOk, code := parser.Parse(strings.NewReader(c.in))
 
@@ -63,7 +63,7 @@ func TestMacrosCanPatternMatch(t *testing.T) {
 			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
 		}
 
-		macro := Macro{pattern.Expressions.First(), nil}
+		macro := Macro{Pattern: pattern.Expressions.First()}
 
 		codeOk, code := parser.Parse(strings.NewReader(c.in))
 
@@ -293,7 +293,7 @@ func TestMacrosDoesNotMatchNonMatchingPatterns(t *testing.T) {
 			t.Fatal("Parsing pattern failed")
 		}
 
-		macro := Macro{pattern.Expressions.First(), nil}
+		macro := Macro{Pattern: pattern.Expressions.First()}
 
 		parseOk, parseRes := parser.Parse(strings.NewReader(c.in))
 		if parseOk != 0 {
@@ -332,7 +332,7 @@ func TestMacroExpansion(t *testing.T) {
 			t.Fatal("Parsing pattern failed")
 		}
 
-		macro := Macro{nil, body.Expressions.First()}
+		macro := Macro{Body: body.Expressions.First()}
 
 		expanded := macro.Expand(c.bound)
 
@@ -348,7 +348,7 @@ func swapMacroExample() {
 	_, body := parser.Parse(strings.NewReader("(let ((tmp x)) (set! x y) (set! y tmp))"))
 	_, code := parser.Parse(strings.NewReader("(swap foo bar)"))
 
-	macro := Macro{pattern.Expressions.(e.List).First(), body.Expressions.(e.List).First()}
+	macro := Macro{Pattern: pattern.Expressions.(e.List).First(), Body: body.Expressions.(e.List).First()}
 	_, bound := macro.Matches(code.Expressions.(e.List).First())
 
 	res := macro.Expand(bound)
@@ -379,7 +379,7 @@ func TestMacroTransform(t *testing.T) {
 			t.Fatal("Parsing pattern failed")
 		}
 
-		macro := Macro{pattern.Expressions.First(), body.Expressions.First()}
+		macro := Macro{Pattern: pattern.Expressions.First(), Body: body.Expressions.First()}
 
 		codeOk, code := parser.Parse(strings.NewReader(c.in))
 
@@ -408,7 +408,7 @@ func runBindingTest(t *testing.T, in string, patternStr string, bound bindings) 
 		t.Fatalf("Parsing pattern '%s' failed", pattern)
 	}
 
-	macro := Macro{pattern.Expressions.First(), nil}
+	macro := Macro{Pattern: pattern.Expressions.First()}
 
 	parseOk, parseRes := parser.Parse(strings.NewReader(in))
 

@@ -2,9 +2,12 @@ package evaluator
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
+	"github.com/archevel/ghoul/macromancy"
 )
 
 const COND_SPECIAL_FORM = e.Identifier("cond")
@@ -13,6 +16,45 @@ const BEGIN_SPECIAL_FORM = e.Identifier("begin")
 const LAMBDA_SPECIAL_FORM = e.Identifier("lambda")
 const DEFINE_SPECIAL_FORM = e.Identifier("define")
 const ASSIGNMENT_SPECIAL_FORM = e.Identifier("set!")
+const DEFINE_SYNTAX_SPECIAL_FORM = e.Identifier("define-syntax")
+const SYNTAX_RULES_FORM = e.Identifier("syntax-rules")
+
+// markCounter provides globally unique marks for hygienic macro expansion.
+var markCounter uint64
+
+func freshMark() macromancy.Mark {
+	return atomic.AddUint64(&markCounter, 1)
+}
+
+// SyntaxTransformer wraps a macro transformation function.
+// When stored in the environment, the evaluator knows to expand
+// rather than call it as a regular function.
+type SyntaxTransformer struct {
+	Transform func(code e.List, mark macromancy.Mark) (e.Expr, error)
+}
+
+func (st SyntaxTransformer) Repr() string {
+	return "#<syntax-transformer>"
+}
+
+func (st SyntaxTransformer) Equiv(other e.Expr) bool {
+	return false
+}
+
+// GeneralSyntaxTransformer wraps a user-defined lambda as a macro transformer.
+// Unlike SyntaxTransformer, this calls the lambda via the evaluator's
+// continuation framework, then evaluates the result.
+type GeneralSyntaxTransformer struct {
+	Fun Function
+}
+
+func (gst GeneralSyntaxTransformer) Repr() string {
+	return "#<general-syntax-transformer>"
+}
+
+func (gst GeneralSyntaxTransformer) Equiv(other e.Expr) bool {
+	return false
+}
 
 type continuation func(arg e.Expr, ev *Evaluator) (e.Expr, error)
 type contStack []continuation
@@ -132,10 +174,16 @@ func chooseEvaluation(expr e.Expr, parent e.List, maybeTailCall bool) (ret e.Exp
 	} else if ident, ok := expr.(e.Identifier); ok {
 		nextCont = makeIdentificationLookupContinuationFor(ident, parent)
 		ret = e.NIL
+	} else if si, ok := expr.(e.ScopedIdentifier); ok {
+		nextCont = makeIdentificationLookupContinuationFor(si, parent)
+		ret = e.NIL
 	} else if !isList && h == nil {
 		ret = expr
 	} else if !isList {
 		err = NewEvaluationError("Malformed expression", parent)
+	} else if DEFINE_SYNTAX_SPECIAL_FORM.Equiv(h) {
+		nextCont = defineSyntaxContinuationFor(t)
+		ret = e.NIL
 	} else if DEFINE_SPECIAL_FORM.Equiv(h) {
 		nextCont = defineContinuationFor(t, maybeTailCall)
 		ret = e.NIL
@@ -159,7 +207,7 @@ func chooseEvaluation(expr e.Expr, parent e.List, maybeTailCall bool) (ret e.Exp
 	return
 }
 
-func makeIdentificationLookupContinuationFor(ident e.Identifier, parent e.List) continuation {
+func makeIdentificationLookupContinuationFor(ident e.Expr, parent e.List) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		var env *environment = ev.env
 
@@ -334,12 +382,53 @@ func isCall(expr e.Expr) (e.List, bool) {
 func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		ev.log.Trace("Evaluating function call")
-		var callEnv *environment = ev.env
 
 		if callable == e.NIL {
 			ev.log.Trace("NIL is not a function that can be called!")
 			return e.NIL, NewEvaluationError("Missing procedure expression in: ()", callable)
 		}
+
+		// First, check if the head is a known syntax transformer (by identifier lookup)
+		// This avoids evaluating arguments for macros
+		if headVal, _ := resolveCallableHead(callable.Head(), ev.env); headVal != nil {
+			if st, ok := headVal.(SyntaxTransformer); ok {
+				ev.log.Trace("Expanding syntax transformer")
+				mark := freshMark()
+				expanded, err := st.Transform(callable, mark)
+				if err != nil {
+					return e.NIL, NewEvaluationError(err.Error(), callable)
+				}
+				ev.pushContinuation(sexprEvalContinuationFor(expanded, callable, maybeTailCall))
+				return e.NIL, nil
+			}
+			if gst, ok := headVal.(GeneralSyntaxTransformer); ok {
+				ev.log.Trace("Expanding general syntax transformer")
+				mark := freshMark()
+				// Wrap the input form as syntax objects
+				wrapped := macromancy.WrapExpr(callable, macromancy.NewMarkSet())
+
+				// After the transformer lambda returns, apply mark and evaluate result
+				ev.pushContinuation(func(result e.Expr, ev *Evaluator) (e.Expr, error) {
+					// Apply hygiene mark to the result
+					marked := macromancy.ApplyMark(result, mark)
+					// Evaluate the expanded result
+					ev.pushContinuation(sexprEvalContinuationFor(marked, callable, maybeTailCall))
+					return e.NIL, nil
+				})
+
+				// Call the transformer function with the wrapped form
+				proc := gst.Fun.Fun
+				res, err := (*proc)(e.Cons(wrapped, e.NIL), ev)
+				if err != nil {
+					return e.NIL, NewEvaluationError(err.Error(), callable)
+				}
+				return res, nil
+			}
+		}
+
+		// Normal function call path
+		var callEnv *environment = ev.env
+
 		if !maybeTailCall {
 			ev.log.Trace("Pushing environment restoration to evaluate after function call since the call is not made in tail position")
 			ev.pushContinuation(func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
@@ -418,6 +507,123 @@ func bindVar(expr e.Expr) continuation {
 		res, err := bindIdentifier(expr, arg, env)
 		return res, err
 	}
+}
+
+func resolveCallableHead(head e.Expr, env *environment) (e.Expr, string) {
+	switch h := head.(type) {
+	case e.Identifier:
+		if val, err := lookupIdentifier(h, env); err == nil {
+			return val, string(h)
+		}
+	case e.ScopedIdentifier:
+		if val, err := lookupIdentifier(h, env); err == nil {
+			return val, string(h.Name)
+		}
+	}
+	return nil, ""
+}
+
+func defineSyntaxContinuationFor(def e.List) continuation {
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+		if def == e.NIL {
+			return e.NIL, NewEvaluationError("Bad syntax: define-syntax requires name and transformer", def)
+		}
+
+		name, nameOk := def.First().(e.Identifier)
+		if !nameOk {
+			return e.NIL, NewEvaluationError("Bad syntax: define-syntax name must be an identifier", def)
+		}
+
+		transformerDef, transformerOk := def.Tail()
+		if !transformerOk || transformerDef == e.NIL {
+			return e.NIL, NewEvaluationError("Bad syntax: define-syntax requires a transformer", def)
+		}
+
+		transformerExpr := transformerDef.First()
+		transformerList, isList := transformerExpr.(e.List)
+		if !isList {
+			return e.NIL, NewEvaluationError("Bad syntax: transformer must be a form", def)
+		}
+
+		// Handle (syntax-rules ...) form
+		if SYNTAX_RULES_FORM.Equiv(transformerList.First()) {
+			transformer, err := buildSyntaxRulesTransformer(name, transformerList, ev.env)
+			if err != nil {
+				return e.NIL, NewEvaluationError(fmt.Sprintf("Bad syntax: %s", err), def)
+			}
+
+			bindIdentifier(name, transformer, ev.env)
+			return e.NIL, nil
+		}
+
+		// For general transformers (lambda), evaluate the expression
+		// and wrap the result as a GeneralSyntaxTransformer
+		ev.pushContinuation(func(transformerVal e.Expr, ev *Evaluator) (e.Expr, error) {
+			fun, isFun := transformerVal.(Function)
+			if !isFun {
+				return e.NIL, NewEvaluationError("Bad syntax: transformer must be a procedure", def)
+			}
+			st := GeneralSyntaxTransformer{
+				Fun: fun,
+			}
+			bindIdentifier(name, st, ev.env)
+			return e.NIL, nil
+		})
+		ev.pushContinuation(sexprEvalContinuationFor(transformerExpr, transformerDef, false))
+		return e.NIL, nil
+	}
+}
+
+func buildSyntaxRulesTransformer(name e.Identifier, syntaxRules e.List, defEnv *environment) (SyntaxTransformer, error) {
+	// Reuse existing macro group parsing from macromancy
+	// Build a define-syntax form for NewMacroGroup
+	defineSyntaxForm := e.Cons(e.Identifier("define-syntax"),
+		e.Cons(name, e.Cons(syntaxRules, e.NIL)))
+
+	mg, err := macromancy.NewMacroGroup(defineSyntaxForm)
+	if err != nil {
+		return SyntaxTransformer{}, err
+	}
+
+	macros := mg.Macros()
+
+	// Collect identifiers that are bound at the definition site.
+	// These should not get marks during expansion, so they resolve
+	// to their definition-site bindings (e.g., built-in functions like +).
+	definitionBindings := collectBoundIdentifiers(defEnv)
+
+	return SyntaxTransformer{
+		Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
+			for _, m := range macros {
+				if ok, bound := m.Matches(code); ok {
+					return macromancy.ExpandHygienicWithDefinitionBindings(m.Body, bound, mark, m.PatternVars, definitionBindings), nil
+				}
+			}
+			return nil, fmt.Errorf("no matching pattern for %s", code.Repr())
+		},
+	}, nil
+}
+
+func collectBoundIdentifiers(env *environment) map[e.Identifier]bool {
+	result := map[e.Identifier]bool{
+		// Special form keywords must not be marked
+		COND_SPECIAL_FORM:          true,
+		ELSE_SPECIAL_FORM:          true,
+		BEGIN_SPECIAL_FORM:         true,
+		LAMBDA_SPECIAL_FORM:       true,
+		DEFINE_SPECIAL_FORM:       true,
+		ASSIGNMENT_SPECIAL_FORM:   true,
+		DEFINE_SYNTAX_SPECIAL_FORM: true,
+		SYNTAX_RULES_FORM:         true,
+	}
+	for i := range *env {
+		for key := range *(*env)[i] {
+			if key.MarksKey == "" { // only plain identifiers
+				result[e.Identifier(key.Name)] = true
+			}
+		}
+	}
+	return result
 }
 
 type EvaluationError struct {

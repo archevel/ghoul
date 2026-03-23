@@ -9,8 +9,9 @@ import (
 type bindings map[e.Identifier]e.Expr
 
 type Macro struct {
-	Pattern e.Expr
-	Body    e.Expr
+	Pattern     e.Expr
+	Body        e.Expr
+	PatternVars map[e.Identifier]bool
 }
 
 func (m Macro) Matches(expr e.Expr) (bool, bindings) {
@@ -36,9 +37,74 @@ func (m Macro) Expand(bound bindings) e.Expr {
 	return walkAndReplace(m.Body, bound)
 }
 
+// ExpandHygienic expands the macro body with bindings, adding the given mark
+// to all template identifiers that are NOT pattern variables and NOT bound.
+func (m Macro) ExpandHygienic(bound bindings, mark Mark) e.Expr {
+	return walkAndReplaceHygienic(m.Body, bound, mark, m.PatternVars)
+}
+
+func walkAndReplaceHygienic(toWalk e.Expr, bound bindings, mark Mark, patternVars map[e.Identifier]bool) e.Expr {
+	return walkAndReplaceHygienicImpl(toWalk, bound, mark, patternVars, nil)
+}
+
+// ExpandHygienicWithDefinitionBindings expands a macro body with hygiene,
+// but identifiers that are bound at the macro definition site (e.g., built-ins)
+// are NOT marked, so they resolve to their definition-site bindings.
+func ExpandHygienicWithDefinitionBindings(body e.Expr, bound bindings, mark Mark, patternVars map[e.Identifier]bool, definitionBindings map[e.Identifier]bool) e.Expr {
+	return walkAndReplaceHygienicImpl(body, bound, mark, patternVars, definitionBindings)
+}
+
+func walkAndReplaceHygienicImpl(toWalk e.Expr, bound bindings, mark Mark, patternVars map[e.Identifier]bool, definitionBindings map[e.Identifier]bool) e.Expr {
+	if id, ok := toWalk.(e.Identifier); ok {
+		replacement, present := bound[id]
+		if present {
+			return replacement
+		}
+		if definitionBindings != nil && definitionBindings[id] {
+			return id
+		}
+		return e.ScopedIdentifier{
+			Name:  id,
+			Marks: map[uint64]bool{mark: true},
+		}
+	}
+	if si, ok := toWalk.(e.ScopedIdentifier); ok {
+		replacement, present := bound[si.Name]
+		if present {
+			return replacement
+		}
+		if definitionBindings != nil && definitionBindings[si.Name] {
+			return si
+		}
+		// Add the mark to existing marks
+		newMarks := copyMarks(si.Marks)
+		newMarks[mark] = true
+		return e.ScopedIdentifier{
+			Name:  si.Name,
+			Marks: newMarks,
+		}
+	}
+
+	if list, ok := toWalk.(e.List); ok && list != e.NIL {
+		h := list.First()
+		return e.Cons(
+			walkAndReplaceHygienicImpl(h, bound, mark, patternVars, definitionBindings),
+			walkAndReplaceHygienicImpl(list.Second(), bound, mark, patternVars, definitionBindings),
+		)
+	}
+
+	return toWalk
+}
+
 func walkAndReplace(toWalk e.Expr, bound bindings) e.Expr {
 	if id, ok := toWalk.(e.Identifier); ok {
 		replacement, present := bound[id]
+		if present {
+			return replacement
+		}
+	}
+	if si, ok := toWalk.(e.ScopedIdentifier); ok {
+		replacement, present := bound[si.Name]
 		if present {
 			return replacement
 		}
@@ -55,6 +121,9 @@ func walkAndReplace(toWalk e.Expr, bound bindings) e.Expr {
 func matchWalk(macro e.Expr, code e.Expr, bound bindings, hasElipsis bool) (bool, bindings) {
 	if id, ok := macro.(e.Identifier); ok {
 		return matchAndBindIdentifier(id, code, bound)
+	}
+	if si, ok := macro.(e.ScopedIdentifier); ok {
+		return matchAndBindIdentifier(si.Name, code, bound)
 	}
 	if macroList, macroOk := macro.(e.List); macroOk {
 		if codeList, codeOk := code.(e.List); codeOk {
@@ -87,7 +156,7 @@ func matchHeadAndTail(macroList e.List, codeList e.List, bound bindings, hasElip
 		return false, nil
 	}
 
-	if id, ok := macroList.First().(e.Identifier); ok && id.Equiv(e.Identifier("...")) {
+	if id := toIdentifier(macroList.First()); id == e.Identifier("...") {
 		return matchElipsis(macroList, macroLength, codeList, bound)
 	} else {
 		headMatch, bound := matchWalk(macroList.First(), codeList.First(), bound, hasElipsis)
@@ -115,10 +184,8 @@ func matchFinalCodeExpression(macroList e.List, code e.Expr, bound bindings, has
 	if macroList != e.NIL && macroList.Second() == e.NIL {
 		return matchWalk(macroList.First(), code, bound, hasElipsis)
 	}
-	if macroList.First().Equiv(e.Identifier("...")) {
-		if id, ok := macroList.First().(e.Identifier); ok {
-			bound[id] = e.NIL
-		}
+	if id := toIdentifier(macroList.First()); id == e.Identifier("...") {
+		bound[id] = e.NIL
 		return matchWalk(macroList.Second(), code, bound, hasElipsis)
 	}
 	return false, nil
@@ -127,17 +194,30 @@ func matchFinalCodeExpression(macroList e.List, code e.Expr, bound bindings, has
 func idAndRest(expr e.Expr) (e.Identifier, e.Expr, error) {
 	identifier := expr
 	if list, ok := expr.(e.List); ok {
-		id, ok := list.First().(e.Identifier)
-		if !ok {
+		id := toIdentifier(list.First())
+		if id == "" {
 			return "", nil, fmt.Errorf("macro pattern must contain identifiers, got %T", list.First())
 		}
 		return id, list.Second(), nil
 	}
-	id, ok := identifier.(e.Identifier)
-	if !ok {
+	id := toIdentifier(identifier)
+	if id == "" {
 		return "", nil, fmt.Errorf("macro pattern must contain identifiers, got %T", identifier)
 	}
 	return id, nil, nil
+}
+
+// toIdentifier extracts a plain Identifier from an Expr,
+// handling both Identifier and ScopedIdentifier.
+func toIdentifier(expr e.Expr) e.Identifier {
+	switch v := expr.(type) {
+	case e.Identifier:
+		return v
+	case e.ScopedIdentifier:
+		return v.Name
+	default:
+		return ""
+	}
 }
 
 func splitListAt(endCount int, codeList e.List) (e.Expr, e.Expr) {
