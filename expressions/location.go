@@ -63,7 +63,7 @@ func (sp *SourcePosition) SourceContext() string {
 		return ""
 	}
 	lines := readLinesFromFile(*sp.Filename)
-	if lines == nil || sp.Ln > len(lines) {
+	if lines == nil || sp.Ln < 1 || sp.Ln > len(lines) {
 		return ""
 	}
 	if strings.TrimSpace(lines[sp.Ln-1]) == "" {

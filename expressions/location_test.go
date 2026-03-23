@@ -175,6 +175,164 @@ func TestSourceContextTopLevelError(t *testing.T) {
 	}
 }
 
+func TestTypeNameAllTypes(t *testing.T) {
+	cases := []struct {
+		expr     Expr
+		expected string
+	}{
+		{Boolean(true), "boolean"},
+		{Integer(42), "integer"},
+		{Float(3.14), "float"},
+		{String("hi"), "string"},
+		{Identifier("foo"), "identifier"},
+		{ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}}, "identifier"},
+		{&Quote{Integer(1)}, "quoted expression"},
+		{Cons(Integer(1), NIL), "list"},
+		{*Cons(Integer(1), NIL), "list"},
+		{NIL, "empty list"},
+		{Wrapp(42), "foreign value"},
+		{*Wrapp(42), "foreign value"},
+	}
+	for _, c := range cases {
+		result := TypeName(c.expr)
+		if result != c.expected {
+			t.Errorf("TypeName(%T) = %q, expected %q", c.expr, result, c.expected)
+		}
+	}
+}
+
+func TestMacroExpansionLocationColumn(t *testing.T) {
+	callSite := &SourcePosition{Ln: 5, Col: 12}
+	loc := &MacroExpansionLocation{MacroName: "my-mac", CallSite: callSite}
+	if loc.Column() != 12 {
+		t.Errorf("expected column 12, got %d", loc.Column())
+	}
+}
+
+func TestMacroExpansionLocationSourceContext(t *testing.T) {
+	tmpFile := t.TempDir() + "/test.ghoul"
+	os.WriteFile(tmpFile, []byte("(define x 1)\n(my-mac x)\n(define y 2)\n"), 0644)
+
+	callSite := &SourcePosition{Ln: 2, Col: 2, Filename: &tmpFile}
+	loc := &MacroExpansionLocation{MacroName: "my-mac", CallSite: callSite}
+	ctx := loc.SourceContext()
+	if !strings.Contains(ctx, "(my-mac x)") {
+		t.Errorf("expected macro call in context, got:\n%s", ctx)
+	}
+}
+
+func TestMacroExpansionLocationSourceContextNoFile(t *testing.T) {
+	callSite := &SourcePosition{Ln: 1, Col: 1}
+	loc := &MacroExpansionLocation{MacroName: "mac", CallSite: callSite}
+	if loc.SourceContext() != "" {
+		t.Error("expected empty context when no filename")
+	}
+}
+
+func TestSourceContextEmptyLines(t *testing.T) {
+	lines := []string{}
+	ctx := sourceContext(lines, 1, 1)
+	if ctx != "" {
+		t.Error("expected empty context for empty lines")
+	}
+}
+
+func TestSourceContextOutOfBoundsLine(t *testing.T) {
+	lines := []string{"(foo)"}
+	ctx := sourceContext(lines, 5, 1)
+	if ctx != "" {
+		t.Error("expected empty context for out-of-bounds line")
+	}
+}
+
+func TestSourcePositionSourceContextEmptyErrorLine(t *testing.T) {
+	tmpFile := t.TempDir() + "/test.ghoul"
+	os.WriteFile(tmpFile, []byte("(foo)\n\n(bar)\n"), 0644)
+
+	pos := &SourcePosition{Ln: 2, Col: 1, Filename: &tmpFile}
+	if pos.SourceContext() != "" {
+		t.Error("expected empty context when error line is blank")
+	}
+}
+
+func TestSourcePositionSourceContextLineBeyondFile(t *testing.T) {
+	tmpFile := t.TempDir() + "/test.ghoul"
+	os.WriteFile(tmpFile, []byte("(foo)\n"), 0644)
+
+	pos := &SourcePosition{Ln: 99, Col: 1, Filename: &tmpFile}
+	if pos.SourceContext() != "" {
+		t.Error("expected empty context when line is beyond file length")
+	}
+}
+
+func TestSourceContextWithNonexistentFilename(t *testing.T) {
+	bogus := "/no/such/file/ever.ghoul"
+	pos := &SourcePosition{Ln: 1, Col: 1, Filename: &bogus}
+	if pos.SourceContext() != "" {
+		t.Error("expected empty context for nonexistent file")
+	}
+	// String() should still include the filename even if unreadable
+	if !strings.Contains(pos.String(), "ever.ghoul") {
+		t.Errorf("expected filename in String(), got '%s'", pos.String())
+	}
+}
+
+func TestSourceContextWithDirectoryAsFilename(t *testing.T) {
+	dir := t.TempDir()
+	pos := &SourcePosition{Ln: 1, Col: 1, Filename: &dir}
+	if pos.SourceContext() != "" {
+		t.Error("expected empty context when filename is a directory")
+	}
+}
+
+func TestSourceContextWithEmptyFilename(t *testing.T) {
+	empty := ""
+	pos := &SourcePosition{Ln: 1, Col: 1, Filename: &empty}
+	if pos.SourceContext() != "" {
+		t.Error("expected empty context for empty filename string")
+	}
+}
+
+func TestSourceContextWithZeroLine(t *testing.T) {
+	tmpFile := t.TempDir() + "/test.ghoul"
+	os.WriteFile(tmpFile, []byte("(foo)\n"), 0644)
+
+	pos := &SourcePosition{Ln: 0, Col: 1, Filename: &tmpFile}
+	if pos.SourceContext() != "" {
+		t.Error("expected empty context for line 0")
+	}
+}
+
+func TestSourceContextWithNegativeLine(t *testing.T) {
+	tmpFile := t.TempDir() + "/test.ghoul"
+	os.WriteFile(tmpFile, []byte("(foo)\n"), 0644)
+
+	pos := &SourcePosition{Ln: -1, Col: 1, Filename: &tmpFile}
+	if pos.SourceContext() != "" {
+		t.Error("expected empty context for negative line")
+	}
+}
+
+func TestSourceContextWithUnreadableFile(t *testing.T) {
+	// Create a file, parse it, then delete it before the error is formatted
+	tmpFile := t.TempDir() + "/disappearing.ghoul"
+	os.WriteFile(tmpFile, []byte("(foo)\n"), 0644)
+
+	pos := &SourcePosition{Ln: 1, Col: 2, Filename: &tmpFile}
+	// Verify it works while file exists
+	ctx := pos.SourceContext()
+	if !strings.Contains(ctx, "(foo)") {
+		t.Fatalf("expected context while file exists, got: %s", ctx)
+	}
+
+	// Delete the file
+	os.Remove(tmpFile)
+	ctx = pos.SourceContext()
+	if ctx != "" {
+		t.Error("expected empty context after file deletion")
+	}
+}
+
 func TestSourcePositionImplementsCodeLocation(t *testing.T) {
 	var loc CodeLocation = &SourcePosition{Ln: 1, Col: 1}
 	if loc.Line() != 1 {
