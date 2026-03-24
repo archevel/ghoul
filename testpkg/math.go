@@ -177,6 +177,14 @@ const DefaultName = "Ghoul"
 // Counter is an exported variable
 var Counter int = 0
 
+// Max returns the larger of two ordered values
+func Max[T int | float64 | string](a, b T) T {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // ForEach calls a void callback for each element
 func ForEach(numbers []int, f func(int)) {
 	for _, n := range numbers {

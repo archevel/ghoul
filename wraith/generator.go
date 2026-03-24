@@ -202,6 +202,10 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 
 // processFunctionInfo converts a FunctionInfo to FunctionWrapperData
 func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperData, error) {
+	if funcInfo.IsGeneric {
+		return FunctionWrapperData{}, fmt.Errorf("generic functions are not supported — wrap a concrete instantiation instead (e.g., create a non-generic wrapper that calls %s with specific types)", funcInfo.Name)
+	}
+
 	for _, param := range funcInfo.Params {
 		if reason := g.typeMapper.UnsupportedTypeReason(param.Type); reason != "" {
 			return FunctionWrapperData{}, fmt.Errorf("parameter '%s' uses unsupported %s", param.Name, reason)

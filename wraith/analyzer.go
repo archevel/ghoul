@@ -21,6 +21,7 @@ type FunctionInfo struct {
 	Doc        string
 	Receiver   *ParameterInfo
 	IsVariadic bool
+	IsGeneric  bool
 }
 
 // ParameterInfo holds information about function parameters and return values
@@ -140,6 +141,10 @@ func (a *Analyzer) extractDeclarations(file *ast.File, pkg *packages.Package) ([
 		case *ast.GenDecl:
 			for _, spec := range node.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok && typeSpec.Name.IsExported() {
+					isGenericType := typeSpec.TypeParams != nil && typeSpec.TypeParams.NumFields() > 0
+					if isGenericType {
+						continue
+					}
 					if structType, ok := typeSpec.Type.(*ast.StructType); ok {
 						structInfo := a.processStructType(typeSpec.Name.Name, structType, pkg)
 						if structInfo != nil {
@@ -204,7 +209,8 @@ func (a *Analyzer) processFunctionDecl(funcDecl *ast.FuncDecl, pkg *packages.Pac
 		fmt.Printf("  Processing function: %s\n", funcName)
 	}
 
-	// Get function documentation
+	isGeneric := funcDecl.Type.TypeParams != nil && funcDecl.Type.TypeParams.NumFields() > 0
+
 	doc := ""
 	if funcDecl.Doc != nil {
 		doc = funcDecl.Doc.Text()
@@ -282,6 +288,7 @@ func (a *Analyzer) processFunctionDecl(funcDecl *ast.FuncDecl, pkg *packages.Pac
 		Doc:        doc,
 		Receiver:   receiver,
 		IsVariadic: isVariadic,
+		IsGeneric:  isGeneric,
 	}
 }
 

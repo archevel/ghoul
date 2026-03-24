@@ -471,6 +471,50 @@ func TestVariablesExposed(t *testing.T) {
 	}
 }
 
+func TestGenericFunctionsSkipped(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	if strings.Contains(code, "\"max\"") {
+		t.Error("generic function Max should be skipped")
+	}
+}
+
+func TestGenericFunctionsReportedAsUnsupported(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	err := PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       t.TempDir(),
+		SkipUnwrappable: false,
+	})
+	if err == nil {
+		t.Fatal("expected error for package with generic functions")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "generic") {
+		t.Errorf("expected mention of 'generic' in error, got: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "Max") {
+		t.Errorf("expected mention of function name 'Max', got: %s", errMsg)
+	}
+}
+
 func TestMultiNameFieldsInConstructor(t *testing.T) {
 	testpkgPath, _ := filepath.Abs("../testpkg")
 	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
