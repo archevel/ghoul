@@ -3,11 +3,14 @@ package mummy
 import (
 	"fmt"
 
-	ev "github.com/archevel/ghoul/evaluator"
 	e "github.com/archevel/ghoul/expressions"
 )
 
-func bytesConv(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+// ConversionFunc is the signature for conversion functions.
+// Uses interface{} for the evaluator to avoid importing the evaluator package.
+type ConversionFunc func(args e.List, evaluator interface{}) (e.Expr, error)
+
+func BytesConv(args e.List, evaluator interface{}) (e.Expr, error) {
 	s, ok := args.First().(e.String)
 	if !ok {
 		return nil, fmt.Errorf("bytes: expected string, got %s", e.TypeName(args.First()))
@@ -15,7 +18,7 @@ func bytesConv(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
 	return Entomb([]byte(string(s)), "[]byte"), nil
 }
 
-func stringFromBytes(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+func StringFromBytes(args e.List, evaluator interface{}) (e.Expr, error) {
 	m, ok := args.First().(*Mummy)
 	if !ok {
 		return nil, fmt.Errorf("string-from-bytes: expected mummy wrapping []byte, got %s", e.TypeName(args.First()))
@@ -27,7 +30,7 @@ func stringFromBytes(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
 	return e.String(bs), nil
 }
 
-func intSlice(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+func IntSlice(args e.List, evaluator interface{}) (e.Expr, error) {
 	var result []int
 	for args != e.NIL {
 		val, ok := args.First().(e.Integer)
@@ -43,7 +46,7 @@ func intSlice(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
 	return Entomb(result, "[]int"), nil
 }
 
-func floatSlice(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+func FloatSlice(args e.List, evaluator interface{}) (e.Expr, error) {
 	var result []float64
 	for args != e.NIL {
 		val, ok := args.First().(e.Float)
@@ -59,14 +62,6 @@ func floatSlice(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
 	return Entomb(result, "[]float64"), nil
 }
 
-func goNil(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+func GoNil(args e.List, evaluator interface{}) (e.Expr, error) {
 	return Entomb(nil, "nil"), nil
-}
-
-func RegisterConversions(env *ev.Environment) {
-	env.Register("bytes", bytesConv)
-	env.Register("string-from-bytes", stringFromBytes)
-	env.Register("int-slice", intSlice)
-	env.Register("float-slice", floatSlice)
-	env.Register("go-nil", goNil)
 }

@@ -41,6 +41,7 @@ func NewGenerator(config *Config) (*Generator, error) {
 // TemplateData holds data for template execution
 type TemplateData struct {
 	PackageName    string
+	ShortName      string
 	ImportPath     string
 	Functions      []FunctionWrapperData
 	Imports        []string
@@ -79,9 +80,20 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 )
 
-// Ensure mummy import is used
 var _ = mummy.Entomb
 var _ = fmt.Sprintf
+
+func init() {
+	mummy.RegisterSarcophagus("{{.ShortName}}", "{{.ImportPath}}", &mummy.SarcophagusEntry{
+		Names: []string{ {{range .Functions}}"{{.GhoulName}}", {{end}} },
+		Register: registerWithPrefix,
+	})
+}
+
+func registerWithPrefix(prefix string, only map[string]bool, register func(string, interface{})) {
+{{range .Functions}}	mummy.RegisterIfAllowed(prefix, only, "{{.GhoulName}}", {{.GoFuncName}}, register)
+{{end}}
+}
 
 {{range .Functions}}{{.GeneratedCode}}
 
@@ -183,6 +195,7 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 	// Prepare template data
 	templateData := TemplateData{
 		PackageName: g.config.PackageName,
+		ShortName:   getPackagePrefix(packageInfo.ImportPath),
 		ImportPath:  packageInfo.ImportPath,
 		Functions:   functionWrappers,
 		Imports:     imports,

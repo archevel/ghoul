@@ -8,6 +8,7 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
 	"github.com/archevel/ghoul/macromancy"
+	"github.com/archevel/ghoul/mummy"
 )
 
 const COND_SPECIAL_FORM = e.Identifier("cond")
@@ -18,6 +19,7 @@ const DEFINE_SPECIAL_FORM = e.Identifier("define")
 const ASSIGNMENT_SPECIAL_FORM = e.Identifier("set!")
 const DEFINE_SYNTAX_SPECIAL_FORM = e.Identifier("define-syntax")
 const SYNTAX_RULES_FORM = e.Identifier("syntax-rules")
+const REQUIRE_SPECIAL_FORM = e.Identifier("require")
 
 var markCounter uint64
 
@@ -196,6 +198,8 @@ func chooseEvaluation(expr e.Expr, parent e.List, maybeTailCall bool) (ret e.Exp
 
 		ret = e.NIL
 		switch specialFormName(h) {
+		case REQUIRE_SPECIAL_FORM:
+			nextCont = requireContinuationFor(t)
 		case DEFINE_SYNTAX_SPECIAL_FORM:
 			nextCont = defineSyntaxContinuationFor(t)
 		case DEFINE_SPECIAL_FORM:
@@ -580,6 +584,113 @@ func resolveCallableHead(head e.Expr, env *environment) (e.Expr, string) {
 	return nil, ""
 }
 
+// requireContinuationFor handles (require module), (require module as alias),
+// (require module only (name ...)), and (require module as alias only (name ...)).
+func requireContinuationFor(args e.List) continuation {
+	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+		if args == e.NIL {
+			return e.NIL, NewEvaluationError("require: module name required", args)
+		}
+
+		// Extract module name
+		moduleName, ok := args.First().(e.Identifier)
+		if !ok {
+			return e.NIL, NewEvaluationError("require: module name must be an identifier", args)
+		}
+
+		// Parse optional as/only
+		var alias string
+		var only map[string]bool
+		rest := args.Second()
+
+		for rest != e.NIL {
+			restList, ok := rest.(e.List)
+			if !ok {
+				break
+			}
+			keyword, ok := restList.First().(e.Identifier)
+			if !ok {
+				break
+			}
+
+			switch keyword {
+			case e.Identifier("as"):
+				tail, ok := restList.Tail()
+				if !ok || tail == e.NIL {
+					return e.NIL, NewEvaluationError("require: expected alias after 'as'", args)
+				}
+				aliasId, ok := tail.First().(e.Identifier)
+				if !ok {
+					return e.NIL, NewEvaluationError("require: alias must be an identifier", args)
+				}
+				alias = string(aliasId)
+				rest = tail.Second()
+			case e.Identifier("only"):
+				tail, ok := restList.Tail()
+				if !ok || tail == e.NIL {
+					return e.NIL, NewEvaluationError("require: expected name list after 'only'", args)
+				}
+				nameList, ok := tail.First().(e.List)
+				if !ok {
+					return e.NIL, NewEvaluationError("require: 'only' must be followed by a list of names", args)
+				}
+				only = map[string]bool{}
+				for nameList != e.NIL {
+					nameId, ok := nameList.First().(e.Identifier)
+					if !ok {
+						return e.NIL, NewEvaluationError("require: 'only' list must contain identifiers", args)
+					}
+					only[string(nameId)] = true
+					nameList, _ = nameList.Tail()
+				}
+				rest = tail.Second()
+			default:
+				return e.NIL, NewEvaluationError(fmt.Sprintf("require: unexpected keyword '%s'", keyword), args)
+			}
+		}
+
+		// Look up module
+		entry := mummy.LookupSarcophagus(string(moduleName))
+		if entry == nil {
+			return e.NIL, NewEvaluationError(fmt.Sprintf("require: module '%s' not found", moduleName), args)
+		}
+
+		// Determine prefix
+		prefix := string(moduleName)
+		if alias != "" {
+			prefix = alias
+		}
+
+		// Check for name clashes before registering
+		namesToRegister := entry.Names
+		if only != nil {
+			namesToRegister = make([]string, 0)
+			for _, n := range entry.Names {
+				if only[n] {
+					namesToRegister = append(namesToRegister, n)
+				}
+			}
+		}
+		for _, name := range namesToRegister {
+			qualifiedName := prefix + ":" + name
+			if _, err := lookupIdentifier(e.Identifier(qualifiedName), ev.env); err == nil {
+				return e.NIL, NewEvaluationError(
+					fmt.Sprintf("require: name '%s' already defined", qualifiedName), args)
+			}
+		}
+
+		// Register functions via callback that adapts to our environment
+		register := func(name string, fn interface{}) {
+			if ghoulFn, ok := fn.(func(e.List, *Evaluator) (e.Expr, error)); ok {
+				bindIdentifier(e.Identifier(name), Function{&ghoulFn}, ev.env)
+			}
+		}
+		entry.Register(prefix, only, register)
+
+		return e.NIL, nil
+	}
+}
+
 func defineSyntaxContinuationFor(def e.List) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		if def == e.NIL {
@@ -666,6 +777,7 @@ func collectBoundIdentifiers(env *environment) map[e.Identifier]bool {
 		ASSIGNMENT_SPECIAL_FORM:   true,
 		DEFINE_SYNTAX_SPECIAL_FORM: true,
 		SYNTAX_RULES_FORM:         true,
+		REQUIRE_SPECIAL_FORM:      true,
 	}
 	for i := range *env {
 		for key := range *(*env)[i] {

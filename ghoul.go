@@ -10,6 +10,7 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
 	"github.com/archevel/ghoul/macromancy"
+	"github.com/archevel/ghoul/mummy"
 	"github.com/archevel/ghoul/parser"
 )
 
@@ -182,5 +183,18 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 		}
 		return e.NIL, nil
 	})
+
+	// Mummy conversion functions
+	wrapConv := func(fn func(e.List, interface{}) (e.Expr, error)) func(e.List, *ev.Evaluator) (e.Expr, error) {
+		return func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+			return fn(args, evaluator)
+		}
+	}
+	env.Register("bytes", wrapConv(mummy.BytesConv))
+	env.Register("string-from-bytes", wrapConv(mummy.StringFromBytes))
+	env.Register("int-slice", wrapConv(mummy.IntSlice))
+	env.Register("float-slice", wrapConv(mummy.FloatSlice))
+	env.Register("go-nil", wrapConv(mummy.GoNil))
+
 	return ev.New(logger, env)
 }

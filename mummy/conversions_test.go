@@ -3,13 +3,12 @@ package mummy
 import (
 	"testing"
 
-	ev "github.com/archevel/ghoul/evaluator"
 	e "github.com/archevel/ghoul/expressions"
 )
 
 func TestBytesConvertsStringToByteSlice(t *testing.T) {
 	args := e.Cons(e.String("hello"), e.NIL)
-	result, err := bytesConv(args, nil)
+	result, err := BytesConv(args, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -28,7 +27,7 @@ func TestBytesConvertsStringToByteSlice(t *testing.T) {
 
 func TestBytesRejectsNonString(t *testing.T) {
 	args := e.Cons(e.Integer(42), e.NIL)
-	_, err := bytesConv(args, nil)
+	_, err := BytesConv(args, nil)
 	if err == nil {
 		t.Error("expected error for non-string argument")
 	}
@@ -37,7 +36,7 @@ func TestBytesRejectsNonString(t *testing.T) {
 func TestStringFromBytesConvertsBack(t *testing.T) {
 	m := Entomb([]byte("world"), "[]byte")
 	args := e.Cons(m, e.NIL)
-	result, err := stringFromBytes(args, nil)
+	result, err := StringFromBytes(args, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -52,7 +51,7 @@ func TestStringFromBytesConvertsBack(t *testing.T) {
 
 func TestStringFromBytesRejectsNonMummy(t *testing.T) {
 	args := e.Cons(e.String("nope"), e.NIL)
-	_, err := stringFromBytes(args, nil)
+	_, err := StringFromBytes(args, nil)
 	if err == nil {
 		t.Error("expected error for non-mummy argument")
 	}
@@ -61,7 +60,7 @@ func TestStringFromBytesRejectsNonMummy(t *testing.T) {
 func TestStringFromBytesRejectsWrongMummyType(t *testing.T) {
 	m := Entomb(42, "int")
 	args := e.Cons(m, e.NIL)
-	_, err := stringFromBytes(args, nil)
+	_, err := StringFromBytes(args, nil)
 	if err == nil {
 		t.Error("expected error for mummy not wrapping []byte")
 	}
@@ -69,7 +68,7 @@ func TestStringFromBytesRejectsWrongMummyType(t *testing.T) {
 
 func TestIntSliceCreatesSlice(t *testing.T) {
 	args := e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL)))
-	result, err := intSlice(args, nil)
+	result, err := IntSlice(args, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +80,7 @@ func TestIntSliceCreatesSlice(t *testing.T) {
 }
 
 func TestIntSliceEmpty(t *testing.T) {
-	result, err := intSlice(e.NIL, nil)
+	result, err := IntSlice(e.NIL, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -94,7 +93,7 @@ func TestIntSliceEmpty(t *testing.T) {
 
 func TestIntSliceRejectsNonInteger(t *testing.T) {
 	args := e.Cons(e.Integer(1), e.Cons(e.String("bad"), e.NIL))
-	_, err := intSlice(args, nil)
+	_, err := IntSlice(args, nil)
 	if err == nil {
 		t.Error("expected error for non-integer element")
 	}
@@ -102,7 +101,7 @@ func TestIntSliceRejectsNonInteger(t *testing.T) {
 
 func TestFloatSliceCreatesSlice(t *testing.T) {
 	args := e.Cons(e.Float(1.5), e.Cons(e.Float(2.5), e.NIL))
-	result, err := floatSlice(args, nil)
+	result, err := FloatSlice(args, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -115,14 +114,14 @@ func TestFloatSliceCreatesSlice(t *testing.T) {
 
 func TestFloatSliceRejectsNonFloat(t *testing.T) {
 	args := e.Cons(e.Integer(1), e.NIL)
-	_, err := floatSlice(args, nil)
+	_, err := FloatSlice(args, nil)
 	if err == nil {
 		t.Error("expected error for non-float element")
 	}
 }
 
 func TestGoNilCreatesNilMummy(t *testing.T) {
-	result, err := goNil(e.NIL, nil)
+	result, err := GoNil(e.NIL, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -135,13 +134,8 @@ func TestGoNilCreatesNilMummy(t *testing.T) {
 	}
 }
 
-func TestRegisterConversionsDoesNotPanic(t *testing.T) {
-	env := ev.NewEnvironment()
-	RegisterConversions(env)
-}
-
 func TestGoNilRepr(t *testing.T) {
-	result, _ := goNil(e.NIL, nil)
+	result, _ := GoNil(e.NIL, nil)
 	m := result.(*Mummy)
 	if m.Repr() != "#<mummy:nil>" {
 		t.Errorf("expected '#<mummy:nil>', got '%s'", m.Repr())

@@ -292,6 +292,9 @@ func TestPossessPackageCreatesSarcophagus(t *testing.T) {
 		{"callback adapter", "ghoulEval.Function"},
 		{"nil handling", "Unwrap() != nil"},
 		{"RegisterFunctions", "func RegisterFunctions"},
+		{"init registration", "mummy.RegisterSarcophagus"},
+		{"registerWithPrefix", "func registerWithPrefix"},
+		{"RegisterIfAllowed", "mummy.RegisterIfAllowed"},
 	}
 
 	for _, c := range checks {

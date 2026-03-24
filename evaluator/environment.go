@@ -135,6 +135,10 @@ func lookupIdentifier(ident e.Expr, env *environment) (e.Expr, error) {
 	return nil, fmt.Errorf("undefined identifier: %s%s", key.Name, suggestion)
 }
 
+func (env environment) LookupByName(name string) (e.Expr, error) {
+	return lookupIdentifier(e.Identifier(name), &env)
+}
+
 func newEnvWithEmptyScope(env *environment) *environment {
 	newEnv := append(*env, &scope{})
 	return &newEnv
