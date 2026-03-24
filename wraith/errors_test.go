@@ -296,6 +296,142 @@ func TestVariadicFunctionWithMixedParams(t *testing.T) {
 	}
 }
 
+func TestTypeAliasParametersWrappedAsPrimitives(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	if !strings.Contains(code, "addscores") {
+		t.Fatal("expected addscores function to be generated")
+	}
+	// Extract the addscores function body to check it specifically
+	idx := strings.Index(code, "func addscores")
+	if idx < 0 {
+		t.Fatal("could not find addscores function")
+	}
+	funcBody := code[idx : idx+300]
+	if strings.Contains(funcBody, "*mummy.Mummy") {
+		t.Errorf("type alias for int should use Integer assertion, not mummy:\n%s", funcBody)
+	}
+	if !strings.Contains(funcBody, "e.Integer") {
+		t.Errorf("type alias for int should use e.Integer assertion:\n%s", funcBody)
+	}
+}
+
+func TestNamedFunctionTypeParameterWrappedAsCallback(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	// ApplyTransform takes IntTransform (named func type) — should generate callback adapter
+	if !strings.Contains(code, "applytransform") {
+		t.Error("expected applytransform function to be generated")
+	}
+	if !strings.Contains(code, "ghoulEval.Function") {
+		t.Error("expected Function assertion for named function type")
+	}
+}
+
+func TestUnexportedReturnTypeWrappedAsMummy(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	// MakeResult returns *result (unexported) — should be entombed as mummy
+	if !strings.Contains(code, "makeresult") {
+		t.Error("expected makeresult function to be generated")
+	}
+	if !strings.Contains(code, "mummy.Entomb") {
+		t.Error("expected mummy.Entomb for unexported return type")
+	}
+
+	// GetResultValue takes *result (unexported) — should be skipped
+	if strings.Contains(code, "getresultvalue") {
+		t.Error("getresultvalue should be skipped because it takes an unexported type")
+	}
+}
+
+func TestConstantsExposed(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	if !strings.Contains(code, "max-value") {
+		t.Error("expected max-value constant to be registered")
+	}
+	if !strings.Contains(code, "pi") {
+		t.Error("expected pi constant to be registered")
+	}
+	if !strings.Contains(code, "default-name") {
+		t.Error("expected default-name constant to be registered")
+	}
+}
+
+func TestVariablesExposed(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	if !strings.Contains(code, "counter") {
+		t.Error("expected counter variable to be registered")
+	}
+}
+
 func TestResultHandlingErrorFunction(t *testing.T) {
 	testpkgPath, _ := filepath.Abs("../testpkg")
 	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {

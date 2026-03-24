@@ -28,8 +28,12 @@ func NewTypeMapper() (*TypeMapper, error) {
 			"uint16":  "Integer",
 			"uint32":  "Integer",
 			"uint64":  "Integer",
-			"float32": "Float",
-			"float64": "Float",
+			"float32":       "Float",
+			"float64":       "Float",
+			"untyped int":   "Integer",
+			"untyped float": "Float",
+			"untyped string": "String",
+			"untyped bool":  "Boolean",
 		},
 		templates: make(map[string]*template.Template),
 	}
@@ -59,6 +63,7 @@ type ArgConversionInfo struct {
 	BuiltInType   string
 	FuncSignature *FuncSignatureInfo
 	IsVariadic    bool
+	IsOpaque      bool
 }
 
 type ResultConversionInfo struct {
@@ -136,6 +141,9 @@ func (tm *TypeMapper) GenerateArgumentConversion(info ArgConversionInfo, w io.Wr
 	if info.FuncSignature != nil {
 		return tm.generateFunctionAdapter(info, w)
 	}
+	if info.IsOpaque {
+		return tm.generateOpaqueConversion(info, w)
+	}
 
 	var templateName string
 	if info.BuiltInType != "" {
@@ -150,6 +158,20 @@ func (tm *TypeMapper) GenerateArgumentConversion(info ArgConversionInfo, w io.Wr
 	}
 
 	return template.Execute(w, info)
+}
+
+// generateOpaqueConversion handles unexported types that can't be referenced
+// by name from the sarcophagus. The value is passed through as-is from the mummy.
+func (tm *TypeMapper) generateOpaqueConversion(info ArgConversionInfo, w io.Writer) error {
+	name := info.Name
+	fmt.Fprintf(w, "\tghoulArg_%s := args.First()\n", name)
+	fmt.Fprintf(w, "\tmummy_%s, ok := ghoulArg_%s.(*mummy.Mummy)\n", name, name)
+	fmt.Fprintf(w, "\tif !ok {\n")
+	fmt.Fprintf(w, "\t\treturn nil, fmt.Errorf(\"expected mummy for parameter '%s', got %%s\", e.TypeName(ghoulArg_%s))\n", name, name)
+	fmt.Fprintf(w, "\t}\n")
+	fmt.Fprintf(w, "\t%s := mummy_%s.Unwrap()\n", name, name)
+	fmt.Fprintf(w, "\targs, _ = args.Tail()\n")
+	return nil
 }
 
 func (tm *TypeMapper) generateVariadicConversion(info ArgConversionInfo, w io.Writer) error {
@@ -266,8 +288,16 @@ func (tm *TypeMapper) MapGoTypeToGhoul(goType types.Type) (ghoulType string, isF
 		return ghoulType, false
 	}
 
+	// Handle type aliases like `type Score int` by checking the underlying type
+	if ghoulType, exists := tm.primitiveMap[goType.Underlying().String()]; exists {
+		return ghoulType, false
+	}
+
 	if ptr, ok := goType.(*types.Pointer); ok {
 		if ghoulType, exists := tm.primitiveMap[ptr.Elem().String()]; exists {
+			return ghoulType, false
+		}
+		if ghoulType, exists := tm.primitiveMap[ptr.Elem().Underlying().String()]; exists {
 			return ghoulType, false
 		}
 	}
@@ -282,12 +312,12 @@ func (tm *TypeMapper) MapGoTypeToGhoul(goType types.Type) (ghoulType string, isF
 }
 
 func (tm *TypeMapper) IsFunction(goType types.Type) bool {
-	_, ok := goType.(*types.Signature)
+	_, ok := goType.Underlying().(*types.Signature)
 	return ok
 }
 
 func (tm *TypeMapper) BuildFuncSignature(goType types.Type) *FuncSignatureInfo {
-	sig, ok := goType.(*types.Signature)
+	sig, ok := goType.Underlying().(*types.Signature)
 	if !ok {
 		return nil
 	}

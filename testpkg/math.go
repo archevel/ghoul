@@ -122,6 +122,49 @@ func JoinWith(sep string, parts ...string) string {
 	return result
 }
 
+// Type alias for int
+type Score int
+
+// AddScores adds two scores
+func AddScores(a, b Score) Score {
+	return a + b
+}
+
+// Named function type
+type IntTransform func(int) int
+
+// ApplyTransform applies a named function type to a value
+func ApplyTransform(f IntTransform, val int) int {
+	return f(val)
+}
+
+// unexported type returned from an exported function
+type result struct {
+	Value int
+}
+
+// MakeResult creates an unexported result type
+func MakeResult(val int) *result {
+	return &result{Value: val}
+}
+
+// GetResultValue extracts the value from a result
+func GetResultValue(r *result) int {
+	return r.Value
+}
+
+// MaxValue is an exported constant
+const MaxValue = 1000
+
+// Pi is an exported float constant
+const Pi = 3.14159
+
+// DefaultName is an exported string constant
+const DefaultName = "Ghoul"
+
+// Counter is an exported variable
+var Counter int = 0
+
 // ForEach calls a void callback for each element
 func ForEach(numbers []int, f func(int)) {
 	for _, n := range numbers {

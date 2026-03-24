@@ -143,6 +143,12 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 		}
 	}
 
+	// Generate accessors for exported constants and variables
+	for _, valInfo := range packageInfo.Values {
+		wrapper := g.generateValueAccessor(valInfo, packageInfo.ImportPath)
+		functionWrappers = append(functionWrappers, wrapper)
+	}
+
 	for _, funcInfo := range packageInfo.Functions {
 		wrapper, err := g.processFunctionInfo(funcInfo)
 		if err != nil {
@@ -199,6 +205,9 @@ func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperD
 	for _, param := range funcInfo.Params {
 		if reason := g.typeMapper.UnsupportedTypeReason(param.Type); reason != "" {
 			return FunctionWrapperData{}, fmt.Errorf("parameter '%s' uses unsupported %s", param.Name, reason)
+		}
+		if isUnexportedType(param.Type) {
+			return FunctionWrapperData{}, fmt.Errorf("parameter '%s' uses unexported type %s", param.Name, param.Type)
 		}
 	}
 	for _, result := range funcInfo.Results {
@@ -522,7 +531,7 @@ func (g *Generator) generateConstructor(structInfo StructInfo, importPath string
 }
 
 func buildGoFuncLiteralType(goType types.Type) string {
-	sig := goType.(*types.Signature)
+	sig := goType.Underlying().(*types.Signature)
 	var b strings.Builder
 	b.WriteString("func(")
 	params := sig.Params()
@@ -652,6 +661,54 @@ func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method Func
 		GoFuncName:    goFuncName,
 		GeneratedCode: body.String(),
 	}, nil
+}
+
+func (g *Generator) generateValueAccessor(valInfo ValueInfo, importPath string) FunctionWrapperData {
+	ghoulName := toGhoulName(valInfo.Name)
+	goFuncName := strings.ReplaceAll(ghoulName, "-", "")
+	packagePrefix := getPackagePrefix(importPath)
+	qualifiedName := packagePrefix + "." + valInfo.Name
+
+	typeStr := qualifiedTypeToAlias(valInfo.Type.String())
+	expr := g.typeMapper.convertValueToExpression(qualifiedName, valInfo.Type.Underlying().String())
+
+	var body bytes.Buffer
+	fmt.Fprintf(&body, "func %s(args e.List, ev *ghoulEval.Evaluator) (e.Expr, error) {\n", goFuncName)
+	fmt.Fprintf(&body, "\treturn %s, nil\n", expr)
+	fmt.Fprintf(&body, "}")
+
+	_ = typeStr
+
+	return FunctionWrapperData{
+		OriginalName:  valInfo.Name,
+		GhoulName:     ghoulName,
+		GoFuncName:    goFuncName,
+		GeneratedCode: body.String(),
+	}
+}
+
+func isUnexportedType(goType types.Type) bool {
+	typeStr := goType.String()
+	typeStr = strings.TrimPrefix(typeStr, "*")
+	if dot := strings.LastIndex(typeStr, "."); dot >= 0 {
+		after := typeStr[dot+1:]
+		if len(after) > 0 && after[0] >= 'a' && after[0] <= 'z' {
+			return true
+		}
+	}
+	return false
+}
+
+// toGhoulName converts CamelCase to kebab-case for Lisp conventions
+func toGhoulName(name string) string {
+	var result []byte
+	for i, r := range name {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			result = append(result, '-')
+		}
+		result = append(result, byte(r))
+	}
+	return strings.ToLower(string(result))
 }
 
 func (g *Generator) generateSliceConstructor(structInfo StructInfo, importPath string) FunctionWrapperData {

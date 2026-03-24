@@ -44,12 +44,19 @@ type InterfaceInfo struct {
 	Methods []FunctionInfo
 }
 
+type ValueInfo struct {
+	Name  string
+	Type  types.Type
+	IsVar bool
+}
+
 type PackageInfo struct {
 	Name       string
 	ImportPath string
 	Functions  []FunctionInfo
 	Structs    []StructInfo
 	Interfaces []InterfaceInfo
+	Values     []ValueInfo
 }
 
 // NewAnalyzer creates a new package analyzer
@@ -101,10 +108,11 @@ func (a *Analyzer) AnalyzePackage() (*PackageInfo, error) {
 	}
 
 	for _, file := range pkg.Syntax {
-		functions, structs, interfaces := a.extractDeclarations(file, pkg)
+		functions, structs, interfaces, values := a.extractDeclarations(file, pkg)
 		packageInfo.Functions = append(packageInfo.Functions, functions...)
 		packageInfo.Structs = append(packageInfo.Structs, structs...)
 		packageInfo.Interfaces = append(packageInfo.Interfaces, interfaces...)
+		packageInfo.Values = append(packageInfo.Values, values...)
 	}
 
 	if a.config.Verbose {
@@ -114,10 +122,11 @@ func (a *Analyzer) AnalyzePackage() (*PackageInfo, error) {
 	return packageInfo, nil
 }
 
-func (a *Analyzer) extractDeclarations(file *ast.File, pkg *packages.Package) ([]FunctionInfo, []StructInfo, []InterfaceInfo) {
+func (a *Analyzer) extractDeclarations(file *ast.File, pkg *packages.Package) ([]FunctionInfo, []StructInfo, []InterfaceInfo, []ValueInfo) {
 	var functions []FunctionInfo
 	var structs []StructInfo
 	var interfaces []InterfaceInfo
+	var values []ValueInfo
 
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch node := n.(type) {
@@ -130,20 +139,31 @@ func (a *Analyzer) extractDeclarations(file *ast.File, pkg *packages.Package) ([
 			}
 		case *ast.GenDecl:
 			for _, spec := range node.Specs {
-				typeSpec, ok := spec.(*ast.TypeSpec)
-				if !ok || !typeSpec.Name.IsExported() {
-					continue
-				}
-				if structType, ok := typeSpec.Type.(*ast.StructType); ok {
-					structInfo := a.processStructType(typeSpec.Name.Name, structType, pkg)
-					if structInfo != nil {
-						structs = append(structs, *structInfo)
+				if typeSpec, ok := spec.(*ast.TypeSpec); ok && typeSpec.Name.IsExported() {
+					if structType, ok := typeSpec.Type.(*ast.StructType); ok {
+						structInfo := a.processStructType(typeSpec.Name.Name, structType, pkg)
+						if structInfo != nil {
+							structs = append(structs, *structInfo)
+						}
+					}
+					if ifaceType, ok := typeSpec.Type.(*ast.InterfaceType); ok {
+						ifaceInfo := a.processInterfaceType(typeSpec.Name.Name, ifaceType, pkg)
+						if ifaceInfo != nil {
+							interfaces = append(interfaces, *ifaceInfo)
+						}
 					}
 				}
-				if ifaceType, ok := typeSpec.Type.(*ast.InterfaceType); ok {
-					ifaceInfo := a.processInterfaceType(typeSpec.Name.Name, ifaceType, pkg)
-					if ifaceInfo != nil {
-						interfaces = append(interfaces, *ifaceInfo)
+				if valueSpec, ok := spec.(*ast.ValueSpec); ok {
+					isVar := node.Tok.String() == "var"
+					for _, name := range valueSpec.Names {
+						if name.IsExported() {
+							valType := pkg.TypesInfo.TypeOf(name)
+							values = append(values, ValueInfo{
+								Name:  name.Name,
+								Type:  valType,
+								IsVar: isVar,
+							})
+						}
 					}
 				}
 			}
@@ -151,7 +171,7 @@ func (a *Analyzer) extractDeclarations(file *ast.File, pkg *packages.Package) ([
 		return true
 	})
 
-	return functions, structs, interfaces
+	return functions, structs, interfaces, values
 }
 
 func (a *Analyzer) processStructType(name string, structType *ast.StructType, pkg *packages.Package) *StructInfo {
