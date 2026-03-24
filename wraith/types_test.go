@@ -2,6 +2,7 @@ package wraith
 
 import (
 	"bytes"
+	"go/types"
 	"strings"
 	"testing"
 )
@@ -218,6 +219,85 @@ func TestGhoulToGoConversionAllTypes(t *testing.T) {
 		if result != c.expected {
 			t.Errorf("ghoulToGoConversion(x, %v) = %q, expected %q", c.param, result, c.expected)
 		}
+	}
+}
+
+func TestVariadicConversionForPrimitiveType(t *testing.T) {
+	tm, _ := NewTypeMapper()
+	var buf bytes.Buffer
+	err := tm.GenerateArgumentConversion(ArgConversionInfo{
+		Name:        "nums",
+		Type:        "[]int",
+		BuiltInType: "Integer",
+		IsVariadic:  true,
+	}, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	code := buf.String()
+	if !strings.Contains(code, "var nums []int") {
+		t.Errorf("expected var declaration, got:\n%s", code)
+	}
+	if !strings.Contains(code, "for args != e.NIL") {
+		t.Errorf("expected loop, got:\n%s", code)
+	}
+	if !strings.Contains(code, "e.Integer") {
+		t.Errorf("expected Integer assertion, got:\n%s", code)
+	}
+}
+
+func TestVariadicConversionForForeignType(t *testing.T) {
+	tm, _ := NewTypeMapper()
+	var buf bytes.Buffer
+	err := tm.GenerateArgumentConversion(ArgConversionInfo{
+		Name:       "items",
+		Type:       "[]pkg.Item",
+		IsVariadic: true,
+	}, &buf)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	code := buf.String()
+	if !strings.Contains(code, "*mummy.Mummy") {
+		t.Errorf("expected mummy assertion, got:\n%s", code)
+	}
+	if !strings.Contains(code, "Unwrap().(pkg.Item)") {
+		t.Errorf("expected Unwrap with type, got:\n%s", code)
+	}
+}
+
+func TestUnsupportedTypeReasonForChannel(t *testing.T) {
+	tm, _ := NewTypeMapper()
+	// Use a real types.Chan via go/types
+	chanType := types.NewChan(types.SendRecv, types.Typ[types.Int])
+	reason := tm.UnsupportedTypeReason(chanType)
+	if !strings.Contains(reason, "channel") {
+		t.Errorf("expected 'channel' in reason, got: %s", reason)
+	}
+}
+
+func TestUnsupportedTypeReasonForMap(t *testing.T) {
+	tm, _ := NewTypeMapper()
+	mapType := types.NewMap(types.Typ[types.String], types.Typ[types.Int])
+	reason := tm.UnsupportedTypeReason(mapType)
+	if !strings.Contains(reason, "map") {
+		t.Errorf("expected 'map' in reason, got: %s", reason)
+	}
+}
+
+func TestUnsupportedTypeReasonForSupportedType(t *testing.T) {
+	tm, _ := NewTypeMapper()
+	reason := tm.UnsupportedTypeReason(types.Typ[types.Int])
+	if reason != "" {
+		t.Errorf("expected empty reason for int, got: %s", reason)
+	}
+}
+
+func TestUnsupportedTypeReasonForNil(t *testing.T) {
+	tm, _ := NewTypeMapper()
+	reason := tm.UnsupportedTypeReason(nil)
+	if reason != "" {
+		t.Errorf("expected empty reason for nil, got: %s", reason)
 	}
 }
 

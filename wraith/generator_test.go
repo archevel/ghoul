@@ -1,6 +1,7 @@
 package wraith
 
 import (
+	"bytes"
 	"go/types"
 	"os"
 	"path/filepath"
@@ -146,6 +147,108 @@ func TestConstructorNaming(t *testing.T) {
 
 	if wrapper.GhoulName != "widget-slice" {
 		t.Errorf("expected 'widget-slice', got '%s'", wrapper.GhoulName)
+	}
+}
+
+func TestGenerateResultHandlingVoid(t *testing.T) {
+	config := &Config{PackagePath: ".", OutputFile: "/dev/null", PackageName: "test"}
+	g, _ := NewGenerator(config)
+	var buf bytes.Buffer
+	g.generateResultHandling(nil, &buf)
+	if !strings.Contains(buf.String(), "e.NIL") {
+		t.Errorf("expected e.NIL for void result, got:\n%s", buf.String())
+	}
+}
+
+func TestGenerateResultHandlingSingleReturn(t *testing.T) {
+	config := &Config{PackagePath: ".", OutputFile: "/dev/null", PackageName: "test"}
+	g, _ := NewGenerator(config)
+	var buf bytes.Buffer
+	g.generateResultHandling([]ResultConversionInfo{
+		{Index: 0, Type: "int", Name: "result0"},
+	}, &buf)
+	if !strings.Contains(buf.String(), "e.Integer(result0)") {
+		t.Errorf("expected Integer conversion, got:\n%s", buf.String())
+	}
+}
+
+func TestGenerateResultHandlingWithError(t *testing.T) {
+	config := &Config{PackagePath: ".", OutputFile: "/dev/null", PackageName: "test"}
+	g, _ := NewGenerator(config)
+	var buf bytes.Buffer
+	g.generateResultHandling([]ResultConversionInfo{
+		{Index: 0, Type: "int", Name: "result0"},
+		{Index: 1, Type: "error", Name: "err"},
+	}, &buf)
+	code := buf.String()
+	if !strings.Contains(code, "err != nil") {
+		t.Errorf("expected error check, got:\n%s", code)
+	}
+	if !strings.Contains(code, "e.Integer(result0)") {
+		t.Errorf("expected Integer conversion, got:\n%s", code)
+	}
+}
+
+func TestGenerateResultHandlingMultipleReturns(t *testing.T) {
+	config := &Config{PackagePath: ".", OutputFile: "/dev/null", PackageName: "test"}
+	g, _ := NewGenerator(config)
+	var buf bytes.Buffer
+	g.generateResultHandling([]ResultConversionInfo{
+		{Index: 0, Type: "int", Name: "a"},
+		{Index: 1, Type: "string", Name: "b"},
+	}, &buf)
+	code := buf.String()
+	if !strings.Contains(code, "e.Cons") {
+		t.Errorf("expected Cons for multi-return, got:\n%s", code)
+	}
+}
+
+func TestGetPackagePrefix(t *testing.T) {
+	cases := []struct {
+		input, expected string
+	}{
+		{"github.com/foo/bar", "bar"},
+		{"fmt", "fmt"},
+		{"github.com/archevel/ghoul/testpkg", "testpkg"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		result := getPackagePrefix(c.input)
+		if result != c.expected {
+			t.Errorf("getPackagePrefix(%q) = %q, expected %q", c.input, result, c.expected)
+		}
+	}
+}
+
+func TestGeneratedCodeContainsMultipleReturnTypes(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	// Divide returns (int, error) — should have both error handling and Integer conversion
+	if !strings.Contains(code, "function failed") {
+		t.Error("expected error handling for Divide")
+	}
+
+	// Variadic functions should be wrapped
+	if !strings.Contains(code, "nums...") {
+		t.Error("expected variadic spread for Variadic")
+	}
+
+	// JoinWith has mixed regular + variadic params
+	if !strings.Contains(code, "parts...") {
+		t.Error("expected variadic spread for JoinWith")
 	}
 }
 
