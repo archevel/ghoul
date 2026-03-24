@@ -285,7 +285,7 @@ type Foreign struct {
 	value any
 }
 
-func Wrapp(val any) *Foreign {
+func Wrap(val any) *Foreign {
 	return &Foreign{val}
 }
 
@@ -293,8 +293,8 @@ func (f Foreign) Repr() string {
 	return fmt.Sprintf("#<foreign:%#v>", f.value)
 }
 
-func (f Foreign) Equiv(e Expr) bool {
-	switch f2 := e.(type) {
+func (f Foreign) Equiv(expr Expr) bool {
+	switch f2 := expr.(type) {
 	case Foreign:
 		return f.value == f2.value
 	case *Foreign:

@@ -190,8 +190,8 @@ func TestTypeNameAllTypes(t *testing.T) {
 		{Cons(Integer(1), NIL), "list"},
 		{*Cons(Integer(1), NIL), "list"},
 		{NIL, "empty list"},
-		{Wrapp(42), "foreign value"},
-		{*Wrapp(42), "foreign value"},
+		{Wrap(42), "foreign value"},
+		{*Wrap(42), "foreign value"},
 	}
 	for _, c := range cases {
 		result := TypeName(c.expr)

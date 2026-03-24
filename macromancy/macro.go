@@ -128,7 +128,7 @@ func appendExprs(list e.Expr, tail e.Expr) e.Expr {
 	return e.Cons(list, tail)
 }
 
-func matchWalk(macro e.Expr, code e.Expr, bound bindings, hasElipsis bool, literals map[e.Identifier]bool) (bool, bindings) {
+func matchWalk(macro e.Expr, code e.Expr, bound bindings, hasEllipsis bool, literals map[e.Identifier]bool) (bool, bindings) {
 	if id, ok := macro.(e.Identifier); ok {
 		return matchAndBindIdentifier(id, code, bound, literals)
 	}
@@ -137,9 +137,9 @@ func matchWalk(macro e.Expr, code e.Expr, bound bindings, hasElipsis bool, liter
 	}
 	if macroList, macroOk := macro.(e.List); macroOk {
 		if codeList, codeOk := code.(e.List); codeOk {
-			return matchHeadAndTail(macroList, codeList, bound, hasElipsis, literals)
+			return matchHeadAndTail(macroList, codeList, bound, hasEllipsis, literals)
 		} else {
-			return matchFinalCodeExpression(macroList, code, bound, hasElipsis, literals)
+			return matchFinalCodeExpression(macroList, code, bound, hasEllipsis, literals)
 		}
 	}
 	if code != nil && macro != nil && code.Equiv(macro) {
@@ -164,27 +164,27 @@ func matchAndBindIdentifier(id e.Identifier, code e.Expr, bound bindings, litera
 	return true, bound
 }
 
-func matchHeadAndTail(macroList e.List, codeList e.List, bound bindings, hasElipsis bool, literals map[e.Identifier]bool) (bool, bindings) {
+func matchHeadAndTail(macroList e.List, codeList e.List, bound bindings, hasEllipsis bool, literals map[e.Identifier]bool) (bool, bindings) {
 	if macroList == e.NIL && codeList == e.NIL {
 		return true, bound
 	}
 	macroLength := listLength(macroList)
-	if macroList == e.NIL || (codeList == e.NIL && (!hasElipsis || macroLength > 1)) {
+	if macroList == e.NIL || (codeList == e.NIL && (!hasEllipsis || macroLength > 1)) {
 		return false, nil
 	}
 
 	if id := toIdentifier(macroList.First()); id == e.Identifier("...") {
-		return matchElipsis(macroList, macroLength, codeList, bound, literals)
+		return matchEllipsis(macroList, macroLength, codeList, bound, literals)
 	} else {
-		headMatch, bound := matchWalk(macroList.First(), codeList.First(), bound, hasElipsis, literals)
+		headMatch, bound := matchWalk(macroList.First(), codeList.First(), bound, hasEllipsis, literals)
 		if headMatch {
-			return matchWalk(macroList.Second(), codeList.Second(), bound, hasElipsis, literals)
+			return matchWalk(macroList.Second(), codeList.Second(), bound, hasEllipsis, literals)
 		}
 	}
 	return false, nil
 }
 
-func matchElipsis(macroList e.List, macroLength int, codeList e.List, bound bindings, literals map[e.Identifier]bool) (bool, bindings) {
+func matchEllipsis(macroList e.List, macroLength int, codeList e.List, bound bindings, literals map[e.Identifier]bool) (bool, bindings) {
 	macHead := macroList.First()
 	if macroList.Second() == e.NIL {
 		return matchWalk(macHead, codeList, bound, true, literals)
@@ -197,13 +197,13 @@ func matchElipsis(macroList e.List, macroLength int, codeList e.List, bound bind
 	return matchWalk(macroList.Second(), rest, bound, true, literals)
 }
 
-func matchFinalCodeExpression(macroList e.List, code e.Expr, bound bindings, hasElipsis bool, literals map[e.Identifier]bool) (bool, bindings) {
+func matchFinalCodeExpression(macroList e.List, code e.Expr, bound bindings, hasEllipsis bool, literals map[e.Identifier]bool) (bool, bindings) {
 	if macroList != e.NIL && macroList.Second() == e.NIL {
-		return matchWalk(macroList.First(), code, bound, hasElipsis, literals)
+		return matchWalk(macroList.First(), code, bound, hasEllipsis, literals)
 	}
 	if id := toIdentifier(macroList.First()); id == e.Identifier("...") {
 		bound[id] = e.NIL
-		return matchWalk(macroList.Second(), code, bound, hasElipsis, literals)
+		return matchWalk(macroList.Second(), code, bound, hasEllipsis, literals)
 	}
 	return false, nil
 }

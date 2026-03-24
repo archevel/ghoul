@@ -151,7 +151,7 @@ func TestMacrosBindCorrectlyCommonPatterns(t *testing.T) {
 	}
 }
 
-func TestMacrosBindCorrectlyWithElipsisPattern(t *testing.T) {
+func TestMacrosBindCorrectlyWithEllipsisPattern(t *testing.T) {
 	cases := []struct {
 		in               string
 		pattern          string

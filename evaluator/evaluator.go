@@ -90,7 +90,7 @@ func (ev *Evaluator) EvaluateWithContext(ctx context.Context, exprs e.Expr) (e.E
 	if exprs == e.NIL {
 		return exprs, nil
 	}
-	listExpr := wrappNonList(exprs)
+	listExpr := wrapNonList(exprs)
 	ev.conts = &contStack{sexprSeqEvalContinuationFor(listExpr, false)}
 
 	return ev.stepThroughContinuationsWithContext(ctx)
@@ -231,13 +231,13 @@ func makeIdentificationLookupContinuationFor(ident e.Expr, parent e.List) contin
 }
 func assignmentContinuationFor(assignment e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
-		valueExpr, val_ok := assignment.Tail()
-		if !val_ok {
+		valueExpr, valOk := assignment.Tail()
+		if !valOk {
 			ev.log.Trace("Failed evaluate assignment: %s", assignment)
 			return e.NIL, NewEvaluationError("Malformed assignment", assignment)
 		}
-		nilTail, nil_ok := valueExpr.Tail()
-		if val_ok && nil_ok && valueExpr != e.NIL && nilTail == e.NIL {
+		nilTail, nilOk := valueExpr.Tail()
+		if valOk && nilOk && valueExpr != e.NIL && nilTail == e.NIL {
 			ev.log.Trace("Pushing anonymous assigment func: %s", assignment)
 			ev.pushContinuation(func(value e.Expr, ev *Evaluator) (e.Expr, error) {
 				var env *environment = ev.env
@@ -486,8 +486,8 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 
 func defineContinuationFor(def e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
-		valueExpr, val_ok := def.Tail()
-		if !val_ok {
+		valueExpr, valOk := def.Tail()
+		if !valOk {
 			ev.log.Trace("Define has inproper fromat: %s", def)
 			return nil, NewEvaluationError("Bad syntax: invalid binding format", def)
 		}

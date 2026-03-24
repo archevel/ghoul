@@ -175,7 +175,7 @@ func TestParseSpecialIdentifiers(t *testing.T) {
 
 }
 
-func TestParseElipsis(t *testing.T) {
+func TestParseEllipsis(t *testing.T) {
 	cases := []struct {
 		in  string
 		out e.Expr
@@ -193,7 +193,7 @@ func TestParseElipsis(t *testing.T) {
 		}
 
 		if !c.out.Equiv(lp.First()) {
-			t.Errorf("Could not parse elipsis. Expected %s, but got %s", c.out.Repr(), lp.First().Repr())
+			t.Errorf("Could not parse ellipsis. Expected %s, but got %s", c.out.Repr(), lp.First().Repr())
 		}
 
 	}

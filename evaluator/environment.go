@@ -140,8 +140,8 @@ func lookupIdentifier(ident e.Expr, env *environment) (e.Expr, error) {
 }
 
 func newEnvWithEmptyScope(env *environment) *environment {
-	new_env := append(*env, &scope{})
-	return &new_env
+	newEnv := append(*env, &scope{})
+	return &newEnv
 }
 
 func currentScope(env *environment) *scope {

@@ -17,7 +17,7 @@ func list(expr e.Expr, exprs ...e.Expr) e.List {
 	return e.Cons(expr, tail)
 }
 
-func wrappNonList(expr e.Expr) e.List {
+func wrapNonList(expr e.Expr) e.List {
 	if list, ok := expr.(e.List); ok {
 		return list
 	}
