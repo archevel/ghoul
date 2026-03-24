@@ -165,14 +165,53 @@ func TestPossessFailsOnUnwrappableFunctions(t *testing.T) {
 	if !strings.Contains(errMsg, "could not be wrapped") {
 		t.Errorf("expected 'could not be wrapped' in error, got: %s", errMsg)
 	}
-	if !strings.Contains(errMsg, "channel") {
-		t.Errorf("expected mention of channel type, got: %s", errMsg)
-	}
-	if !strings.Contains(errMsg, "map") {
-		t.Errorf("expected mention of map type, got: %s", errMsg)
+	if !strings.Contains(errMsg, "unexported type") {
+		t.Errorf("expected mention of unexported type, got: %s", errMsg)
 	}
 	if !strings.Contains(errMsg, "--skip-unwrappable") {
 		t.Errorf("expected suggestion to use --skip-unwrappable, got: %s", errMsg)
+	}
+}
+
+func TestMapParametersWrappedAsMummy(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	if !strings.Contains(code, "lookupmap") {
+		t.Error("expected lookupmap to be generated (maps should be wrapped as mummy)")
+	}
+}
+
+func TestChannelParametersWrappedAsMummy(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	if !strings.Contains(code, "sendonchannel") {
+		t.Error("expected sendonchannel to be generated (channels should be wrapped as mummy)")
 	}
 }
 
@@ -199,12 +238,12 @@ func TestPossessSucceedsWithSkipUnwrappable(t *testing.T) {
 	if !strings.Contains(code, "\"add\"") {
 		t.Error("expected 'add' function to be wrapped")
 	}
-	// Unwrappable functions should NOT be present
-	if strings.Contains(code, "sendonchannel") {
-		t.Error("channel function should be skipped")
+	// Maps and channels are now wrapped as mummies
+	if !strings.Contains(code, "sendonchannel") {
+		t.Error("channel function should be wrapped")
 	}
-	if strings.Contains(code, "lookupmap") {
-		t.Error("map function should be skipped")
+	if !strings.Contains(code, "lookupmap") {
+		t.Error("map function should be wrapped")
 	}
 	// Variadic functions SHOULD be wrapped (consuming remaining args)
 	if !strings.Contains(code, "\"variadic\"") {

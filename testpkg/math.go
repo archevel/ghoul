@@ -90,12 +90,12 @@ func WithError(f func(string) (int, error), input string) (int, error) {
 	return f(input)
 }
 
-// SendOnChannel sends a value on a channel (unwrappable — channels not supported)
+// SendOnChannel sends a value on a channel
 func SendOnChannel(ch chan int, val int) {
 	ch <- val
 }
 
-// LookupMap looks up a key in a map (unwrappable — maps not supported)
+// LookupMap looks up a key in a map
 func LookupMap(m map[string]int, key string) (int, bool) {
 	v, ok := m[key]
 	return v, ok

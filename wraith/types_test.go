@@ -127,6 +127,12 @@ func TestQualifiedTypeToAlias(t *testing.T) {
 		{"[]github.com/archevel/ghoul/testpkg.Person", "[]testpkg.Person"},
 		{"fmt.Stringer", "fmt.Stringer"},
 		{"Person", "Person"},
+		{"map[string]int", "map[string]int"},
+		{"map[github.com/pkg.Foo]github.com/pkg.Bar", "map[pkg.Foo]pkg.Bar"},
+		{"chan int", "chan int"},
+		{"chan<- int", "chan<- int"},
+		{"<-chan int", "<-chan int"},
+		{"chan github.com/pkg.Foo", "chan pkg.Foo"},
 	}
 	for _, c := range cases {
 		result := qualifiedTypeToAlias(c.input)
@@ -266,22 +272,21 @@ func TestVariadicConversionForForeignType(t *testing.T) {
 	}
 }
 
-func TestUnsupportedTypeReasonForChannel(t *testing.T) {
+func TestChannelTypeIsSupported(t *testing.T) {
 	tm, _ := NewTypeMapper()
-	// Use a real types.Chan via go/types
 	chanType := types.NewChan(types.SendRecv, types.Typ[types.Int])
 	reason := tm.UnsupportedTypeReason(chanType)
-	if !strings.Contains(reason, "channel") {
-		t.Errorf("expected 'channel' in reason, got: %s", reason)
+	if reason != "" {
+		t.Errorf("channels should be supported, got reason: %s", reason)
 	}
 }
 
-func TestUnsupportedTypeReasonForMap(t *testing.T) {
+func TestMapTypeIsSupported(t *testing.T) {
 	tm, _ := NewTypeMapper()
 	mapType := types.NewMap(types.Typ[types.String], types.Typ[types.Int])
 	reason := tm.UnsupportedTypeReason(mapType)
-	if !strings.Contains(reason, "map") {
-		t.Errorf("expected 'map' in reason, got: %s", reason)
+	if reason != "" {
+		t.Errorf("maps should be supported, got reason: %s", reason)
 	}
 }
 

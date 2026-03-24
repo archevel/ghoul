@@ -358,11 +358,48 @@ func qualifiedTypeToAlias(typeStr string) string {
 		prefix += "[]"
 		inner = inner[2:]
 	}
+
+	// Handle map types: map[K]V where K and V may be qualified
+	if strings.HasPrefix(inner, "map[") {
+		bracketEnd := findMatchingBracket(inner, 3)
+		if bracketEnd > 0 {
+			keyType := qualifiedTypeToAlias(inner[4:bracketEnd])
+			valType := qualifiedTypeToAlias(inner[bracketEnd+1:])
+			return prefix + "map[" + keyType + "]" + valType
+		}
+	}
+
+	// Handle channel types: chan T, chan<- T, <-chan T
+	if strings.HasPrefix(inner, "chan<- ") {
+		return prefix + "chan<- " + qualifiedTypeToAlias(strings.TrimSpace(inner[6:]))
+	}
+	if strings.HasPrefix(inner, "<-chan ") {
+		return prefix + "<-chan " + qualifiedTypeToAlias(strings.TrimSpace(inner[6:]))
+	}
+	if strings.HasPrefix(inner, "chan ") {
+		return prefix + "chan " + qualifiedTypeToAlias(strings.TrimSpace(inner[4:]))
+	}
+
 	lastSlash := strings.LastIndex(inner, "/")
 	if lastSlash >= 0 {
 		inner = inner[lastSlash+1:]
 	}
 	return prefix + inner
+}
+
+func findMatchingBracket(s string, openPos int) int {
+	depth := 1
+	for i := openPos + 1; i < len(s); i++ {
+		if s[i] == '[' {
+			depth++
+		} else if s[i] == ']' {
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 // UnsupportedTypeReason returns a description of why a type can't be wrapped,
@@ -372,15 +409,10 @@ func (tm *TypeMapper) UnsupportedTypeReason(t types.Type) string {
 		return ""
 	}
 	switch underlying := t.Underlying().(type) {
-	case *types.Chan:
-		return fmt.Sprintf("channel type %s", t)
-	case *types.Map:
-		return fmt.Sprintf("map type %s", t)
 	case *types.Signature:
 		if underlying.Variadic() {
 			return fmt.Sprintf("variadic function type %s", t)
 		}
-		return ""
 	}
 	return ""
 }
