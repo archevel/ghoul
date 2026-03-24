@@ -21,7 +21,7 @@ func TestExpandHygienicMarksTemplateIdentifiers(t *testing.T) {
 	// Macro: (swap x y) -> (begin (define tmp x) (set! x y) (set! y tmp))
 	pattern := parseExpr(t, "(swap x y)")
 	body := parseExpr(t, "(begin (define tmp x) (set! x y) (set! y tmp))")
-	patternVars := ExtractPatternVars(pattern)
+	patternVars := ExtractPatternVars(pattern, nil)
 
 	macro := Macro{Pattern: pattern, Body: body, PatternVars: patternVars}
 
@@ -86,7 +86,7 @@ func TestExpandHygienicWithEllipsisSplicesBindings(t *testing.T) {
 	// Should expand to (begin a b c), not (begin a . (b c))
 	pattern := parseExpr(t, "(my-begin x ...)")
 	body := parseExpr(t, "(begin x ...)")
-	patternVars := ExtractPatternVars(pattern)
+	patternVars := ExtractPatternVars(pattern, nil)
 
 	macro := Macro{Pattern: pattern, Body: body, PatternVars: patternVars}
 
@@ -137,7 +137,7 @@ func TestMatchWithLiteralsRequiresExactMatch(t *testing.T) {
 	pattern := parseExpr(t, "(test-lit x arrow y)")
 	body := parseExpr(t, "(+ x y)")
 	literals := map[e.Identifier]bool{e.Identifier("arrow"): true}
-	patternVars := ExtractPatternVarsWithLiterals(pattern, literals)
+	patternVars := ExtractPatternVars(pattern, literals)
 
 	macro := Macro{Pattern: pattern, Body: body, PatternVars: patternVars, Literals: literals}
 
@@ -165,7 +165,7 @@ func TestMatchWithLiteralsRequiresExactMatch(t *testing.T) {
 func TestExpandHygienicWithDefinitionBindingsSkipsKnownIdentifiers(t *testing.T) {
 	pattern := parseExpr(t, "(mac x)")
 	body := parseExpr(t, "(+ x 1)")
-	patternVars := ExtractPatternVars(pattern)
+	patternVars := ExtractPatternVars(pattern, nil)
 
 	code := parseExpr(t, "(mac 5)")
 	macro := Macro{Pattern: pattern, Body: body, PatternVars: patternVars}
@@ -357,7 +357,7 @@ func TestExpandHygienicUserVarNamedTmpDoesNotConflict(t *testing.T) {
 	// Macro: (swap x y) -> (begin (define tmp x) (set! x y) (set! y tmp))
 	pattern := parseExpr(t, "(swap x y)")
 	body := parseExpr(t, "(begin (define tmp x) (set! x y) (set! y tmp))")
-	patternVars := ExtractPatternVars(pattern)
+	patternVars := ExtractPatternVars(pattern, nil)
 
 	macro := Macro{Pattern: pattern, Body: body, PatternVars: patternVars}
 

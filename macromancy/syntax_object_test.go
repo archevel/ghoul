@@ -197,7 +197,7 @@ func TestExtractPatternVars(t *testing.T) {
 	// Pattern: (swap x y)
 	pattern := e.Cons(e.Identifier("swap"), e.Cons(e.Identifier("x"), e.Cons(e.Identifier("y"), e.NIL)))
 
-	vars := ExtractPatternVars(pattern)
+	vars := ExtractPatternVars(pattern, nil)
 
 	// swap is the macro name (first element), x and y are pattern variables
 	if vars[e.Identifier("swap")] {
@@ -217,7 +217,7 @@ func TestExtractPatternVarsNested(t *testing.T) {
 		e.Cons(e.Cons(e.Cons(e.Identifier("x"), e.Cons(e.Identifier("v"), e.NIL)), e.NIL),
 			e.Cons(e.Identifier("body"), e.NIL)))
 
-	vars := ExtractPatternVars(pattern)
+	vars := ExtractPatternVars(pattern, nil)
 
 	if vars[e.Identifier("my-let")] {
 		t.Error("macro name should NOT be a pattern variable")
@@ -343,7 +343,7 @@ func TestExtractPatternVarsWithLiteralsExcludesLiterals(t *testing.T) {
 			e.Cons(e.Identifier("arrow"),
 				e.Cons(e.Identifier("y"), e.NIL))))
 	literals := map[e.Identifier]bool{e.Identifier("arrow"): true}
-	vars := ExtractPatternVarsWithLiterals(pattern, literals)
+	vars := ExtractPatternVars(pattern, literals)
 	if !vars[e.Identifier("x")] || !vars[e.Identifier("y")] {
 		t.Error("x and y should be pattern variables")
 	}
@@ -355,7 +355,7 @@ func TestExtractPatternVarsWithLiteralsExcludesLiterals(t *testing.T) {
 func TestExtractPatternVarsWithScopedIdentifier(t *testing.T) {
 	pattern := e.Cons(e.Identifier("mac"),
 		e.Cons(e.ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}}, e.NIL))
-	vars := ExtractPatternVars(pattern)
+	vars := ExtractPatternVars(pattern, nil)
 	if !vars[e.Identifier("x")] {
 		t.Error("ScopedIdentifier 'x' should be extracted as pattern variable by name")
 	}
@@ -364,7 +364,7 @@ func TestExtractPatternVarsWithScopedIdentifier(t *testing.T) {
 func TestCollectIdentifiersWithScopedEllipsis(t *testing.T) {
 	pattern := e.Cons(e.Identifier("mac"),
 		e.Cons(e.ScopedIdentifier{Name: "...", Marks: map[uint64]bool{1: true}}, e.NIL))
-	vars := ExtractPatternVars(pattern)
+	vars := ExtractPatternVars(pattern, nil)
 	if vars[e.Identifier("...")] {
 		t.Error("ellipsis should not be a pattern variable even as ScopedIdentifier")
 	}
@@ -379,7 +379,7 @@ func TestExtractPatternVarsWithLiteralsScopedIdentifier(t *testing.T) {
 				e.Cons(e.ScopedIdentifier{Name: "y", Marks: map[uint64]bool{1: true}}, e.NIL))))
 	literals := map[e.Identifier]bool{e.Identifier("arrow"): true}
 
-	vars := ExtractPatternVarsWithLiterals(pattern, literals)
+	vars := ExtractPatternVars(pattern, literals)
 
 	if !vars[e.Identifier("x")] || !vars[e.Identifier("y")] {
 		t.Error("x and y should be pattern variables")
@@ -394,7 +394,7 @@ func TestExtractPatternVarsWithLiteralsScopedEllipsis(t *testing.T) {
 		e.Cons(e.ScopedIdentifier{Name: "...", Marks: map[uint64]bool{1: true}}, e.NIL))
 	literals := map[e.Identifier]bool{}
 
-	vars := ExtractPatternVarsWithLiterals(pattern, literals)
+	vars := ExtractPatternVars(pattern, literals)
 
 	if vars[e.Identifier("...")] {
 		t.Error("ellipsis should not be a pattern variable even as ScopedIdentifier with literals")
@@ -405,7 +405,7 @@ func TestExtractPatternVarsWithNilLiterals(t *testing.T) {
 	pattern := e.Cons(e.Identifier("mac"),
 		e.Cons(e.Identifier("x"), e.Cons(e.Identifier("y"), e.NIL)))
 
-	vars := ExtractPatternVarsWithLiterals(pattern, nil)
+	vars := ExtractPatternVars(pattern, nil)
 
 	if !vars[e.Identifier("x")] || !vars[e.Identifier("y")] {
 		t.Error("with nil literals, all identifiers should be pattern variables")
@@ -413,7 +413,7 @@ func TestExtractPatternVarsWithNilLiterals(t *testing.T) {
 }
 
 func TestExtractPatternVarsWithLiteralsNonListPattern(t *testing.T) {
-	vars := ExtractPatternVarsWithLiterals(e.Identifier("foo"), nil)
+	vars := ExtractPatternVars(e.Identifier("foo"), nil)
 	if len(vars) != 0 {
 		t.Error("non-list pattern should return empty vars")
 	}
@@ -425,7 +425,7 @@ func TestExtractPatternVarsWithLiteralsNestedScopedIdentifier(t *testing.T) {
 		e.Cons(e.ScopedIdentifier{Name: "b", Marks: map[uint64]bool{1: true}}, e.NIL))
 	pattern := e.Cons(e.Identifier("mac"), e.Cons(inner, e.NIL))
 
-	vars := ExtractPatternVarsWithLiterals(pattern, nil)
+	vars := ExtractPatternVars(pattern, nil)
 
 	if !vars[e.Identifier("a")] || !vars[e.Identifier("b")] {
 		t.Error("nested ScopedIdentifiers should be extracted as pattern variables")

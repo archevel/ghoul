@@ -127,7 +127,7 @@ func extractMacros(rules e.List, literals map[e.Identifier]bool) ([]Macro, error
 		macros = append(macros, Macro{
 			Pattern:     pat,
 			Body:        bdyList.First(),
-			PatternVars: ExtractPatternVarsWithLiterals(pat, literals),
+			PatternVars: ExtractPatternVars(pat, literals),
 			Literals:    literals,
 		})
 
