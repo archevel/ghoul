@@ -63,6 +63,21 @@ func (g ghoul) RegisterFunction(name string, fn func(args e.List, ev *ev.Evaluat
 	g.evaluator.GetEnvironment().Register(name, fn)
 }
 
+func intBinOp(name string, op func(a, b e.Integer) (e.Expr, error)) func(e.List, *ev.Evaluator) (e.Expr, error) {
+	return func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+		fst, ok := args.First().(e.Integer)
+		if !ok {
+			return nil, fmt.Errorf("%s: expected integer as first argument, got %s", name, e.TypeName(args.First()))
+		}
+		t, _ := args.Tail()
+		snd, ok := t.First().(e.Integer)
+		if !ok {
+			return nil, fmt.Errorf("%s: expected integer as second argument, got %s", name, e.TypeName(t.First()))
+		}
+		return op(fst, snd)
+	}
+}
+
 func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 	env := ev.NewEnvironment()
 
@@ -86,47 +101,20 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 		return e.Boolean(fst && snd), nil
 	})
 
-	env.Register("<", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
-		fst, ok := args.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("<: expected integer as first argument, got %s", e.TypeName(args.First()))
-		}
-		t, _ := args.Tail()
-		snd, ok := t.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("<: expected integer as second argument, got %s", e.TypeName(t.First()))
-		}
-		return e.Boolean(fst < snd), nil
-	})
+	env.Register("<", intBinOp("<", func(a, b e.Integer) (e.Expr, error) {
+		return e.Boolean(a < b), nil
+	}))
 
-	env.Register("mod", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
-		fst, ok := args.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("mod: expected integer as first argument, got %s", e.TypeName(args.First()))
-		}
-		t, _ := args.Tail()
-		snd, ok := t.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("mod: expected integer as second argument, got %s", e.TypeName(t.First()))
-		}
-		if snd == 0 {
+	env.Register("mod", intBinOp("mod", func(a, b e.Integer) (e.Expr, error) {
+		if b == 0 {
 			return nil, fmt.Errorf("mod: division by zero")
 		}
-		return e.Integer(fst % snd), nil
-	})
+		return e.Integer(a % b), nil
+	}))
 
-	env.Register("+", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
-		fst, ok := args.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("+: expected integer as first argument, got %s", e.TypeName(args.First()))
-		}
-		t, _ := args.Tail()
-		snd, ok := t.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("+: expected integer as second argument, got %s", e.TypeName(t.First()))
-		}
-		return e.Integer(fst + snd), nil
-	})
+	env.Register("+", intBinOp("+", func(a, b e.Integer) (e.Expr, error) {
+		return e.Integer(a + b), nil
+	}))
 
 	env.Register("syntax->datum", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		arg := args.First()
