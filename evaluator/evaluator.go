@@ -178,37 +178,41 @@ func specialFormName(h e.Expr) e.Identifier {
 }
 
 func chooseEvaluation(expr e.Expr, parent e.List, maybeTailCall bool) (ret e.Expr, nextCont continuation, err error) {
-	h, t, isList := maybeSplitExpr(expr)
-	if quote, ok := expr.(*e.Quote); ok {
-		ret = quote.Quoted
-	} else if ident, ok := expr.(e.Identifier); ok {
-		nextCont = makeIdentificationLookupContinuationFor(ident, parent)
+	switch v := expr.(type) {
+	case *e.Quote:
+		ret = v.Quoted
+	case e.Identifier:
+		nextCont = makeIdentificationLookupContinuationFor(v, parent)
 		ret = e.NIL
-	} else if si, ok := expr.(e.ScopedIdentifier); ok {
-		nextCont = makeIdentificationLookupContinuationFor(si, parent)
+	case e.ScopedIdentifier:
+		nextCont = makeIdentificationLookupContinuationFor(v, parent)
 		ret = e.NIL
-	} else if !isList && h == nil {
-		ret = expr
-	} else if !isList {
-		err = NewEvaluationError("Malformed expression", parent)
-	} else {
-		sfn := specialFormName(h)
-		if sfn == DEFINE_SYNTAX_SPECIAL_FORM {
-			nextCont = defineSyntaxContinuationFor(t)
-		} else if sfn == DEFINE_SPECIAL_FORM {
-			nextCont = defineContinuationFor(t, maybeTailCall)
-		} else if sfn == LAMBDA_SPECIAL_FORM {
-			nextCont = lambdaContinuationFor(t)
-		} else if sfn == COND_SPECIAL_FORM {
-			nextCont = conditionalContinuationFor(t, maybeTailCall)
-		} else if sfn == ASSIGNMENT_SPECIAL_FORM {
-			nextCont = assignmentContinuationFor(t, maybeTailCall)
-		} else if sfn == BEGIN_SPECIAL_FORM {
-			nextCont = sexprSeqEvalContinuationFor(t, maybeTailCall)
-		} else {
-			nextCont = functionCallContinuationFor(expr.(e.List), maybeTailCall)
+	case e.List:
+		h, t, isList := maybeSplitExpr(expr)
+		if !isList {
+			err = NewEvaluationError("Malformed expression", parent)
+			return
 		}
+
 		ret = e.NIL
+		switch specialFormName(h) {
+		case DEFINE_SYNTAX_SPECIAL_FORM:
+			nextCont = defineSyntaxContinuationFor(t)
+		case DEFINE_SPECIAL_FORM:
+			nextCont = defineContinuationFor(t, maybeTailCall)
+		case LAMBDA_SPECIAL_FORM:
+			nextCont = lambdaContinuationFor(t)
+		case COND_SPECIAL_FORM:
+			nextCont = conditionalContinuationFor(t, maybeTailCall)
+		case ASSIGNMENT_SPECIAL_FORM:
+			nextCont = assignmentContinuationFor(t, maybeTailCall)
+		case BEGIN_SPECIAL_FORM:
+			nextCont = sexprSeqEvalContinuationFor(t, maybeTailCall)
+		default:
+			nextCont = functionCallContinuationFor(v, maybeTailCall)
+		}
+	default:
+		ret = expr
 	}
 
 	return
