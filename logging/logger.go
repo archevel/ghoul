@@ -83,12 +83,11 @@ func New(debug io.Writer, warn io.Writer) Logger {
 	}
 }
 
-func (l logger) Trace(msg string, args ...e.Expr) {
+func (l logger) log(level slog.Level, msg string, args []e.Expr) {
 	if l.slog == nil {
-		return // Disabled logger
+		return
 	}
 	if len(args) > 0 {
-		// Convert args to strings for printf-style formatting (backward compatibility)
 		strArgs := make([]any, len(args))
 		for i, expr := range args {
 			if expr == nil {
@@ -97,49 +96,13 @@ func (l logger) Trace(msg string, args ...e.Expr) {
 				strArgs[i] = expr.Repr()
 			}
 		}
-		l.slog.Log(nil, LevelTrace, msg, "args", strArgs)
+		l.slog.Log(nil, level, msg, "args", strArgs)
 	} else {
-		l.slog.Log(nil, LevelTrace, msg)
+		l.slog.Log(nil, level, msg)
 	}
 }
 
-func (l logger) Debug(msg string, args ...e.Expr) {
-	if l.slog == nil {
-		return // Disabled logger
-	}
-	if len(args) > 0 {
-		// Convert args to strings for printf-style formatting (backward compatibility)
-		strArgs := make([]any, len(args))
-		for i, expr := range args {
-			if expr == nil {
-				strArgs[i] = "<nil>"
-			} else {
-				strArgs[i] = expr.Repr()
-			}
-		}
-		l.slog.Debug(msg, "args", strArgs)
-	} else {
-		l.slog.Debug(msg)
-	}
-}
-
-func (l logger) Warn(msg string, args ...e.Expr) {
-	if l.slog == nil {
-		return // Disabled logger
-	}
-	if len(args) > 0 {
-		// Convert args to strings for printf-style formatting (backward compatibility)
-		strArgs := make([]any, len(args))
-		for i, expr := range args {
-			if expr == nil {
-				strArgs[i] = "<nil>"
-			} else {
-				strArgs[i] = expr.Repr()
-			}
-		}
-		l.slog.Warn(msg, "args", strArgs)
-	} else {
-		l.slog.Warn(msg)
-	}
-}
+func (l logger) Trace(msg string, args ...e.Expr) { l.log(LevelTrace, msg, args) }
+func (l logger) Debug(msg string, args ...e.Expr) { l.log(slog.LevelDebug, msg, args) }
+func (l logger) Warn(msg string, args ...e.Expr)  { l.log(slog.LevelWarn, msg, args) }
 
