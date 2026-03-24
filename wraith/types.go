@@ -4,17 +4,15 @@ import (
 	"fmt"
 	"go/types"
 	"io"
+	"strings"
 	"text/template"
 )
 
-// TypeMapper handles conversion between Go types and Ghoul expressions
 type TypeMapper struct {
-	// Maps Go type names to Ghoul expression types
 	primitiveMap map[string]string
 	templates    map[string]*template.Template
 }
 
-// NewTypeMapper creates a new type mapper with standard conversions
 func NewTypeMapper() (*TypeMapper, error) {
 	tm := &TypeMapper{
 		primitiveMap: map[string]string{
@@ -32,7 +30,6 @@ func NewTypeMapper() (*TypeMapper, error) {
 			"uint64":  "Integer",
 			"float32": "Float",
 			"float64": "Float",
-			// TODO: Add slice support for primitive types
 		},
 		templates: make(map[string]*template.Template),
 	}
@@ -45,91 +42,80 @@ func NewTypeMapper() (*TypeMapper, error) {
 	return tm, nil
 }
 
-// ArgConversionInfo holds information about converting a function argument
+type FuncParamInfo struct {
+	Type      string
+	GhoulType string // e.g. "Integer", "String", empty for complex
+}
+
+type FuncSignatureInfo struct {
+	Params  []FuncParamInfo
+	Results []FuncParamInfo
+}
+
 type ArgConversionInfo struct {
-	N           int    // Argument index
-	Name        string // Parameter name
-	Type        string // Go type string
-	BuiltInType string // Ghoul expression type (empty for Foreign)
+	N             int
+	Name          string
+	Type          string
+	BuiltInType   string
+	FuncSignature *FuncSignatureInfo
 }
 
-// ResultConversionInfo holds information about converting function results
 type ResultConversionInfo struct {
-	Index int    // Result index
-	Type  string // Go type string
-	Name  string // Result variable name
+	Index int
+	Type  string
+	Name  string
 }
 
-// initializeTemplates creates the code generation templates
 func (tm *TypeMapper) initializeTemplates() error {
-	// Template for converting built-in types (int, string, bool, float)
 	builtInTypeTemplate := `
-	var {{.Name}} {{.Type}}
-
-	switch v := args.First().(type) {
-		case e.{{.BuiltInType}}:
-			{{.Name}} = {{.Type}}(v)
-		case *e.{{.BuiltInType}}:
-			{{.Name}} = {{.Type}}(*v)
-		case e.Foreign:
-			switch vv := v.Val().(type) {
-			case *{{.Type}}:
-				{{.Name}} = *vv
-			case {{.Type}}:
-				{{.Name}} = vv
-			default:
-				return nil, fmt.Errorf("{{.Name}}: cannot convert argument to {{.Type}}, got %T", v.Val())
-			}
-		case *e.Foreign:
-			switch vv := v.Val().(type) {
-			case *{{.Type}}:
-				{{.Name}} = *vv
-			case {{.Type}}:
-				{{.Name}} = vv
-			default:
-				return nil, fmt.Errorf("{{.Name}}: cannot convert argument to {{.Type}}, got %T", v.Val())
-			}
-		default:
-			return nil, fmt.Errorf("{{.Name}}: expected {{.BuiltInType}} or Foreign, got %T", v)
+	ghoulArg_{{.Name}} := args.First()
+	{{.Name}}_val, ok := ghoulArg_{{.Name}}.(e.{{.BuiltInType}})
+	if !ok {
+		return nil, fmt.Errorf("expected {{.BuiltInType | lower}} for parameter '{{.Name}}', got %s", e.TypeName(ghoulArg_{{.Name}}))
 	}
-
-	// Move to next argument
+	{{.Name}} := {{.Type}}({{.Name}}_val)
 	args, _ = args.Tail()
 `
 
-	// Template for converting structs and interfaces to Foreign
 	foreignTypeTemplate := `
-	var {{.Name}} {{.Type}}
-
-	switch f := args.First().(type) {
-	case e.Foreign:
-		switch v := f.Val().(type) {
-		case *{{.Type}}:
-			{{.Name}} = *v
-		case {{.Type}}:
-			{{.Name}} = v
-		default:
-			return nil, fmt.Errorf("{{.Name}}: cannot convert argument to {{.Type}}, got %T", v)
-		}
-	case *e.Foreign:
-		switch v := f.Val().(type) {
-		case *{{.Type}}:
-			{{.Name}} = *v
-		case {{.Type}}:
-			{{.Name}} = v
-		default:
-			return nil, fmt.Errorf("{{.Name}}: cannot convert argument to {{.Type}}, got %T", v)
-		}
-	default:
-		return nil, fmt.Errorf("{{.Name}}: expected Foreign type containing {{.Type}}, got %T", f)
+	ghoulArg_{{.Name}} := args.First()
+	mummy_{{.Name}}, ok := ghoulArg_{{.Name}}.(*mummy.Mummy)
+	if !ok {
+		return nil, fmt.Errorf("expected mummy for parameter '{{.Name}}', got %s", e.TypeName(ghoulArg_{{.Name}}))
 	}
-
-	// Move to next argument
+	var {{.Name}} {{.Type}}
+	if mummy_{{.Name}}.Unwrap() != nil {
+		{{.Name}}, ok = mummy_{{.Name}}.Unwrap().({{.Type}})
+		if !ok {
+			{{.Name}}_ptr, ok := mummy_{{.Name}}.Unwrap().(*{{.Type}})
+			if !ok {
+				return nil, fmt.Errorf("parameter '{{.Name}}': mummy contains %T, expected {{.Type}}", mummy_{{.Name}}.Unwrap())
+			}
+			{{.Name}} = *{{.Name}}_ptr
+		}
+	}
 	args, _ = args.Tail()
 `
+
+	funcMap := template.FuncMap{
+		"lower": func(s string) string {
+			switch s {
+			case "Integer":
+				return "integer"
+			case "String":
+				return "string"
+			case "Boolean":
+				return "boolean"
+			case "Float":
+				return "float"
+			default:
+				return s
+			}
+		},
+	}
 
 	var err error
-	tm.templates["builtin"], err = template.New("builtin").Parse(builtInTypeTemplate)
+	tm.templates["builtin"], err = template.New("builtin").Funcs(funcMap).Parse(builtInTypeTemplate)
 	if err != nil {
 		return fmt.Errorf("failed to parse builtin type template: %w", err)
 	}
@@ -142,8 +128,11 @@ func (tm *TypeMapper) initializeTemplates() error {
 	return nil
 }
 
-// GenerateArgumentConversion generates code to convert a Ghoul argument to a Go type
 func (tm *TypeMapper) GenerateArgumentConversion(info ArgConversionInfo, w io.Writer) error {
+	if info.FuncSignature != nil {
+		return tm.generateFunctionAdapter(info, w)
+	}
+
 	var templateName string
 	if info.BuiltInType != "" {
 		templateName = "builtin"
@@ -159,48 +148,163 @@ func (tm *TypeMapper) GenerateArgumentConversion(info ArgConversionInfo, w io.Wr
 	return template.Execute(w, info)
 }
 
-// MapGoTypeToGhoul maps a Go type to its corresponding Ghoul expression type
-func (tm *TypeMapper) MapGoTypeToGhoul(goType types.Type) (ghouType string, isForeign bool) {
+func (tm *TypeMapper) generateFunctionAdapter(info ArgConversionInfo, w io.Writer) error {
+	sig := info.FuncSignature
+	name := info.Name
+
+	// Assert the argument is a Ghoul Function
+	fmt.Fprintf(w, "\tghoulArg_%s := args.First()\n", name)
+	fmt.Fprintf(w, "\tghoulFunc_%s, ok := ghoulArg_%s.(ghoulEval.Function)\n", name, name)
+	fmt.Fprintf(w, "\tif !ok {\n")
+	fmt.Fprintf(w, "\t\treturn nil, fmt.Errorf(\"expected function for parameter '%s', got %%s\", e.TypeName(ghoulArg_%s))\n", name, name)
+	fmt.Fprintf(w, "\t}\n")
+
+	// Build the Go function adapter signature
+	fmt.Fprintf(w, "\t%s := %s{\n", name, info.Type)
+
+	// Build ghoul argument list from Go parameters (in reverse to build cons list)
+	fmt.Fprintf(w, "\t\tvar ghoulArgs e.List = e.NIL\n")
+	for i := len(sig.Params) - 1; i >= 0; i-- {
+		p := sig.Params[i]
+		if p.GhoulType != "" {
+			fmt.Fprintf(w, "\t\tghoulArgs = e.Cons(e.%s(p%d), ghoulArgs)\n", p.GhoulType, i)
+		} else {
+			fmt.Fprintf(w, "\t\tghoulArgs = e.Cons(mummy.Entomb(p%d, \"%s\"), ghoulArgs)\n", i, p.Type)
+		}
+	}
+
+	if len(sig.Results) == 0 {
+		fmt.Fprintf(w, "\t\t(*ghoulFunc_%s.Fun)(ghoulArgs, ev)\n", name)
+	} else if len(sig.Results) == 1 {
+		fmt.Fprintf(w, "\t\tresult, _ := (*ghoulFunc_%s.Fun)(ghoulArgs, ev)\n", name)
+		r := sig.Results[0]
+		fmt.Fprintf(w, "\t\treturn %s\n", tm.ghoulToGoConversion("result", r))
+	} else {
+		fmt.Fprintf(w, "\t\tresult, _ := (*ghoulFunc_%s.Fun)(ghoulArgs, ev)\n", name)
+		for i, r := range sig.Results {
+			if i == 0 {
+				fmt.Fprintf(w, "\t\tresultList := result.(e.List)\n")
+			}
+			varName := fmt.Sprintf("goResult%d", i)
+			fmt.Fprintf(w, "\t\t%s := %s\n", varName, tm.ghoulToGoConversion("resultList.First()", r))
+			if i < len(sig.Results)-1 {
+				fmt.Fprintf(w, "\t\tresultList, _ = resultList.Tail()\n")
+			}
+		}
+		fmt.Fprintf(w, "\t\treturn ")
+		for i := range sig.Results {
+			if i > 0 {
+				fmt.Fprint(w, ", ")
+			}
+			fmt.Fprintf(w, "goResult%d", i)
+		}
+		fmt.Fprint(w, "\n")
+	}
+
+	fmt.Fprintf(w, "\t}\n")
+	fmt.Fprintf(w, "\targs, _ = args.Tail()\n")
+	return nil
+}
+
+func (tm *TypeMapper) ghoulToGoConversion(exprVar string, param FuncParamInfo) string {
+	switch param.GhoulType {
+	case "Integer":
+		return fmt.Sprintf("%s(%s.(e.Integer))", param.Type, exprVar)
+	case "String":
+		return fmt.Sprintf("%s(%s.(e.String))", param.Type, exprVar)
+	case "Boolean":
+		return fmt.Sprintf("%s(%s.(e.Boolean))", param.Type, exprVar)
+	case "Float":
+		return fmt.Sprintf("%s(%s.(e.Float))", param.Type, exprVar)
+	default:
+		return fmt.Sprintf("%s.(*mummy.Mummy).Unwrap().(%s)", exprVar, param.Type)
+	}
+}
+
+func (tm *TypeMapper) MapGoTypeToGhoul(goType types.Type) (ghoulType string, isForeign bool) {
 	typeStr := goType.String()
 
-	// Check for primitive types
 	if ghoulType, exists := tm.primitiveMap[typeStr]; exists {
 		return ghoulType, false
 	}
 
-	// Handle pointer types
 	if ptr, ok := goType.(*types.Pointer); ok {
 		if ghoulType, exists := tm.primitiveMap[ptr.Elem().String()]; exists {
 			return ghoulType, false
 		}
 	}
 
-	// Handle slices of primitive types
 	if slice, ok := goType.(*types.Slice); ok {
 		if tm.isPrimitiveType(slice.Elem()) {
-			// For now, treat slices as Foreign
-			// TODO: Implement List conversion for primitive slices
 			return "", true
 		}
 	}
 
-	// Default to Foreign for complex types
 	return "", true
 }
 
-// isPrimitiveType checks if a type is a Go primitive that maps to Ghoul
+func (tm *TypeMapper) IsFunction(goType types.Type) bool {
+	_, ok := goType.(*types.Signature)
+	return ok
+}
+
+func (tm *TypeMapper) BuildFuncSignature(goType types.Type) *FuncSignatureInfo {
+	sig, ok := goType.(*types.Signature)
+	if !ok {
+		return nil
+	}
+
+	info := &FuncSignatureInfo{}
+
+	params := sig.Params()
+	for i := 0; i < params.Len(); i++ {
+		p := params.At(i)
+		ghoulType, _ := tm.MapGoTypeToGhoul(p.Type())
+		info.Params = append(info.Params, FuncParamInfo{
+			Type:      qualifiedTypeToAlias(p.Type().String()),
+			GhoulType: ghoulType,
+		})
+	}
+
+	results := sig.Results()
+	for i := 0; i < results.Len(); i++ {
+		r := results.At(i)
+		ghoulType, _ := tm.MapGoTypeToGhoul(r.Type())
+		info.Results = append(info.Results, FuncParamInfo{
+			Type:      qualifiedTypeToAlias(r.Type().String()),
+			GhoulType: ghoulType,
+		})
+	}
+
+	return info
+}
+
+func qualifiedTypeToAlias(typeStr string) string {
+	prefix := ""
+	inner := typeStr
+	for strings.HasPrefix(inner, "*") {
+		prefix += "*"
+		inner = inner[1:]
+	}
+	if strings.HasPrefix(inner, "[]") {
+		prefix += "[]"
+		inner = inner[2:]
+	}
+	lastSlash := strings.LastIndex(inner, "/")
+	if lastSlash >= 0 {
+		inner = inner[lastSlash+1:]
+	}
+	return prefix + inner
+}
+
 func (tm *TypeMapper) isPrimitiveType(t types.Type) bool {
 	_, exists := tm.primitiveMap[t.String()]
 	return exists
 }
 
-// GenerateResultConversion generates code to convert Go results back to Ghoul expressions
 func (tm *TypeMapper) GenerateResultConversion(results []ResultConversionInfo, funcName string, w io.Writer) error {
-	// Generate function call
-	fmt.Fprintf(w, "\n\t// Call original Go function\n")
 	fmt.Fprintf(w, "\t")
 
-	// Generate result assignment
 	if len(results) > 0 {
 		for i, result := range results {
 			if i > 0 {
@@ -212,12 +316,8 @@ func (tm *TypeMapper) GenerateResultConversion(results []ResultConversionInfo, f
 	}
 
 	fmt.Fprintf(w, "%s(", funcName)
-
-	// We'll generate parameter passing separately
-	// For now just close the function call
 	fmt.Fprintf(w, ")\n")
 
-	// Handle errors first (typically last result)
 	errorIndex := -1
 	for i, result := range results {
 		if result.Type == "error" {
@@ -232,7 +332,6 @@ func (tm *TypeMapper) GenerateResultConversion(results []ResultConversionInfo, f
 		fmt.Fprintf(w, "\t}\n")
 	}
 
-	// Convert non-error results to Ghoul expressions
 	nonErrorResults := make([]ResultConversionInfo, 0, len(results))
 	for i, result := range results {
 		if i != errorIndex {
@@ -241,14 +340,11 @@ func (tm *TypeMapper) GenerateResultConversion(results []ResultConversionInfo, f
 	}
 
 	if len(nonErrorResults) == 0 {
-		// No return value, return NIL
 		fmt.Fprintf(w, "\treturn e.NIL, nil\n")
 	} else if len(nonErrorResults) == 1 {
-		// Single return value
 		result := nonErrorResults[0]
 		fmt.Fprintf(w, "\treturn %s, nil\n", tm.convertValueToExpression(result.Name, result.Type))
 	} else {
-		// Multiple return values - create a list
 		fmt.Fprintf(w, "\treturn ")
 		for _, result := range nonErrorResults {
 			fmt.Fprintf(w, "e.Cons(%s, ", tm.convertValueToExpression(result.Name, result.Type))
@@ -263,11 +359,9 @@ func (tm *TypeMapper) GenerateResultConversion(results []ResultConversionInfo, f
 	return nil
 }
 
-// convertValueToExpression converts a Go value to a Ghoul expression
 func (tm *TypeMapper) convertValueToExpression(valueName, goType string) string {
-	// Check if it's a primitive type
-	if ghouType, exists := tm.primitiveMap[goType]; exists {
-		switch ghouType {
+	if ghoulType, exists := tm.primitiveMap[goType]; exists {
+		switch ghoulType {
 		case "Boolean":
 			return fmt.Sprintf("e.Boolean(%s)", valueName)
 		case "Integer":
@@ -279,11 +373,9 @@ func (tm *TypeMapper) convertValueToExpression(valueName, goType string) string 
 		}
 	}
 
-	// For complex types, wrap in Foreign
-	return fmt.Sprintf("e.Wrapp(%s)", valueName)
+	return fmt.Sprintf("mummy.Entomb(%s, \"%s\")", valueName, goType)
 }
 
-// GenerateParameterList generates the parameter list for calling the Go function
 func (tm *TypeMapper) GenerateParameterList(params []string, w io.Writer) error {
 	for i, param := range params {
 		if i > 0 {

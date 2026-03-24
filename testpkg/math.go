@@ -65,3 +65,34 @@ func (p *Person) SetAge(age int) {
 func NewPerson(name string, age int) *Person {
 	return &Person{Name: name, Age: age}
 }
+
+// Greeter is an interface for things that can greet
+type Greeter interface {
+	Greet(name string) string
+}
+
+// Apply calls the given function with two integers and returns the result
+func Apply(f func(int, int) int, a, b int) int {
+	return f(a, b)
+}
+
+// Transform applies a transformation function to each element of a slice
+func Transform(numbers []int, f func(int) int) []int {
+	result := make([]int, len(numbers))
+	for i, n := range numbers {
+		result[i] = f(n)
+	}
+	return result
+}
+
+// WithError calls a function that may return an error
+func WithError(f func(string) (int, error), input string) (int, error) {
+	return f(input)
+}
+
+// ForEach calls a void callback for each element
+func ForEach(numbers []int, f func(int)) {
+	for _, n := range numbers {
+		f(n)
+	}
+}

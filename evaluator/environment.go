@@ -53,6 +53,7 @@ func canonicalMarks(marks map[uint64]bool) string {
 
 type scope map[scopeKey]e.Expr
 
+type Environment = environment
 type environment []*scope
 
 type Registrator interface {

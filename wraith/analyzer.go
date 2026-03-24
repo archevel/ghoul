@@ -28,11 +28,27 @@ type ParameterInfo struct {
 	Type types.Type  // Type information
 }
 
-// PackageInfo holds all discovered information about a package
+type StructInfo struct {
+	Name   string
+	Fields []FieldInfo
+}
+
+type FieldInfo struct {
+	Name string
+	Type types.Type
+}
+
+type InterfaceInfo struct {
+	Name    string
+	Methods []FunctionInfo
+}
+
 type PackageInfo struct {
-	Name      string          // Package name
-	ImportPath string         // Import path
-	Functions []FunctionInfo  // All exported functions
+	Name       string
+	ImportPath string
+	Functions  []FunctionInfo
+	Structs    []StructInfo
+	Interfaces []InterfaceInfo
 }
 
 // NewAnalyzer creates a new package analyzer
@@ -83,10 +99,11 @@ func (a *Analyzer) AnalyzePackage() (*PackageInfo, error) {
 		Functions:  []FunctionInfo{},
 	}
 
-	// Analyze each source file in the package
 	for _, file := range pkg.Syntax {
-		functions := a.extractFunctions(file, pkg)
+		functions, structs, interfaces := a.extractDeclarations(file, pkg)
 		packageInfo.Functions = append(packageInfo.Functions, functions...)
+		packageInfo.Structs = append(packageInfo.Structs, structs...)
+		packageInfo.Interfaces = append(packageInfo.Interfaces, interfaces...)
 	}
 
 	if a.config.Verbose {
@@ -96,9 +113,10 @@ func (a *Analyzer) AnalyzePackage() (*PackageInfo, error) {
 	return packageInfo, nil
 }
 
-// extractFunctions extracts all exported functions from an AST file
-func (a *Analyzer) extractFunctions(file *ast.File, pkg *packages.Package) []FunctionInfo {
+func (a *Analyzer) extractDeclarations(file *ast.File, pkg *packages.Package) ([]FunctionInfo, []StructInfo, []InterfaceInfo) {
 	var functions []FunctionInfo
+	var structs []StructInfo
+	var interfaces []InterfaceInfo
 
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch node := n.(type) {
@@ -109,11 +127,52 @@ func (a *Analyzer) extractFunctions(file *ast.File, pkg *packages.Package) []Fun
 					functions = append(functions, *function)
 				}
 			}
+		case *ast.GenDecl:
+			for _, spec := range node.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok || !typeSpec.Name.IsExported() {
+					continue
+				}
+				if structType, ok := typeSpec.Type.(*ast.StructType); ok {
+					structInfo := a.processStructType(typeSpec.Name.Name, structType, pkg)
+					if structInfo != nil {
+						structs = append(structs, *structInfo)
+					}
+				}
+				if ifaceType, ok := typeSpec.Type.(*ast.InterfaceType); ok {
+					ifaceInfo := a.processInterfaceType(typeSpec.Name.Name, ifaceType, pkg)
+					if ifaceInfo != nil {
+						interfaces = append(interfaces, *ifaceInfo)
+					}
+				}
+			}
 		}
 		return true
 	})
 
-	return functions
+	return functions, structs, interfaces
+}
+
+func (a *Analyzer) processStructType(name string, structType *ast.StructType, pkg *packages.Package) *StructInfo {
+	var fields []FieldInfo
+	for _, field := range structType.Fields.List {
+		if len(field.Names) == 0 || !field.Names[0].IsExported() {
+			continue
+		}
+		fieldType := pkg.TypesInfo.TypeOf(field.Type)
+		for _, fieldName := range field.Names {
+			if fieldName.IsExported() {
+				fields = append(fields, FieldInfo{
+					Name: fieldName.Name,
+					Type: fieldType,
+				})
+			}
+		}
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	return &StructInfo{Name: name, Fields: fields}
 }
 
 // processFunctionDecl processes a function declaration and extracts relevant information
@@ -195,6 +254,57 @@ func (a *Analyzer) processFunctionDecl(funcDecl *ast.FuncDecl, pkg *packages.Pac
 		Doc:      doc,
 		Receiver: receiver,
 	}
+}
+
+func (a *Analyzer) processInterfaceType(name string, ifaceType *ast.InterfaceType, pkg *packages.Package) *InterfaceInfo {
+	var methods []FunctionInfo
+	for _, method := range ifaceType.Methods.List {
+		if len(method.Names) == 0 || !method.Names[0].IsExported() {
+			continue
+		}
+		methodName := method.Names[0].Name
+		methodType := pkg.TypesInfo.TypeOf(method.Type)
+		sig, ok := methodType.(*types.Signature)
+		if !ok {
+			continue
+		}
+
+		var params []ParameterInfo
+		for i := 0; i < sig.Params().Len(); i++ {
+			p := sig.Params().At(i)
+			params = append(params, ParameterInfo{
+				Name: p.Name(),
+				Type: p.Type(),
+			})
+		}
+
+		var results []ParameterInfo
+		for i := 0; i < sig.Results().Len(); i++ {
+			r := sig.Results().At(i)
+			rName := r.Name()
+			if rName == "" {
+				if isErrorType(r.Type()) {
+					rName = "err"
+				} else {
+					rName = fmt.Sprintf("result%d", i)
+				}
+			}
+			results = append(results, ParameterInfo{
+				Name: rName,
+				Type: r.Type(),
+			})
+		}
+
+		methods = append(methods, FunctionInfo{
+			Name:    methodName,
+			Params:  params,
+			Results: results,
+		})
+	}
+	if len(methods) == 0 {
+		return nil
+	}
+	return &InterfaceInfo{Name: name, Methods: methods}
 }
 
 // getFieldName extracts the name from a field, handling unnamed fields
