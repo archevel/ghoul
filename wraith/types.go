@@ -63,7 +63,6 @@ type ArgConversionInfo struct {
 	BuiltInType   string
 	FuncSignature *FuncSignatureInfo
 	IsVariadic    bool
-	IsOpaque      bool
 }
 
 type ResultConversionInfo struct {
@@ -141,10 +140,6 @@ func (tm *TypeMapper) GenerateArgumentConversion(info ArgConversionInfo, w io.Wr
 	if info.FuncSignature != nil {
 		return tm.generateFunctionAdapter(info, w)
 	}
-	if info.IsOpaque {
-		return tm.generateOpaqueConversion(info, w)
-	}
-
 	var templateName string
 	if info.BuiltInType != "" {
 		templateName = "builtin"
@@ -158,20 +153,6 @@ func (tm *TypeMapper) GenerateArgumentConversion(info ArgConversionInfo, w io.Wr
 	}
 
 	return template.Execute(w, info)
-}
-
-// generateOpaqueConversion handles unexported types that can't be referenced
-// by name from the sarcophagus. The value is passed through as-is from the mummy.
-func (tm *TypeMapper) generateOpaqueConversion(info ArgConversionInfo, w io.Writer) error {
-	name := info.Name
-	fmt.Fprintf(w, "\tghoulArg_%s := args.First()\n", name)
-	fmt.Fprintf(w, "\tmummy_%s, ok := ghoulArg_%s.(*mummy.Mummy)\n", name, name)
-	fmt.Fprintf(w, "\tif !ok {\n")
-	fmt.Fprintf(w, "\t\treturn nil, fmt.Errorf(\"expected mummy for parameter '%s', got %%s\", e.TypeName(ghoulArg_%s))\n", name, name)
-	fmt.Fprintf(w, "\t}\n")
-	fmt.Fprintf(w, "\t%s := mummy_%s.Unwrap()\n", name, name)
-	fmt.Fprintf(w, "\targs, _ = args.Tail()\n")
-	return nil
 }
 
 func (tm *TypeMapper) generateVariadicConversion(info ArgConversionInfo, w io.Writer) error {

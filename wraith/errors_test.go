@@ -471,6 +471,61 @@ func TestVariablesExposed(t *testing.T) {
 	}
 }
 
+func TestMultiNameFieldsInConstructor(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	// Point has X, Y int (multi-name field) — constructor should have both
+	if !strings.Contains(code, "make-point") {
+		t.Fatal("expected make-point constructor")
+	}
+	idx := strings.Index(code, "func makepoint")
+	if idx < 0 {
+		t.Fatal("could not find makepoint function")
+	}
+	funcBody := code[idx : idx+500]
+	if !strings.Contains(funcBody, "X") || !strings.Contains(funcBody, "Y") {
+		t.Errorf("expected both X and Y fields in constructor:\n%s", funcBody)
+	}
+}
+
+func TestUnexportedInterfaceMethodsSkipped(t *testing.T) {
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+
+	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	code := string(content)
+
+	// Formatter has Format (exported) and internal (unexported)
+	if !strings.Contains(code, "formatter-format") {
+		t.Error("expected formatter-format for exported method")
+	}
+	if strings.Contains(code, "formatter-internal") {
+		t.Error("unexported method 'internal' should be skipped")
+	}
+}
+
 func TestResultHandlingErrorFunction(t *testing.T) {
 	testpkgPath, _ := filepath.Abs("../testpkg")
 	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {

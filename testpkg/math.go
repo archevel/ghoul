@@ -66,6 +66,18 @@ func NewPerson(name string, age int) *Person {
 	return &Person{Name: name, Age: age}
 }
 
+// Point has multi-name fields (X, Y share a type declaration)
+type Point struct {
+	X, Y int
+}
+
+// Formatter has both exported and unexported methods
+type Formatter interface {
+	Format(val int) string
+	// unexported method — should be skipped by wraith
+	internal()
+}
+
 // Greeter is an interface for things that can greet
 type Greeter interface {
 	Greet(name string) string

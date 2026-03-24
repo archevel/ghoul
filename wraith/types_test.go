@@ -306,6 +306,56 @@ func TestUnsupportedTypeReasonForNil(t *testing.T) {
 	}
 }
 
+func TestFindMatchingBracketSuccess(t *testing.T) {
+	result := findMatchingBracket("map[string]int", 3)
+	if result != 10 {
+		t.Errorf("expected 10, got %d", result)
+	}
+}
+
+func TestFindMatchingBracketNested(t *testing.T) {
+	result := findMatchingBracket("map[map[int]int]string", 3)
+	if result != 15 {
+		t.Errorf("expected 15, got %d", result)
+	}
+}
+
+func TestFindMatchingBracketNoMatch(t *testing.T) {
+	result := findMatchingBracket("map[string", 3)
+	if result != -1 {
+		t.Errorf("expected -1 for no match, got %d", result)
+	}
+}
+
+func TestIsErrorTypeWithNil(t *testing.T) {
+	if isErrorType(nil) {
+		t.Error("nil should not be an error type")
+	}
+}
+
+func TestIsErrorTypeWithError(t *testing.T) {
+	// Create a real error type via go/types universe
+	errorType := types.Universe.Lookup("error").Type()
+	if !isErrorType(errorType) {
+		t.Error("error type should be recognized")
+	}
+}
+
+func TestIsErrorTypeWithNonError(t *testing.T) {
+	if isErrorType(types.Typ[types.Int]) {
+		t.Error("int should not be an error type")
+	}
+}
+
+func TestQualifiedTypeToAliasMapNoClosingBracket(t *testing.T) {
+	// Malformed map type — should handle gracefully
+	result := qualifiedTypeToAlias("map[string")
+	// Falls through to the default path since findMatchingBracket returns -1
+	if result != "map[string" {
+		t.Errorf("expected 'map[string', got '%s'", result)
+	}
+}
+
 func TestConvertValueToExpressionComplexType(t *testing.T) {
 	tm, _ := NewTypeMapper()
 	result := tm.convertValueToExpression("result", "*testpkg.Person")
