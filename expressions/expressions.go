@@ -156,7 +156,6 @@ func MarksEq(a, b map[uint64]bool) bool {
 type List interface {
 	First() Expr
 	Second() Expr
-	Head() Expr
 	Tail() (List, bool)
 	Expr
 }
@@ -177,10 +176,6 @@ func (p Pair) First() Expr {
 
 func (p Pair) Second() Expr {
 	return p.T
-}
-
-func (p Pair) Head() Expr {
-	return p.H
 }
 
 func (p Pair) Tail() (List, bool) {
@@ -257,10 +252,6 @@ func (e nilList) First() Expr {
 }
 
 func (e nilList) Second() Expr {
-	return NIL
-}
-
-func (e nilList) Head() Expr {
 	return NIL
 }
 

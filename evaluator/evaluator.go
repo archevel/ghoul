@@ -143,7 +143,7 @@ func sexprSeqEvalContinuationFor(exprs e.List, maybeTailCall bool) continuation 
 		} else if !ok {
 			return nil, NewEvaluationError("Malformed expression sequence", exprs)
 		}
-		head := exprs.Head()
+		head := exprs.First()
 		ev.log.Trace("Pushing continuation for evaluating head of expression sequence")
 		ev.pushContinuation(sexprEvalContinuationFor(head, exprs, maybeTailCall && t == e.NIL))
 		return e.NIL, nil
@@ -246,10 +246,10 @@ func assignmentContinuationFor(assignment e.List, maybeTailCall bool) continuati
 			ev.pushContinuation(func(value e.Expr, ev *Evaluator) (e.Expr, error) {
 				var env *environment = ev.env
 
-				ret, err := assign(assignment.Head(), value, env)
+				ret, err := assign(assignment.First(), value, env)
 				return ret, err
 			})
-			ev.pushContinuation(sexprEvalContinuationFor(valueExpr.Head(), valueExpr, maybeTailCall))
+			ev.pushContinuation(sexprEvalContinuationFor(valueExpr.First(), valueExpr, maybeTailCall))
 			return e.NIL, nil
 
 		} else {
@@ -269,8 +269,8 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 
 		alternative, ok := headList(conds)
 		if !ok {
-			ev.log.Trace("Malformed alternative of cond list. Head should be list, but was %s", conds.Head())
-			return nil, NewEvaluationError("Bad syntax: Malformed cond clause: "+conds.Head().Repr(), conds)
+			ev.log.Trace("Malformed alternative of cond list. Head should be list, but was %s", conds.First())
+			return nil, NewEvaluationError("Bad syntax: Malformed cond clause: "+conds.First().Repr(), conds)
 		}
 
 		if alternative == e.NIL {
@@ -289,7 +289,7 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 			return nil, NewEvaluationError("Bad syntax: Missing consequent", alternative)
 		}
 
-		predExpr := alternative.Head()
+		predExpr := alternative.First()
 		if specialFormName(predExpr) == ELSE_SPECIAL_FORM {
 			predExpr = e.Boolean(true)
 		}
@@ -297,7 +297,7 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 		nextPredOrConsequent := func(truthy e.Expr, ev *Evaluator) (e.Expr, error) {
 			if isTruthy(truthy) {
 				ev.log.Trace("Found truthy alternative pushing evaluation of consequent")
-				ev.pushContinuation(sexprEvalContinuationFor(consequent.Head(), conds, maybeTailCall))
+				ev.pushContinuation(sexprEvalContinuationFor(consequent.First(), conds, maybeTailCall))
 				return e.NIL, nil
 			}
 
@@ -328,7 +328,7 @@ func lambdaContinuationFor(lambda e.List) continuation {
 			fun := func(args e.List, ev *Evaluator) (e.Expr, error) {
 				ev.log.Trace("Pushing evaluation of lambda body and preparation of the lambdas scope")
 				ev.pushContinuation(sexprSeqEvalContinuationFor(body, true))
-				ev.pushContinuation(prepareScope(lambda.Head(), args, env))
+				ev.pushContinuation(prepareScope(lambda.First(), args, env))
 
 				return e.NIL, nil
 			}
@@ -353,9 +353,9 @@ func prepareScope(paramExpr e.Expr, args e.List, definitionEnv *environment) con
 
 		ev.log.Trace("Binding function arguments %s to parameter list %s", args, paramList)
 		for ok && paramList != e.NIL && args != e.NIL {
-			arg := args.Head()
+			arg := args.First()
 			args, _ = args.Tail()
-			param := paramList.Head()
+			param := paramList.First()
 			pl, ok := paramList.Tail()
 			if !ok {
 				variadicParam = paramList.Second()
@@ -394,7 +394,7 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 
 		// Macro calls must be intercepted before argument evaluation,
 		// since macros receive unevaluated syntax, not values.
-		if headVal, _ := resolveCallableHead(callable.Head(), ev.env); headVal != nil {
+		if headVal, _ := resolveCallableHead(callable.First(), ev.env); headVal != nil {
 			if st, ok := headVal.(SyntaxTransformer); ok {
 				ev.log.Trace("Expanding syntax transformer")
 				mark := freshMark()
@@ -469,13 +469,13 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 		}
 		ev.log.Trace("Pushing function application and function resolution")
 		ev.pushContinuation(applyFunc)
-		resolveFunc := sexprEvalContinuationFor(callable.Head(), callable, false)
+		resolveFunc := sexprEvalContinuationFor(callable.First(), callable, false)
 		ev.pushContinuation(resolveFunc)
 
 		funcArgs, ok := callable.Tail()
 		ev.log.Trace("Pushing collection and evaluation of function arguments")
 		for ok && funcArgs != e.NIL {
-			anArg := funcArgs.Head()
+			anArg := funcArgs.First()
 			ev.pushContinuation(collectArgs)
 			ev.pushContinuation(sexprEvalContinuationFor(anArg, callable, false))
 			funcArgs, ok = funcArgs.Tail()
@@ -506,8 +506,8 @@ func defineContinuationFor(def e.List, maybeTailCall bool) continuation {
 		}
 
 		ev.log.Trace("Pushing binding of variable and evaluation of definition value")
-		ev.pushContinuation(bindVar(def.Head()))
-		ev.pushContinuation(sexprEvalContinuationFor(valueExpr.Head(), valueExpr, maybeTailCall))
+		ev.pushContinuation(bindVar(def.First()))
+		ev.pushContinuation(sexprEvalContinuationFor(valueExpr.First(), valueExpr, maybeTailCall))
 		return e.NIL, nil
 	}
 }

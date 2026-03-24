@@ -37,7 +37,7 @@ func isTruthy(truth e.Expr) bool {
 func maybeSplitExpr(expr e.Expr) (e.Expr, e.List, bool) {
 	if list, ok := expr.(e.List); ok {
 		t, isList := list.Tail()
-		return list.Head(), t, isList
+		return list.First(), t, isList
 	}
 	return nil, nil, false
 }
