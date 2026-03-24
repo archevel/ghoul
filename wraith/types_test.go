@@ -201,6 +201,26 @@ func TestForeignTypeTemplateHandlesNil(t *testing.T) {
 	}
 }
 
+func TestGhoulToGoConversionAllTypes(t *testing.T) {
+	tm, _ := NewTypeMapper()
+	cases := []struct {
+		param    FuncParamInfo
+		expected string
+	}{
+		{FuncParamInfo{Type: "int", GhoulType: "Integer"}, "int(x.(e.Integer))"},
+		{FuncParamInfo{Type: "string", GhoulType: "String"}, "string(x.(e.String))"},
+		{FuncParamInfo{Type: "bool", GhoulType: "Boolean"}, "bool(x.(e.Boolean))"},
+		{FuncParamInfo{Type: "float64", GhoulType: "Float"}, "float64(x.(e.Float))"},
+		{FuncParamInfo{Type: "pkg.Foo", GhoulType: ""}, "x.(*mummy.Mummy).Unwrap().(pkg.Foo)"},
+	}
+	for _, c := range cases {
+		result := tm.ghoulToGoConversion("x", c.param)
+		if result != c.expected {
+			t.Errorf("ghoulToGoConversion(x, %v) = %q, expected %q", c.param, result, c.expected)
+		}
+	}
+}
+
 func TestConvertValueToExpressionComplexType(t *testing.T) {
 	tm, _ := NewTypeMapper()
 	result := tm.convertValueToExpression("result", "*testpkg.Person")

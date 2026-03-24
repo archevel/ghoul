@@ -215,7 +215,7 @@ func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperD
 			N:           0,
 			Name:        "receiver",
 			Type:        qualifiedTypeToAlias(funcInfo.Receiver.Type.String()),
-			BuiltInType: ifEmpty(ghoulType, ""),
+			BuiltInType: ghoulType,
 		}
 		if !isForeign && ghoulType != "" {
 			wrapper.ReceiverInfo.BuiltInType = ghoulType
@@ -657,11 +657,3 @@ func (g *Generator) generateSliceConstructor(structInfo StructInfo, importPath s
 	}
 }
 
-func ifEmpty(s, defaultVal string) string {
-	if s == "" {
-		return defaultVal
-	}
-	return s
-}
-
-// Remove duplicate isErrorType function - already defined in analyzer.go

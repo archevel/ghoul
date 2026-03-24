@@ -302,63 +302,6 @@ func (tm *TypeMapper) isPrimitiveType(t types.Type) bool {
 	return exists
 }
 
-func (tm *TypeMapper) GenerateResultConversion(results []ResultConversionInfo, funcName string, w io.Writer) error {
-	fmt.Fprintf(w, "\t")
-
-	if len(results) > 0 {
-		for i, result := range results {
-			if i > 0 {
-				fmt.Fprint(w, ", ")
-			}
-			fmt.Fprintf(w, "%s", result.Name)
-		}
-		fmt.Fprintf(w, " := ")
-	}
-
-	fmt.Fprintf(w, "%s(", funcName)
-	fmt.Fprintf(w, ")\n")
-
-	errorIndex := -1
-	for i, result := range results {
-		if result.Type == "error" {
-			errorIndex = i
-			break
-		}
-	}
-
-	if errorIndex >= 0 {
-		fmt.Fprintf(w, "\tif %s != nil {\n", results[errorIndex].Name)
-		fmt.Fprintf(w, "\t\treturn nil, fmt.Errorf(\"%s failed: %%w\", %s)\n", funcName, results[errorIndex].Name)
-		fmt.Fprintf(w, "\t}\n")
-	}
-
-	nonErrorResults := make([]ResultConversionInfo, 0, len(results))
-	for i, result := range results {
-		if i != errorIndex {
-			nonErrorResults = append(nonErrorResults, result)
-		}
-	}
-
-	if len(nonErrorResults) == 0 {
-		fmt.Fprintf(w, "\treturn e.NIL, nil\n")
-	} else if len(nonErrorResults) == 1 {
-		result := nonErrorResults[0]
-		fmt.Fprintf(w, "\treturn %s, nil\n", tm.convertValueToExpression(result.Name, result.Type))
-	} else {
-		fmt.Fprintf(w, "\treturn ")
-		for _, result := range nonErrorResults {
-			fmt.Fprintf(w, "e.Cons(%s, ", tm.convertValueToExpression(result.Name, result.Type))
-		}
-		fmt.Fprintf(w, "e.NIL")
-		for range nonErrorResults {
-			fmt.Fprint(w, ")")
-		}
-		fmt.Fprintf(w, ", nil\n")
-	}
-
-	return nil
-}
-
 func (tm *TypeMapper) convertValueToExpression(valueName, goType string) string {
 	if ghoulType, exists := tm.primitiveMap[goType]; exists {
 		switch ghoulType {
@@ -376,12 +319,3 @@ func (tm *TypeMapper) convertValueToExpression(valueName, goType string) string 
 	return fmt.Sprintf("mummy.Entomb(%s, \"%s\")", valueName, goType)
 }
 
-func (tm *TypeMapper) GenerateParameterList(params []string, w io.Writer) error {
-	for i, param := range params {
-		if i > 0 {
-			fmt.Fprint(w, ", ")
-		}
-		fmt.Fprint(w, param)
-	}
-	return nil
-}
