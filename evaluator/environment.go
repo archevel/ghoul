@@ -56,10 +56,6 @@ type scope map[scopeKey]e.Expr
 type Environment = environment
 type environment []*scope
 
-type Registrator interface {
-	Register(string, func(e.List) (e.Expr, error))
-}
-
 func NewEnvironment() *environment {
 	return newEnvWithEmptyScope(&environment{})
 }

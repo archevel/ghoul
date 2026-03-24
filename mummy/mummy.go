@@ -6,7 +6,8 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 )
 
-// Mummy wraps a Go value, preserving it in its sarcophagus for use in Ghoul.
+// Mummy wraps a Go value with type metadata, used by wraith-generated
+// sarcophagi. For ad-hoc wrapping without type names, see expressions.Foreign.
 type Mummy struct {
 	wrapped  any
 	typeName string
@@ -24,6 +25,9 @@ func (m *Mummy) Repr() string {
 	return fmt.Sprintf("#<mummy:%s>", m.typeName)
 }
 
+// Equiv compares wrapped values using ==. Go panics when comparing
+// uncomparable types (slices, maps, functions) with ==, so we recover
+// and return false — those types have no meaningful equality.
 func (m *Mummy) Equiv(other e.Expr) bool {
 	o, ok := other.(*Mummy)
 	if !ok {

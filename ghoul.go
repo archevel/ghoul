@@ -136,14 +136,6 @@ func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
 		return macromancy.WrapExpr(datum, marks), nil
 	})
 
-	env.Register("syntax-e", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
-		arg := args.First()
-		if so, ok := arg.(macromancy.SyntaxObject); ok {
-			return so.Datum, nil
-		}
-		return arg, nil
-	})
-
 	env.Register("identifier?", func(args e.List, ev *ev.Evaluator) (e.Expr, error) {
 		arg := args.First()
 		if so, ok := arg.(macromancy.SyntaxObject); ok {

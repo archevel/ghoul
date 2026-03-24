@@ -97,7 +97,6 @@ func (e Quote) Equiv(expr Expr) bool {
 	default:
 		return false
 	}
-	return true
 }
 
 type Identifier string
@@ -281,6 +280,8 @@ func (e nilList) String() string {
 	return e.Repr()
 }
 
+// Foreign wraps an arbitrary Go value for use in Ghoul expressions.
+// For wraith-generated code, see mummy.Mummy which adds type name tracking.
 type Foreign struct {
 	value any
 }

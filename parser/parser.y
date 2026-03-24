@@ -104,6 +104,8 @@ func ParseWithFilename(r io.Reader, filename *string) (int, *ParsedExpressions) 
 	return res, &ParsedExpressions{lex.lpair, lex.PairSrcPositions}
 }
 
+// setLastTail mutates the last Pair's tail in place. Safe here because
+// the parser creates fresh Pairs for each parse — no shared references.
 func setLastTail(p *e.Pair, newEnd e.Expr) *e.Pair {
 	lastPair := p
 	tail, _ := lastPair.Tail()

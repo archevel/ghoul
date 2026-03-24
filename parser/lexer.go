@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	sc "text/scanner"
@@ -178,11 +179,10 @@ func handleNeg(subscanner *sc.Scanner) (int, string) {
 			return UNEXPECTED_TOKEN, buffer.String()
 		}
 	}
-	return UNEXPECTED_TOKEN, buffer.String()
 }
 
 func (l schemeLexer) Error(e string) {
-	fmt.Printf("Error: %s", e)
+	fmt.Fprintf(os.Stderr, "Error: %s\n", e)
 }
 
 const SPECIAL_IDENTIFIERS = `§¶½!@£¤$%€&¥/=?+\^~*´_:,<>|«»©“”µªßðđŋħĸłøæåöäþœ→↓←þ®€ł@`
