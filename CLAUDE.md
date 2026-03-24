@@ -4,19 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Ghoul is an undead-themed Lisp interpreter written in Go that aims to be simple to understand while being more advanced than a naive interpreter. It features proper tail call optimizations and hygienic macro support through the "macromancy" package.
+Ghoul is an undead-themed Lisp interpreter written in Go that aims to be simple to understand while being more advanced than a naive interpreter. It features proper tail call optimizations and hygienic macro support.
 
 ## Architecture
 
 The codebase is organized into several key packages:
 
-- **`ghoul.go`**: Main entry point that orchestrates the parsing, macro transformation, and evaluation pipeline
-- **`cmd/ghoul/main.go`**: CLI interface supporting both REPL mode and file execution
-- **`parser/`**: Lexer and yacc-based parser for Lisp syntax (uses `parser.y` with goyacc)
-- **`evaluator/`**: Core expression evaluation engine with tail call optimization
-- **`expressions/`**: Expression type definitions and interfaces
-- **`macromancy/`**: Macro expansion system for hygienic macros
-- **`logging/`**: Configurable logging infrastructure
+- **`ghoul.go`**: Main entry point that orchestrates parsing and evaluation. Registers built-in functions. Uses `intBinOp` helper for binary integer operations.
+- **`cmd/ghoul/main.go`**: CLI interface supporting both REPL mode and file execution via `ProcessFile`.
+- **`cmd/wraith/main.go`**: CLI for the wraith tool — possesses Go packages and generates sarcophagi.
+- **`parser/`**: Lexer and yacc-based parser for Lisp syntax (uses `parser.y` with goyacc). Sets `SourcePosition` with optional `Filename` on each parsed `Pair`.
+- **`evaluator/`**: Core expression evaluation engine with tail call optimization. Handles `define-syntax` as a special form for interleaved macro expansion.
+- **`expressions/`**: Expression type definitions, `CodeLocation` interface, `SourcePosition`/`MacroExpansionLocation` types, `TypeName()` helper, and `ScopedIdentifier` for hygiene marks.
+- **`macromancy/`**: Macro pattern matching, hygienic expansion via mark-based scoping, and `SyntaxObject` type. The `Macromancer` type is removed — macro expansion is handled inline by the evaluator.
+- **`mummy/`**: `Mummy` type for wraith-generated wrappers. Conversion functions (`bytes`, `int-slice`, `float-slice`, `go-nil`, `string-from-bytes`).
+- **`wraith/`**: Code generation tool that analyzes Go packages and generates sarcophagus packages with wrapped functions, struct constructors, interface method wrappers, and callback adapters.
+- **`logging/`**: Configurable logging with TRACE/DEBUG/WARN levels via shared `log` method.
 
 ## Prerequisites
 
@@ -28,35 +31,23 @@ This project requires:
 
 ### Building
 ```bash
-# Generate parser from yacc grammar (required before building)
+# Generate parser from yacc grammar (required after changing parser.y)
 go generate ./parser
-
-# Build the main executable
-go build -o ghoul ./cmd/ghoul
 
 # Build all packages
 go build ./...
 ```
 
-### Logging Levels
-```bash
-# Quiet (WARN level only)
-./ghoul  # Default
-
-# Verbose (includes TRACE level for detailed evaluator steps)
-# Use VerboseLogger in code: ghoul.NewLoggingGhoul(logging.VerboseLogger)
-```
-
 ### Testing
 ```bash
-# Run all tests (note: some test formatting issues exist but build succeeds)
+# Run all tests
 go test ./...
 
-# Run tests with verbose output
-go test -v ./...
+# Run tests with coverage
+go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out
 
 # Run tests for specific package
-go test ./evaluator
+go test -v ./evaluator
 ```
 
 ### Running
@@ -66,98 +57,62 @@ go test ./evaluator
 
 # Execute a Ghoul file
 ./ghoul filename.ghoul
+
+# Possess a Go package (generate sarcophagus)
+wraith possess ./path/to/package
+wraith -skip-unwrappable possess ./path/to/package
 ```
 
 ## Key Implementation Details
 
-- **Tail Call Optimization**: The evaluator uses continuation-passing style with a continuation stack for proper tail calls
-- **Macro System**: The macromancy package handles hygienic macro expansion before evaluation
-- **Environment**: Uses lexical scoping with environment chains for variable lookup
-- **Built-in Functions**: Core functions like `eq?`, `and`, `<`, `mod`, `+`, `println` are registered in the default environment
-- **Parser Generation**: Uses goyacc to generate parser from `parser/parser.y` grammar file
+### Evaluator
+- Uses continuation-passing style with a continuation stack for proper tail calls
+- `chooseEvaluation` uses a type switch for expression dispatch and a nested switch for special forms
+- Special forms: `cond`, `else`, `begin`, `lambda`, `define`, `set!`, `define-syntax`
+- `define-syntax` is a special form — macro expansion happens interleaved with evaluation, not as a separate pass
+- `SyntaxTransformer` (pattern-based) and `GeneralSyntaxTransformer` (lambda-based) are stored in the environment
+- Macro calls are intercepted before argument evaluation in `functionCallContinuationFor`
+- Lookup fallback: `ScopedIdentifier` with marks falls back to name-only lookup for macro-introduced references to existing bindings
+- `specialFormName` strips marks so macro-introduced special form keywords are still recognized
 
-## Special Notes
+### Hygienic Macros
+- Mark-based hygiene: each expansion gets a fresh mark (uint64 counter)
+- For `syntax-rules`: template identifiers not in pattern vars and not bound at definition site get the mark
+- For general transformers: input is pre-marked, output is marked again — toggle semantics cancels marks on input-originated identifiers
+- `SyntaxObject` wraps leaf expressions with marks; `Pair` tree structure is preserved for `List` interface compatibility
+- `ResolveExpr` strips `SyntaxObject` wrappers after general transformer expansion
+- `syntax-rules` supports: multiple clauses, ellipsis splicing, literals
 
-- The parser requires generation via `go generate ./parser` before building
-- The project follows Go package conventions with clear separation of concerns
-- Error handling focuses on parse-time and runtime errors with plans for better error messages with source locations
-- The evaluator supports special forms: `cond`, `else`, `begin`, `lambda`, `define`, `set!`
+### Error Messages
+- `EvaluationError` includes source location from `Pair.Loc` (set by parser)
+- `SourcePosition` carries optional `Filename` — when present, `SourceContext()` reads the file to show surrounding lines with a caret
+- `MacroExpansionLocation` points back to the macro call site
+- `suggestIdentifiers` provides Levenshtein-based typo suggestions for undefined identifiers
+- `TypeName()` gives human-readable type names in error messages
 
-## Modernization Notes
+### Wraith Tool
+- Generates sarcophagus packages (not code in the target package)
+- Uses `mummy.Mummy` for complex type wrapping, `mummy.Entomb`/`Unwrap` for creation/access
+- Single type assertion for primitives; `*mummy.Mummy` + `Unwrap()` for complex types
+- Methods registered as `typename-methodname` (e.g., `person-getage`)
+- Struct constructors as `make-typename` (e.g., `make-person`)
+- Callback adapters wrap Ghoul `Function` in Go function closures
+- Variadic functions consume remaining args into a slice
+- Detects unwrappable types (channels, maps) and fails unless `--skip-unwrappable` is set
+- `Environment` type alias exported from evaluator for use in generated `RegisterFunctions`
 
-**✅ Completed:**
-- Replaced `interface{}` with `any` (Go 1.18+) for better readability
-- Migrated to structured logging with `slog` (Go 1.21+) for better observability and performance
-- Added TRACE level logging for detailed evaluator execution flow (below DEBUG level)
+### Expression Types
+- `Pair` has `H`, `T`, and `Loc CodeLocation` fields
+- `Foreign` wraps arbitrary Go values (internal use). `mummy.Mummy` wraps with type metadata (wraith-generated code).
+- `ScopedIdentifier` carries `Name` + `Marks` for hygiene. Equiv to plain `Identifier` only when marks are empty.
+- `Cons` creates Pairs with nil `Loc` by default; parser sets `Loc` during parsing.
 
-**❌ Not Recommended:**
-- **Generics for type safety**: The dynamic nature of Lisp expressions conflicts fundamentally with static generics. The architecture relies on type switches across different expression types (Boolean, Integer, String, etc.) in a single interface, which generics would break. Estimated 6-8 weeks of work with high risk and questionable benefit.
-- **`slices` package migration**: Current slice operations are in performance-critical hot paths (evaluator continuation stack, environment creation). The `append()` operations in `evaluator.go:65` are called for every expression evaluation. Replacing with `slices` package functions would add function call overhead to the core evaluation loop with minimal readability benefit. Risk > reward for this performance-sensitive interpreter.
+## Conventions
 
-**✅ Error Wrapping Improvements Completed:**
-- Enhanced parser error context with parse result codes for better debugging
-- Improved environment error messages for `define`, `set!`, and undefined identifier errors
-- Added comprehensive macro error context with specific failure details
-- Implemented type assertion safety for all built-in functions (`and`, `<`, `mod`, `+`) with descriptive error messages
-- Fixed nil pointer crashes in macro error handling
-- Updated all test cases to expect improved error messages
-- All tests now pass with significantly better debugging experience
-
-**✅ Context Support Implementation Completed:**
-- Added `context.Context` support for cancellation and timeout control
-- Implemented `EvaluateWithContext()` and `ProcessWithContext()` methods
-- Maintains full backward compatibility with existing `Evaluate()` and `Process()` methods
-- Context checking integrated into the main evaluation loop for responsive cancellation
-- Comprehensive test coverage including happy path, cancellation, timeout, and complex programs
-- **Key Benefits:**
-  - **Infinite loop protection**: Cancel runaway Lisp programs gracefully
-  - **Timeout support**: Enforce evaluation time limits for server environments
-  - **Production readiness**: Makes Ghoul suitable for production use with proper resource management
-  - **Go ecosystem integration**: Works seamlessly with HTTP handlers, gRPC, and other Go services
-
-**❌ String Building Optimization Analysis:**
-- **Not recommended for Ghoul**: Current string concatenations are small (2-3 pieces) and already optimal
-- Go compiler optimizes simple `+` concatenation for small strings better than `strings.Builder`
-- `Pair.Repr()` already uses `bytes.Buffer` appropriately for complex cases
-- `strings.Builder` would add overhead, not reduce it, for typical Lisp expression rendering
-- **Conclusion**: Current implementation is well-optimized for Lisp interpreter use cases
-
-**✅ Type Assertion Safety Improvements Completed:**
-- **Fixed all high-risk panicking type assertions using TDD approach**
-- **Priority 1**: `evaluator/environment.go:49` - Assignment with non-identifier variables now returns proper error instead of panicking
-- **Priority 2**: `macromancy/macro.go` - Multiple macro processing type assertions now safely handle malformed patterns
-- **Priority 3**: `evaluator/evaluator.go:151` - Analysis confirmed this assertion is already protected by logic flow
-- **Priority 4**: `macromancy/macro.go:166` - `splitListAt` function now safely handles non-Pair splitPoints
-- **Priority 5**: `logging/logger.go:29` - slog level replacer now uses defensive programming against type mismatches
-- **Test Coverage**: Added comprehensive test suites for each fix using Test-Driven Development
-- **Result**: Eliminated runtime panic risks from user input, replaced with proper error messages
-
-**✅ Error Chaining Improvements Completed:**
-- **Enhanced error context throughout the codebase using TDD approach**
-- **Fixed evaluation error chaining** in `ghoul.go:48-52` - Processing errors now include proper context with underlying causes
-- **Fixed macro error chaining** in `macromancy/macromancy.go` - Macro definition errors now propagate properly with context
-- **Updated context tests** in `ghoul_context_test.go` - Context cancellation/timeout tests now use `errors.Is()` for proper error matching
-- **Added comprehensive test coverage** in `ghoul_error_chaining_test.go` - Tests validate both processing and macro error chaining
-- **Modified Macromancer interface** - `Transform` method now returns `(e.Expr, error)` instead of just `e.Expr` for proper error propagation
-- **Test Coverage**: All error chaining scenarios tested with TDD methodology
-- **Result**: Significantly improved debugging experience with proper error context and chain unwrapping
-
-**✅ Wraith Tool Implementation Completed:**
-- **Undead-themed package possession** - Successfully implemented the wraith command-line tool with `wraith possess <package>` interface
-- **Mummy wrapper generation** - Creates `<packagename>_mummy.go` files containing wrapped functions with full undead theming
-- **Possession protection** - Refuses to possess packages that already have mummy files (prevents double-possession)
-- **Comprehensive type mapping system** - Maps Go primitives (`int`, `string`, `bool`, `float`) to Ghoul expressions, complex types to Foreign
-- **Template-based code generation** - Generates complete wrapper functions with argument conversion, function calls, and result handling
-- **Error propagation support** - Automatically handles Go errors and propagates them as Ghoul errors with proper context
-- **Method and function support** - Handles both standalone functions and struct methods (value and pointer receivers)
-- **Thematic code generation** - Generated mummy files include undead-themed comments and function descriptions
-- **CLI interface** - `wraith possess <package-path> [-v]` command with verbose mode and proper error messages
-- **Package analysis** - Uses go/packages and go/ast for robust Go package parsing and type information extraction
-- **Generated registration** - Automatically creates `RegisterFunctions()` to "awaken" all mummified functions in Ghoul environments
-- **Test Coverage**: Successfully tested with sample package containing various function signatures, methods, and types
-- **Result**: Enables automatic possession and mummification of any Go package for use in Ghoul, fulfilling the original README requirement
-
-**🔄 Future Considerations:**
-- Additional string concatenation optimizations with `strings.Builder` (already analyzed - not recommended for small strings)
-- Enhanced slice handling (convert primitive slices to Ghoul Lists)
-- Support for Go interfaces and function types in wraith generation
+- No reflection in generated wraith code
+- TDD approach for new features
+- Comments should explain *why*, not restate *what* the code does
+- Error messages use `TypeName()` for human-readable type names, not `%T`
+- Go naming conventions: camelCase variables, no snake_case
+- Breaking changes are acceptable — no backward-compat shims needed
+- `splitListAt` builds fresh lists to avoid mutating shared expression trees
