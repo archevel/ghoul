@@ -150,6 +150,40 @@ func TestRequireNameClash(t *testing.T) {
 	}
 }
 
+func TestRequireSameModuleTwice(t *testing.T) {
+	defer mummy.ClearRegistry()
+	registerTestModule()
+	env := NewEnvironment()
+
+	in := `(require testmod) (require testmod) (testmod:foo)`
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	result, err := Evaluate(parsed.Expressions, env)
+	if err != nil {
+		t.Fatalf("requiring same module twice should work, got: %v", err)
+	}
+	if !result.Equiv(e.Integer(42)) {
+		t.Errorf("expected 42, got %s", result.Repr())
+	}
+}
+
+func TestRequireSameModuleDifferentAlias(t *testing.T) {
+	defer mummy.ClearRegistry()
+	registerTestModule()
+	env := NewEnvironment()
+
+	in := `(require testmod as a) (require testmod as b) (a:foo)`
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	result, err := Evaluate(parsed.Expressions, env)
+	if err != nil {
+		t.Fatalf("same module under different aliases should work, got: %v", err)
+	}
+	if !result.Equiv(e.Integer(42)) {
+		t.Errorf("expected 42, got %s", result.Repr())
+	}
+}
+
 func TestRequireEmptyForm(t *testing.T) {
 	defer mummy.ClearRegistry()
 	env := NewEnvironment()

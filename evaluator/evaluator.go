@@ -71,13 +71,14 @@ func EvaluateWithContext(ctx context.Context, exprs e.Expr, env *environment) (r
 }
 
 func New(logger logging.Logger, env *environment) *Evaluator {
-	return &Evaluator{log: logger, env: env}
+	return &Evaluator{log: logger, env: env, requiredModules: map[string]bool{}}
 }
 
 type Evaluator struct {
-	log   logging.Logger
-	env   *environment
-	conts *contStack
+	log              logging.Logger
+	env              *environment
+	conts            *contStack
+	requiredModules  map[string]bool
 }
 
 func (ev *Evaluator) Evaluate(exprs e.Expr) (e.Expr, error) {
@@ -661,7 +662,12 @@ func requireContinuationFor(args e.List) continuation {
 			prefix = alias
 		}
 
-		// Check for name clashes before registering
+		// Same module under same prefix is idempotent
+		requireKey := string(moduleName) + ":" + prefix
+		if ev.requiredModules[requireKey] {
+			return e.NIL, nil
+		}
+
 		namesToRegister := entry.Names
 		if only != nil {
 			namesToRegister = make([]string, 0)
@@ -686,6 +692,7 @@ func requireContinuationFor(args e.List) continuation {
 			}
 		}
 		entry.Register(prefix, only, register)
+		ev.requiredModules[requireKey] = true
 
 		return e.NIL, nil
 	}
