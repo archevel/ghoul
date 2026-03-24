@@ -130,7 +130,7 @@ func (si ScopedIdentifier) Repr() string {
 func (si ScopedIdentifier) Equiv(expr Expr) bool {
 	switch v := expr.(type) {
 	case ScopedIdentifier:
-		return si.Name == v.Name && marksEq(si.Marks, v.Marks)
+		return si.Name == v.Name && MarksEq(si.Marks, v.Marks)
 	case Identifier:
 		return si.marksEmpty() && si.Name == v
 	default:
@@ -142,7 +142,7 @@ func (si ScopedIdentifier) marksEmpty() bool {
 	return len(si.Marks) == 0
 }
 
-func marksEq(a, b map[uint64]bool) bool {
+func MarksEq(a, b map[uint64]bool) bool {
 	if len(a) != len(b) {
 		return false
 	}

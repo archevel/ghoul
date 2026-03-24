@@ -134,18 +134,6 @@ func ResolveExpr(expr e.Expr) e.Expr {
 	return expr
 }
 
-func MarksEqual(a, b MarkSet) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k := range a {
-		if !b[k] {
-			return false
-		}
-	}
-	return true
-}
-
 type SyntaxObject struct {
 	Datum e.Expr
 	Marks MarkSet
@@ -160,7 +148,7 @@ func (so SyntaxObject) Equiv(other e.Expr) bool {
 
 	if otherSo, ok := other.(SyntaxObject); ok {
 		if isIdent {
-			return so.Datum.Equiv(otherSo.Datum) && MarksEqual(so.Marks, otherSo.Marks)
+			return so.Datum.Equiv(otherSo.Datum) && e.MarksEq(so.Marks, otherSo.Marks)
 		}
 		return so.Datum.Equiv(otherSo.Datum)
 	}

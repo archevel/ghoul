@@ -58,13 +58,13 @@ func TestMarkSetEquals(t *testing.T) {
 	b := NewMarkSet().Toggle(2).Toggle(1)
 	c := NewMarkSet().Toggle(1)
 
-	if !MarksEqual(a, b) {
+	if !e.MarksEq(a, b) {
 		t.Error("expected equal mark sets to be equal")
 	}
-	if MarksEqual(a, c) {
+	if e.MarksEq(a, c) {
 		t.Error("expected different mark sets to not be equal")
 	}
-	if !MarksEqual(NewMarkSet(), NewMarkSet()) {
+	if !e.MarksEq(NewMarkSet(), NewMarkSet()) {
 		t.Error("expected two empty mark sets to be equal")
 	}
 }
