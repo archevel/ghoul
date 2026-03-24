@@ -168,7 +168,7 @@ func matchHeadAndTail(macroList e.List, codeList e.List, bound bindings, hasElip
 	if macroList == e.NIL && codeList == e.NIL {
 		return true, bound
 	}
-	macroLength, _ := listLength(macroList)
+	macroLength := listLength(macroList)
 	if macroList == e.NIL || (codeList == e.NIL && (!hasElipsis || macroLength > 1)) {
 		return false, nil
 	}
@@ -235,46 +235,74 @@ func toIdentifier(expr e.Expr) e.Identifier {
 	}
 }
 
+// splitListAt builds fresh lists for both halves rather than severing
+// the original, since the same expression tree may be matched against
+// multiple macro patterns.
 func splitListAt(endCount int, codeList e.List) (e.Expr, e.Expr) {
+	codeLength := listLength(codeList)
+	beginCount := codeLength - endCount
 
-	begining := codeList
-	splitPoint := begining
-	var ending e.Expr
-	ok := false
-	codeLength, _ := listLength(codeList)
-	splitIndex := codeLength - (endCount + 1)
-
-	if splitIndex < 0 {
+	if beginCount <= 0 {
 		return e.NIL, codeList
 	}
 
-	for i := 0; i < splitIndex; i++ {
-		if sp, ok := splitPoint.Tail(); ok {
-			splitPoint = sp
-		} else {
+	// Collect all elements (and possibly a dotted tail) into a slice
+	type elem struct {
+		val    e.Expr
+		isTail bool // true if this is a non-list tail (dotted pair)
+	}
+	var elems []elem
+	current := codeList
+	for current != e.NIL {
+		elems = append(elems, elem{val: current.First()})
+		next, ok := current.Tail()
+		if !ok {
+			// Improper list: the Second() is the dotted tail
+			elems = append(elems, elem{val: current.Second(), isTail: true})
 			break
 		}
+		current = next
 	}
-	ending, ok = splitPoint.Tail()
-	if splitPoint != e.NIL && (ok || endCount == 1) {
-		ending = splitPoint.Second()
-		if pair, ok := splitPoint.(*e.Pair); ok {
-			pair.T = e.NIL
+
+	if beginCount > len(elems) {
+		beginCount = len(elems)
+	}
+
+	// Build beginning from the first beginCount elements
+	begElems := elems[:beginCount]
+	endElems := elems[beginCount:]
+
+	var beginning e.Expr = e.NIL
+	for i := len(begElems) - 1; i >= 0; i-- {
+		beginning = e.Cons(begElems[i].val, beginning)
+	}
+
+	// Build ending from the remaining elements
+	if len(endElems) == 0 {
+		return beginning, e.NIL
+	}
+
+	var ending e.Expr = e.NIL
+	for i := len(endElems) - 1; i >= 0; i-- {
+		if endElems[i].isTail {
+			ending = endElems[i].val
+		} else {
+			ending = e.Cons(endElems[i].val, ending)
 		}
 	}
 
-	return begining, ending
+	return beginning, ending
 }
 
-func listLength(list e.List) (int, bool) {
+func listLength(list e.List) int {
 	count := 0
-	ok := false
 	for list != e.NIL {
-		count = count + 1
-		list, ok = list.Tail()
+		count++
+		next, ok := list.Tail()
 		if !ok {
-			return count + 1, false
+			return count + 1
 		}
+		list = next
 	}
-	return count, true
+	return count
 }

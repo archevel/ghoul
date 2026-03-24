@@ -281,6 +281,78 @@ func TestExpandHygienicEllipsisEmptyList(t *testing.T) {
 	}
 }
 
+func TestSplitListAtDoesNotMutateOriginal(t *testing.T) {
+	// Build list (1 2 3 4)
+	list := e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.Cons(e.Integer(4), e.NIL))))
+
+	originalRepr := list.Repr()
+
+	// Split at endCount=1 should give beginning=(1 2 3), ending=(4)
+	beg, end := splitListAt(1, list)
+
+	begList := beg.(e.List)
+	if begList.Repr() != "(1 2 3)" {
+		t.Errorf("expected beginning (1 2 3), got %s", begList.Repr())
+	}
+
+	endExpr := end
+	if endExpr.Repr() != "(4)" {
+		t.Errorf("expected ending (4), got %s", endExpr.Repr())
+	}
+
+	// The original list must NOT be mutated
+	if list.Repr() != originalRepr {
+		t.Errorf("splitListAt mutated the original list: was %s, now %s", originalRepr, list.Repr())
+	}
+}
+
+func TestSplitListAtDoesNotMutateOriginalWithMultipleEndElements(t *testing.T) {
+	list := e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.Cons(e.Integer(4), e.Cons(e.Integer(5), e.NIL)))))
+
+	originalRepr := list.Repr()
+
+	// Split at endCount=2: 5 elements, keep last 2 → beginning=(1 2 3), ending=(4 5)
+	beg, end := splitListAt(2, list)
+
+	begList := beg.(e.List)
+	if begList.Repr() != "(1 2 3)" {
+		t.Errorf("expected beginning (1 2 3), got %s", begList.Repr())
+	}
+
+	endList := end.(e.List)
+	if endList.Repr() != "(4 5)" {
+		t.Errorf("expected ending (4 5), got %s", endList.Repr())
+	}
+
+	if list.Repr() != originalRepr {
+		t.Errorf("splitListAt mutated the original list: was %s, now %s", originalRepr, list.Repr())
+	}
+}
+
+func TestSplitListAtEndCountZero(t *testing.T) {
+	list := e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.NIL))
+	beg, end := splitListAt(0, list)
+
+	if beg.(e.List).Repr() != "(1 2)" {
+		t.Errorf("expected all elements in beginning, got %s", beg.(e.List).Repr())
+	}
+	if end != e.NIL {
+		t.Errorf("expected NIL ending, got %s", end.Repr())
+	}
+}
+
+func TestSplitListAtEndCountExceedsLength(t *testing.T) {
+	list := e.Cons(e.Integer(1), e.NIL)
+	beg, end := splitListAt(5, list)
+
+	if beg != e.NIL {
+		t.Errorf("expected NIL beginning, got %s", beg.Repr())
+	}
+	if end.(e.List).Repr() != "(1)" {
+		t.Errorf("expected full list as ending, got %s", end.Repr())
+	}
+}
+
 func TestExpandHygienicUserVarNamedTmpDoesNotConflict(t *testing.T) {
 	// Macro: (swap x y) -> (begin (define tmp x) (set! x y) (set! y tmp))
 	pattern := parseExpr(t, "(swap x y)")
