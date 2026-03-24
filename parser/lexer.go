@@ -56,7 +56,6 @@ func (l schemeLexer) Lex(lval *yySymType) int {
 	scanToNextNonComment(l.scanner)
 
 	if l.scanner.Err() != nil {
-		//TODO: Handle error...
 		lval.tok = l.scanner.Text()
 		lval.col = l.pos.Col
 		lval.row = l.pos.Row
