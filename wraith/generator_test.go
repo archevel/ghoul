@@ -158,8 +158,9 @@ func TestPossessPackageCreatesSarcophagus(t *testing.T) {
 
 	outputDir := t.TempDir()
 	err := PossessPackage(&PossessionConfig{
-		PackagePath: testpkgPath,
-		OutputDir:   outputDir,
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
 	})
 	if err != nil {
 		t.Fatalf("possession failed: %v", err)

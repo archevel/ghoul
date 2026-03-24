@@ -51,13 +51,14 @@ type TemplateData struct {
 type FunctionWrapperData struct {
 	OriginalName   string
 	GhoulName      string
-	GoFuncName     string // Valid Go identifier for the wrapper function
+	GoFuncName     string
 	Documentation  string
 	Arguments      []ArgConversionInfo
 	Results        []ResultConversionInfo
 	ParameterNames []string
 	HasReceiver    bool
 	ReceiverInfo   *ArgConversionInfo
+	IsVariadic     bool
 	GeneratedCode  string
 }
 
@@ -107,10 +108,10 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 		fmt.Printf("Generating wrappers for %d functions\n", len(packageInfo.Functions))
 	}
 
-	// Process each function
 	var functionWrappers []FunctionWrapperData
 	imports := []string{packageInfo.ImportPath}
 	hasErrors := false
+	var skippedFunctions []string
 
 	for _, structInfo := range packageInfo.Structs {
 		constructor, err := g.generateConstructor(structInfo, packageInfo.ImportPath)
@@ -145,6 +146,8 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 	for _, funcInfo := range packageInfo.Functions {
 		wrapper, err := g.processFunctionInfo(funcInfo)
 		if err != nil {
+			msg := fmt.Sprintf("%s: %v", funcInfo.Name, err)
+			skippedFunctions = append(skippedFunctions, msg)
 			if g.config.Verbose {
 				fmt.Printf("Skipping function %s: %v\n", funcInfo.Name, err)
 			}
@@ -152,9 +155,10 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 			continue
 		}
 
-		// Generate the function body code
 		err = g.generateFunctionBody(&wrapper, packageInfo.ImportPath)
 		if err != nil {
+			msg := fmt.Sprintf("%s: %v", funcInfo.Name, err)
+			skippedFunctions = append(skippedFunctions, msg)
 			if g.config.Verbose {
 				fmt.Printf("Failed to generate function body for %s: %v\n", funcInfo.Name, err)
 			}
@@ -163,6 +167,11 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 		}
 
 		functionWrappers = append(functionWrappers, wrapper)
+	}
+
+	if hasErrors && !g.config.SkipUnwrappable {
+		return fmt.Errorf("some functions could not be wrapped:\n  %s\n\nUse --skip-unwrappable to generate wrappers for the remaining functions",
+			strings.Join(skippedFunctions, "\n  "))
 	}
 
 	// Prepare template data
@@ -187,6 +196,17 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 
 // processFunctionInfo converts a FunctionInfo to FunctionWrapperData
 func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperData, error) {
+	for _, param := range funcInfo.Params {
+		if reason := g.typeMapper.UnsupportedTypeReason(param.Type); reason != "" {
+			return FunctionWrapperData{}, fmt.Errorf("parameter '%s' uses unsupported %s", param.Name, reason)
+		}
+	}
+	for _, result := range funcInfo.Results {
+		if reason := g.typeMapper.UnsupportedTypeReason(result.Type); reason != "" {
+			return FunctionWrapperData{}, fmt.Errorf("return value '%s' uses unsupported %s", result.Name, reason)
+		}
+	}
+
 	ghoulName := strings.ToLower(funcInfo.Name)
 	if funcInfo.Receiver != nil {
 		typeName := funcInfo.Receiver.Type.String()
@@ -207,6 +227,7 @@ func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperD
 		Results:        []ResultConversionInfo{},
 		ParameterNames: []string{},
 		HasReceiver:    funcInfo.Receiver != nil,
+		IsVariadic:     funcInfo.IsVariadic,
 	}
 
 	if funcInfo.Receiver != nil {
@@ -234,15 +255,25 @@ func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperD
 			paramName = fmt.Sprintf("arg%d", i)
 		}
 
+		isLastAndVariadic := funcInfo.IsVariadic && i == len(funcInfo.Params)-1
+
 		argInfo := ArgConversionInfo{
-			N:    i + argOffset,
-			Name: paramName,
-			Type: qualifiedTypeToAlias(param.Type.String()),
+			N:          i + argOffset,
+			Name:       paramName,
+			Type:       qualifiedTypeToAlias(param.Type.String()),
+			IsVariadic: isLastAndVariadic,
 		}
 
-		if g.typeMapper.IsFunction(param.Type) {
+		if isLastAndVariadic {
+			// For variadic params, extract the element type from the slice
+			if sliceType, ok := param.Type.(*types.Slice); ok {
+				elemType := sliceType.Elem()
+				ghoulType, _ := g.typeMapper.MapGoTypeToGhoul(elemType)
+				argInfo.BuiltInType = ghoulType
+				// Type stays as the slice type for the var declaration
+			}
+		} else if g.typeMapper.IsFunction(param.Type) {
 			argInfo.FuncSignature = g.typeMapper.BuildFuncSignature(param.Type)
-			// The Type needs to be a valid Go function literal prefix
 			argInfo.Type = buildGoFuncLiteralType(param.Type)
 		} else {
 			ghoulType, isForeign := g.typeMapper.MapGoTypeToGhoul(param.Type)
@@ -333,12 +364,14 @@ func (g *Generator) generateFunctionBody(wrapper *FunctionWrapperData, importPat
 		fmt.Fprintf(&body, "%s.%s(", packagePrefix, wrapper.OriginalName)
 	}
 
-	// Generate parameter list
 	for i, paramName := range wrapper.ParameterNames {
 		if i > 0 {
 			fmt.Fprint(&body, ", ")
 		}
 		fmt.Fprint(&body, paramName)
+		if wrapper.IsVariadic && i == len(wrapper.ParameterNames)-1 {
+			fmt.Fprint(&body, "...")
+		}
 	}
 	fmt.Fprintf(&body, ")\n")
 

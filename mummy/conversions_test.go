@@ -3,6 +3,7 @@ package mummy
 import (
 	"testing"
 
+	ev "github.com/archevel/ghoul/evaluator"
 	e "github.com/archevel/ghoul/expressions"
 )
 
@@ -132,6 +133,11 @@ func TestGoNilCreatesNilMummy(t *testing.T) {
 	if m.Unwrap() != nil {
 		t.Error("expected nil inside mummy")
 	}
+}
+
+func TestRegisterConversionsDoesNotPanic(t *testing.T) {
+	env := ev.NewEnvironment()
+	RegisterConversions(env)
 }
 
 func TestGoNilRepr(t *testing.T) {

@@ -11,7 +11,8 @@ import (
 
 func main() {
 	var (
-		verbose = flag.Bool("v", false, "Enable verbose output")
+		verbose         = flag.Bool("v", false, "Enable verbose output")
+		skipUnwrappable = flag.Bool("skip-unwrappable", false, "Skip functions that can't be wrapped instead of failing")
 	)
 	flag.Parse()
 
@@ -55,8 +56,9 @@ func main() {
 	}
 
 	err = wraith.PossessPackage(&wraith.PossessionConfig{
-		PackagePath: absPackagePath,
-		Verbose:     *verbose,
+		PackagePath:     absPackagePath,
+		Verbose:         *verbose,
+		SkipUnwrappable: *skipUnwrappable,
 	})
 
 	if err != nil {

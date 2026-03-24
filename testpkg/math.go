@@ -90,6 +90,38 @@ func WithError(f func(string) (int, error), input string) (int, error) {
 	return f(input)
 }
 
+// SendOnChannel sends a value on a channel (unwrappable — channels not supported)
+func SendOnChannel(ch chan int, val int) {
+	ch <- val
+}
+
+// LookupMap looks up a key in a map (unwrappable — maps not supported)
+func LookupMap(m map[string]int, key string) (int, bool) {
+	v, ok := m[key]
+	return v, ok
+}
+
+// Variadic takes variadic args (unwrappable — variadic not supported)
+func Variadic(nums ...int) int {
+	total := 0
+	for _, n := range nums {
+		total += n
+	}
+	return total
+}
+
+// JoinWith joins strings with a separator (mixed: regular + variadic params)
+func JoinWith(sep string, parts ...string) string {
+	result := ""
+	for i, p := range parts {
+		if i > 0 {
+			result += sep
+		}
+		result += p
+	}
+	return result
+}
+
 // ForEach calls a void callback for each element
 func ForEach(numbers []int, f func(int)) {
 	for _, n := range numbers {

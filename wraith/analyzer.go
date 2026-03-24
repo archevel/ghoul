@@ -15,11 +15,12 @@ type Analyzer struct {
 
 // FunctionInfo holds information about a discovered function
 type FunctionInfo struct {
-	Name       string           // Function name
-	Params     []ParameterInfo  // Parameter information
-	Results    []ParameterInfo  // Return value information
-	Doc        string           // Documentation comment
-	Receiver   *ParameterInfo   // Receiver for methods (nil for functions)
+	Name       string
+	Params     []ParameterInfo
+	Results    []ParameterInfo
+	Doc        string
+	Receiver   *ParameterInfo
+	IsVariadic bool
 }
 
 // ParameterInfo holds information about function parameters and return values
@@ -247,12 +248,20 @@ func (a *Analyzer) processFunctionDecl(funcDecl *ast.FuncDecl, pkg *packages.Pac
 		}
 	}
 
+	isVariadic := false
+	if funcObj := pkg.TypesInfo.ObjectOf(funcDecl.Name); funcObj != nil {
+		if sig, ok := funcObj.Type().(*types.Signature); ok {
+			isVariadic = sig.Variadic()
+		}
+	}
+
 	return &FunctionInfo{
-		Name:     funcName,
-		Params:   params,
-		Results:  results,
-		Doc:      doc,
-		Receiver: receiver,
+		Name:       funcName,
+		Params:     params,
+		Results:    results,
+		Doc:        doc,
+		Receiver:   receiver,
+		IsVariadic: isVariadic,
 	}
 }
 

@@ -7,16 +7,18 @@ import (
 )
 
 type PossessionConfig struct {
-	PackagePath    string
-	OutputDir      string
-	Verbose        bool
+	PackagePath     string
+	OutputDir       string
+	Verbose         bool
+	SkipUnwrappable bool
 }
 
 type Config struct {
-	PackagePath string
-	OutputFile  string
-	PackageName string
-	Verbose     bool
+	PackagePath     string
+	OutputFile      string
+	PackageName     string
+	Verbose         bool
+	SkipUnwrappable bool
 }
 
 func PossessPackage(config *PossessionConfig) error {
@@ -40,10 +42,11 @@ func PossessPackage(config *PossessionConfig) error {
 	}
 
 	legacyConfig := &Config{
-		PackagePath: config.PackagePath,
-		OutputFile:  outputFile,
-		PackageName: sarcophagusName,
-		Verbose:     config.Verbose,
+		PackagePath:     config.PackagePath,
+		OutputFile:      outputFile,
+		PackageName:     sarcophagusName,
+		Verbose:         config.Verbose,
+		SkipUnwrappable: config.SkipUnwrappable,
 	}
 
 	return GenerateWrappers(legacyConfig)

@@ -58,6 +58,7 @@ type ArgConversionInfo struct {
 	Type          string
 	BuiltInType   string
 	FuncSignature *FuncSignatureInfo
+	IsVariadic    bool
 }
 
 type ResultConversionInfo struct {
@@ -129,6 +130,9 @@ func (tm *TypeMapper) initializeTemplates() error {
 }
 
 func (tm *TypeMapper) GenerateArgumentConversion(info ArgConversionInfo, w io.Writer) error {
+	if info.IsVariadic {
+		return tm.generateVariadicConversion(info, w)
+	}
 	if info.FuncSignature != nil {
 		return tm.generateFunctionAdapter(info, w)
 	}
@@ -146,6 +150,40 @@ func (tm *TypeMapper) GenerateArgumentConversion(info ArgConversionInfo, w io.Wr
 	}
 
 	return template.Execute(w, info)
+}
+
+func (tm *TypeMapper) generateVariadicConversion(info ArgConversionInfo, w io.Writer) error {
+	name := info.Name
+
+	fmt.Fprintf(w, "\tvar %s %s\n", name, info.Type)
+	fmt.Fprintf(w, "\tfor args != e.NIL {\n")
+
+	if info.BuiltInType != "" {
+		elemType := strings.TrimPrefix(info.Type, "[]")
+		fmt.Fprintf(w, "\t\tghoulElem := args.First()\n")
+		fmt.Fprintf(w, "\t\telemVal, ok := ghoulElem.(e.%s)\n", info.BuiltInType)
+		fmt.Fprintf(w, "\t\tif !ok {\n")
+		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: expected %s, got %%s\", e.TypeName(ghoulElem))\n",
+			name, strings.ToLower(info.BuiltInType))
+		fmt.Fprintf(w, "\t\t}\n")
+		fmt.Fprintf(w, "\t\t%s = append(%s, %s(elemVal))\n", name, name, elemType)
+	} else {
+		elemType := strings.TrimPrefix(info.Type, "[]")
+		fmt.Fprintf(w, "\t\tghoulElem := args.First()\n")
+		fmt.Fprintf(w, "\t\tmummyElem, ok := ghoulElem.(*mummy.Mummy)\n")
+		fmt.Fprintf(w, "\t\tif !ok {\n")
+		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: expected mummy, got %%s\", e.TypeName(ghoulElem))\n", name)
+		fmt.Fprintf(w, "\t\t}\n")
+		fmt.Fprintf(w, "\t\telem, ok := mummyElem.Unwrap().(%s)\n", elemType)
+		fmt.Fprintf(w, "\t\tif !ok {\n")
+		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: mummy contains %%T, expected %s\", mummyElem.Unwrap())\n", name, elemType)
+		fmt.Fprintf(w, "\t\t}\n")
+		fmt.Fprintf(w, "\t\t%s = append(%s, elem)\n", name, name)
+	}
+
+	fmt.Fprintf(w, "\t\targs, _ = args.Tail()\n")
+	fmt.Fprintf(w, "\t}\n")
+	return nil
 }
 
 func (tm *TypeMapper) generateFunctionAdapter(info ArgConversionInfo, w io.Writer) error {
@@ -295,6 +333,26 @@ func qualifiedTypeToAlias(typeStr string) string {
 		inner = inner[lastSlash+1:]
 	}
 	return prefix + inner
+}
+
+// UnsupportedTypeReason returns a description of why a type can't be wrapped,
+// or empty string if the type is supported.
+func (tm *TypeMapper) UnsupportedTypeReason(t types.Type) string {
+	if t == nil {
+		return ""
+	}
+	switch underlying := t.Underlying().(type) {
+	case *types.Chan:
+		return fmt.Sprintf("channel type %s", t)
+	case *types.Map:
+		return fmt.Sprintf("map type %s", t)
+	case *types.Signature:
+		if underlying.Variadic() {
+			return fmt.Sprintf("variadic function type %s", t)
+		}
+		return ""
+	}
+	return ""
 }
 
 func (tm *TypeMapper) isPrimitiveType(t types.Type) bool {
