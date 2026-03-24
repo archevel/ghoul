@@ -141,7 +141,7 @@ func sexprSeqEvalContinuationFor(exprs e.List, maybeTailCall bool) continuation 
 			ev.log.Trace("Pushing continuation for evaluating tail of expression sequence")
 			ev.pushContinuation(sexprSeqEvalContinuationFor(t, maybeTailCall))
 		} else if !ok {
-			return nil, NewEvaluationError("Malformed expresion sequence", exprs)
+			return nil, NewEvaluationError("Malformed expression sequence", exprs)
 		}
 		head := exprs.Head()
 		ev.log.Trace("Pushing continuation for evaluating head of expression sequence")
@@ -242,7 +242,7 @@ func assignmentContinuationFor(assignment e.List, maybeTailCall bool) continuati
 		}
 		nilTail, nilOk := valueExpr.Tail()
 		if valOk && nilOk && valueExpr != e.NIL && nilTail == e.NIL {
-			ev.log.Trace("Pushing anonymous assigment func: %s", assignment)
+			ev.log.Trace("Pushing anonymous assignment func: %s", assignment)
 			ev.pushContinuation(func(value e.Expr, ev *Evaluator) (e.Expr, error) {
 				var env *environment = ev.env
 
@@ -492,7 +492,7 @@ func defineContinuationFor(def e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		valueExpr, valOk := def.Tail()
 		if !valOk {
-			ev.log.Trace("Define has inproper fromat: %s", def)
+			ev.log.Trace("Define has improper format: %s", def)
 			return nil, NewEvaluationError("Bad syntax: invalid binding format", def)
 		}
 
