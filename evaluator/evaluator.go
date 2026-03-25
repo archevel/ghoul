@@ -107,10 +107,6 @@ func (ev *Evaluator) SetModuleState(ms *ModuleState) {
 	ev.moduleState = ms
 }
 
-func (ev *Evaluator) GetEnvironment() *environment {
-	return ev.env
-}
-
 func (ev *Evaluator) EvaluateWithContext(ctx context.Context, exprs e.Expr) (e.Expr, error) {
 	if exprs == e.NIL {
 		return exprs, nil
