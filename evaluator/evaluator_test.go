@@ -12,6 +12,36 @@ import (
 	p "github.com/archevel/ghoul/parser"
 )
 
+// testInputGivesOutput parses and evaluates the input, asserting it produces
+// the expected output expression.
+func testInputGivesOutput(in string, out e.Expr, t *testing.T) {
+	t.Helper()
+	env := NewEnvironment()
+	testInputGivesOutputWithinEnv(in, out, env, t)
+}
+
+func testInputGivesOutputWithinEnv(in string, out e.Expr, env *environment, t *testing.T) {
+	t.Helper()
+	r := strings.NewReader(in)
+	parseRes, parsed := p.Parse(r)
+
+	if parseRes != 0 {
+		t.Errorf("Parser failed given: %s", in)
+	}
+
+	res, err := Evaluate(parsed.Expressions, env)
+
+	if err != nil {
+		t.Errorf("Given %s. Got unexpected error: %q", in, err)
+	}
+
+	if res == nil {
+		t.Errorf("Given %s. Resulted in 'nil', expected %s", in, out.Repr())
+	} else if !out.Equiv(res) {
+		t.Errorf("Given %s. Expected %s to be equivalent to %s", in, res.Repr(), out.Repr())
+	}
+}
+
 func TestEvaluatesSimpleValues(t *testing.T) {
 
 	cases := []struct {
@@ -830,28 +860,3 @@ func TestGeneralTransformerRecursiveFnInsideLetInNestedCall(t *testing.T) {
 	testInputGivesOutputWithinEnv(in, e.Integer(3), env, t)
 }
 
-func testInputGivesOutput(in string, out e.Expr, t *testing.T) {
-	env := NewEnvironment()
-	testInputGivesOutputWithinEnv(in, out, env, t)
-}
-
-func testInputGivesOutputWithinEnv(in string, out e.Expr, env *environment, t *testing.T) {
-	r := strings.NewReader(in)
-	parseRes, parsed := p.Parse(r)
-
-	if parseRes != 0 {
-		t.Errorf("Parser failed given: %s", in)
-	}
-
-	res, err := Evaluate(parsed.Expressions, env)
-
-	if err != nil {
-		t.Errorf("Given %s. Got unexpected error: %q", in, err)
-	}
-
-	if res == nil {
-		t.Errorf("Given %s. Resulted in 'nil', expected %s", in, out.Repr())
-	} else if !out.Equiv(res) {
-		t.Errorf("Given %s. Expected %s to be equivalent to %s", in, res.Repr(), out.Repr())
-	}
-}

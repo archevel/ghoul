@@ -25,46 +25,6 @@ func newWithPrelude(t *testing.T) Ghoul {
 	return g
 }
 
-const guidingScript = `
-(define fiz-buz (lambda (n)
-  (cond ((and (eq? 0 (mod n 3)) (eq? 0 (mod n 5))) "FizzBuzz")
-        ((eq? 0 (mod n 3)) "Fizz")
-        ((eq? 0 (mod n 5)) "Buzz")
-        (else n))))
-
-(define loop (lambda (i m body)
-  (cond ((< i m)
-    (begin (body i) (loop (+ 1 i) m body))))))
-
-
-(define do-fizz-buzz-to (lambda (n) 
-  (loop 0 (+ 1 n) 
-    (lambda (i) 
-      (println (fiz-buz i))))))
-
-(do-fizz-buzz-to 10)
-`
-
-func guidingExample() {
-	r := strings.NewReader(guidingScript)
-	g := New()
-
-	g.Process(r)
-	// Output:
-	// FizzBuzz
-	// 1
-	// 2
-	// Fizz
-	// 4
-	// Buzz
-	// Fizz
-	// 7
-	// 8
-	// Fizz
-	// Buzz
-
-}
-
 func TestFailsOnUnparsableCode(t *testing.T) {
 	g := New()
 
@@ -240,27 +200,6 @@ func TestSyntaxRulesLiterals(t *testing.T) {
   ((my-if test then else alt) (cond (test then) (else alt)))))
 (my-if #t 1 else 2)
 `
-	expected := e.Integer(1)
-	res, err := g.Process(strings.NewReader(in))
-	if err != nil {
-		t.Errorf("Got error: %s", err)
-	}
-	if res != nil && !expected.Equiv(res) {
-		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
-	}
-}
-
-func TestSyntaxRulesLiteralMustMatchExactly(t *testing.T) {
-	g := New()
-	// "else" is a literal — when the input doesn't have "else" at that position,
-	// the pattern should not match
-	in := `
-(define-syntax my-if (syntax-rules (else)
-  ((my-if test then else alt) (cond (test then) (else alt)))))
-(my-if #t 1 else 2)
-`
-	// With "else" as a literal, the pattern requires the identifier "else" at that position.
-	// This should match because the input has "else" in the right place.
 	expected := e.Integer(1)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
@@ -493,56 +432,31 @@ func TestGeneralTransformerHygieneIntroducedBinding(t *testing.T) {
 }
 
 func TestSyntaxRulesMultipleClauses(t *testing.T) {
-	g := New()
-	in := `
-(define-syntax my-op (syntax-rules ()
+	// Multiple clauses are tried in order; the first matching pattern wins.
+	macro := `(define-syntax my-op (syntax-rules ()
   ((my-op x y) (+ x y))
-  ((my-op x) (+ x 1))))
-(my-op 10)
-`
-	expected := e.Integer(11)
-	res, err := g.Process(strings.NewReader(in))
-	if err != nil {
-		t.Errorf("Got error: %s", err)
-	}
-	if res != nil && !expected.Equiv(res) {
-		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
-	}
-}
+  ((my-op x) (+ x 1))))`
 
-func TestSyntaxRulesMultipleClausesFirstMatches(t *testing.T) {
-	g := New()
-	in := `
-(define-syntax my-op (syntax-rules ()
-  ((my-op x y) (+ x y))
-  ((my-op x) (+ x 1))))
-(my-op 3 4)
-`
-	expected := e.Integer(7)
-	res, err := g.Process(strings.NewReader(in))
-	if err != nil {
-		t.Errorf("Got error: %s", err)
+	cases := []struct {
+		name     string
+		call     string
+		expected e.Expr
+	}{
+		{"second clause matches single arg", "(my-op 10)", e.Integer(11)},
+		{"first clause matches two args", "(my-op 3 4)", e.Integer(7)},
 	}
-	if res != nil && !expected.Equiv(res) {
-		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
-	}
-}
 
-func TestSyntaxRulesMultipleClausesSiblingFormat(t *testing.T) {
-	g := New()
-	in := `
-(define-syntax my-op2 (syntax-rules ()
-  ((my-op2 x y) (+ x y))
-  ((my-op2 x) (+ x 1))))
-(my-op2 10)
-`
-	expected := e.Integer(11)
-	res, err := g.Process(strings.NewReader(in))
-	if err != nil {
-		t.Errorf("Got error: %s", err)
-	}
-	if res != nil && !expected.Equiv(res) {
-		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			g := New()
+			res, err := g.Process(strings.NewReader(macro + "\n" + c.call))
+			if err != nil {
+				t.Fatalf("Got error: %s", err)
+			}
+			if res != nil && !c.expected.Equiv(res) {
+				t.Errorf("Expected %s, got %s", c.expected.Repr(), res.Repr())
+			}
+		})
 	}
 }
 
@@ -778,10 +692,3 @@ func TestPreludeSyntaxCaseAdd1(t *testing.T) {
 	}
 }
 
-func testPrintlnExample() {
-	g := New()
-	g.Process(strings.NewReader(`(println "hello, world")`))
-
-	// Output:
-	// hello, world
-}

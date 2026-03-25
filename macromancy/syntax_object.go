@@ -184,6 +184,17 @@ func ResolveExpr(expr e.Expr) e.Expr {
 	return expr
 }
 
+// SyntaxObject wraps a leaf expression with hygiene marks during general
+// transformer expansion. The lifecycle is:
+//
+//  1. WrapExpr: wraps leaves as SyntaxObject (Pair structure preserved)
+//  2. ApplyMark: toggles marks on SyntaxObject-wrapped identifiers
+//  3. ResolveExpr: converts SyntaxObject{Identifier} → ScopedIdentifier
+//     (with marks) or plain Identifier (if marks are empty)
+//
+// After ResolveExpr, SyntaxObjects are gone and only ScopedIdentifiers
+// remain. ScopedIdentifier is a permanent part of the expression tree;
+// SyntaxObject is transient and only exists during transformer expansion.
 type SyntaxObject struct {
 	Datum e.Expr
 	Marks MarkSet

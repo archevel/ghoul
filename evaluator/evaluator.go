@@ -1,3 +1,12 @@
+// Package evaluator implements a continuation-passing style (CPS) expression
+// evaluator with proper tail call optimization. Evaluation proceeds by pushing
+// continuations onto a stack and stepping through them in a trampoline loop
+// (stepThroughContinuationsWithContext). Each continuation receives the result
+// of the previous one and the evaluator state, returning the next result.
+//
+// Special forms (cond, begin, lambda, define, set!, define-syntax, quote, require)
+// are dispatched in chooseEvaluation. Function calls go through
+// functionCallContinuationFor which handles both regular calls and macro expansion.
 package evaluator
 
 import (
@@ -153,6 +162,10 @@ func (ev *Evaluator) popContinuation() continuation {
 	return next
 }
 
+// sexprSeqEvalContinuationFor evaluates a sequence of expressions left to right.
+// maybeTailCall indicates this sequence is in tail position of its enclosing
+// body — when true, the last expression can reuse the caller's stack frame
+// (tail call optimization: no environment restoration is pushed after the call).
 func sexprSeqEvalContinuationFor(exprs e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		t, ok := exprs.Tail()
@@ -410,6 +423,16 @@ func prepareScope(paramExpr e.Expr, args e.List, definitionEnv *environment) con
 	}
 }
 
+// functionCallContinuationFor sets up the continuation stack for a function call.
+// Continuations are pushed in reverse execution order (stack-based):
+//
+//  1. Environment restore (skipped for tail calls)
+//  2. Apply function to collected arguments
+//  3. Resolve function identifier
+//  4. For each argument (right to left): collect result, then evaluate
+//
+// Macro calls (SyntaxTransformer / GeneralSyntaxTransformer) are intercepted
+// before argument evaluation since macros receive unevaluated syntax.
 func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuation {
 	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 		ev.log.Trace("Evaluating function call")
@@ -481,6 +504,9 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 			})
 		}
 
+		// collectArgs accumulates each evaluated argument into argList.
+		// Arguments are evaluated right-to-left (stack order) and consed
+		// onto the front, so argList ends up in the correct left-to-right order.
 		var argList e.List = e.NIL
 		collectArgs := func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
 			argList = cons(arg, argList)
