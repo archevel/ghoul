@@ -15,6 +15,92 @@
   ((let* ((var val) rest ...) body ...)
    (let ((var val)) (let* (rest ...) body ...)))))
 
+;; syntax-case -- pattern matching for general transformers
+;; Used inside define-syntax lambda bodies:
+;;   (define-syntax my-mac
+;;     (lambda (stx)
+;;       (syntax-case stx (literals ...)
+;;         ((my-mac x) body) ...)))
+;;
+;; Expands to runtime code that evaluates the expression, tries each
+;; pattern via syntax-match?, and on match calls a lambda with the
+;; bound pattern variables.
+(define-syntax syntax-case
+  (lambda (outer-stx)
+    (define stx-expr (car (cdr outer-stx)))
+    (define lits (car (cdr (cdr outer-stx))))
+    (define clauses (cdr (cdr (cdr outer-stx))))
+
+    (define walk-vars
+      (lambda (expr acc)
+        (cond
+          ((null? expr) acc)
+          ((identifier? expr)
+           (cond
+             ((eq? (syntax->datum expr) '...) acc)
+             ((eq? (syntax->datum expr) '_) acc)
+             (else (cons expr acc))))
+          ((pair? expr)
+           (walk-vars (cdr expr) (walk-vars (car expr) acc)))
+          (else acc))))
+
+    (define make-quote
+      (lambda (datum)
+        (list 'quote datum)))
+
+    (define make-var-lookup
+      (lambda (var)
+        (list 'cdr (list 'assoc (list 'syntax->datum (make-quote (syntax->datum var))) 'bindings__))))
+
+    (define make-var-lookups
+      (lambda (vars)
+        (cond
+          ((null? vars) '())
+          (else (cons (make-var-lookup (car vars))
+                      (make-var-lookups (cdr vars)))))))
+
+    (define build-clause
+      (lambda (pat body vars)
+        (define match-test
+          (list 'syntax-match? 'stx__ (make-quote pat) (make-quote lits)))
+        (define var-lookups (make-var-lookups vars))
+        (define body-with-bindings
+          (cons (list 'lambda vars body) var-lookups))
+        ;; (cond-clause: ((let ((bindings__ match)) (cond (bindings__ apply-body)))))
+        (list (list 'begin
+                (list 'define 'bindings__ match-test)
+                (list 'cond (list 'bindings__ body-with-bindings))))))
+
+    (define build-clauses
+      (lambda (clauses)
+        (cond
+          ((null? clauses) '())
+          (else
+            (define clause (car clauses))
+            (define pat (car clause))
+            (define body (car (cdr clause)))
+            (define vars (cond ((pair? pat) (walk-vars (cdr pat) '())) (else '())))
+            (define rest (build-clauses (cdr clauses)))
+            (define match-test
+              (list 'syntax-match? 'stx__ (make-quote pat) (make-quote lits)))
+            (define var-lookups (make-var-lookups vars))
+            (define body-with-bindings
+              (cons (list 'lambda vars body) var-lookups))
+            (cond
+              ((null? rest)
+               (list 'begin
+                 (list 'define 'bindings__ match-test)
+                 (list 'cond (list 'bindings__ body-with-bindings))))
+              (else
+               (list 'begin
+                 (list 'define 'bindings__ match-test)
+                 (list 'cond
+                   (list 'bindings__ body-with-bindings)
+                   (list 'else rest)))))))))
+
+    (define clause-code (build-clauses clauses))
+    (list (list 'lambda (list 'stx__) clause-code) stx-expr)))
+
 ;; when -- conditional execution
 ;; (when test body ...)
 (define-syntax when (syntax-rules ()

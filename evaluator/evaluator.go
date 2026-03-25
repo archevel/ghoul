@@ -20,6 +20,7 @@ const ASSIGNMENT_SPECIAL_FORM = e.Identifier("set!")
 const DEFINE_SYNTAX_SPECIAL_FORM = e.Identifier("define-syntax")
 const SYNTAX_RULES_FORM = e.Identifier("syntax-rules")
 const REQUIRE_SPECIAL_FORM = e.Identifier("require")
+const QUOTE_SPECIAL_FORM = e.Identifier("quote")
 
 func (ev *Evaluator) freshMark() macromancy.Mark {
 	return atomic.AddUint64(ev.markCounter, 1)
@@ -162,8 +163,9 @@ func sexprSeqEvalContinuationFor(exprs e.List, maybeTailCall bool) continuation 
 			return nil, NewEvaluationError("Malformed expression sequence", exprs)
 		}
 		head := exprs.First()
+		isTail := maybeTailCall && t == e.NIL
 		ev.log.Trace("Pushing continuation for evaluating head of expression sequence")
-		ev.pushContinuation(sexprEvalContinuationFor(head, exprs, maybeTailCall && t == e.NIL))
+		ev.pushContinuation(sexprEvalContinuationFor(head, exprs, isTail))
 		return e.NIL, nil
 	}
 }
@@ -228,6 +230,11 @@ func chooseEvaluation(expr e.Expr, parent e.List, maybeTailCall bool) (ret e.Exp
 			nextCont = assignmentContinuationFor(t, maybeTailCall)
 		case BEGIN_SPECIAL_FORM:
 			nextCont = sexprSeqEvalContinuationFor(t, maybeTailCall)
+		case QUOTE_SPECIAL_FORM:
+			// (quote expr) returns expr unevaluated, like the parser's ' syntax
+			if t != e.NIL {
+				ret = t.First()
+			}
 		default:
 			nextCont = functionCallContinuationFor(v, maybeTailCall)
 		}
@@ -697,6 +704,7 @@ func collectBoundIdentifiers(env *environment) map[e.Identifier]bool {
 		ASSIGNMENT_SPECIAL_FORM:   true,
 		DEFINE_SYNTAX_SPECIAL_FORM: true,
 		SYNTAX_RULES_FORM:         true,
+		QUOTE_SPECIAL_FORM:        true,
 		REQUIRE_SPECIAL_FORM:      true,
 	}
 	for i := range *env {

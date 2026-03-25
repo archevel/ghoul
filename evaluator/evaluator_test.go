@@ -1,12 +1,14 @@
 package evaluator
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
 
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
+	"github.com/archevel/ghoul/macromancy"
 	p "github.com/archevel/ghoul/parser"
 )
 
@@ -663,6 +665,169 @@ func TestScopedIdentifierAndPlainIdentifierAreDistinct(t *testing.T) {
 	if !result2.Equiv(e.Integer(2)) {
 		t.Errorf("scoped x should be 2, got %s", result2.Repr())
 	}
+}
+
+func TestGeneralTransformerDefineInsideLetInsideNestedCall(t *testing.T) {
+	// When a general transformer uses `let` (a syntax-rules macro) and
+	// that transformer is called from within another general transformer,
+	// the `let` bindings should resolve correctly. Previously, the double
+	// hygiene marking (outer transformer + inner transformer) caused
+	// identifiers defined via `let` to become unreachable.
+	in := `
+(define-syntax let (syntax-rules ()
+  ((let ((var val) ...) body ...)
+   ((lambda (var ...) body ...) val ...))))
+
+(define-syntax inner-mac
+  (lambda (stx)
+    (let ((x 42)) x)))
+
+(define-syntax outer-mac
+  (lambda (stx)
+    (inner-mac)))
+
+(outer-mac)
+`
+	testInputGivesOutput(in, e.Integer(42), t)
+}
+
+func TestGeneralTransformerNestedDefineInsideLambda(t *testing.T) {
+	// When a general transformer defines a function inside a lambda
+	// (nested define), and that inner function uses car/cdr on the
+	// transformer's syntax input, it should see the same data as
+	// the outer scope. This fails when the inner scope's environment
+	// causes different identifier resolution.
+	env := NewEnvironment()
+	env.Register("cdr", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		arg := args.First()
+		if list, ok := arg.(e.List); ok && list != e.NIL {
+			return list.Second(), nil
+		}
+		return e.NIL, fmt.Errorf("cdr: expected list, got %T", arg)
+	})
+	env.Register("car", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		if list, ok := args.First().(e.List); ok && list != e.NIL {
+			return list.First(), nil
+		}
+		return e.NIL, fmt.Errorf("car: expected list, got %T", args.First())
+	})
+	env.Register("identifier?", func(args e.List, evaluator *Evaluator) (e.Expr, error) {
+		arg := args.First()
+		if so, ok := arg.(macromancy.SyntaxObject); ok {
+			_, isId := so.Datum.(e.Identifier)
+			_, isSI := so.Datum.(e.ScopedIdentifier)
+			return e.Boolean(isId || isSI), nil
+		}
+		_, isId := arg.(e.Identifier)
+		_, isSI := arg.(e.ScopedIdentifier)
+		return e.Boolean(isId || isSI), nil
+	})
+	env.Register("syntax->datum", func(args e.List, evaluator *Evaluator) (e.Expr, error) {
+		if so, ok := args.First().(macromancy.SyntaxObject); ok {
+			if si, ok := so.Datum.(e.ScopedIdentifier); ok {
+				return si.Name, nil
+			}
+			return so.Datum, nil
+		}
+		if si, ok := args.First().(e.ScopedIdentifier); ok {
+			return si.Name, nil
+		}
+		return args.First(), nil
+	})
+	env.Register("null?", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		return e.Boolean(args.First() == e.NIL), nil
+	})
+	env.Register("pair?", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		_, ok := args.First().(*e.Pair)
+		return e.Boolean(ok), nil
+	})
+	env.Register("cons", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		fst := args.First()
+		t2, _ := args.Tail()
+		snd := t2.First()
+		return e.Cons(fst, snd), nil
+	})
+
+	in := `
+(define-syntax test-mac
+  (lambda (stx)
+    (define clauses (cdr (cdr stx)))
+    (define clause (car clauses))
+    (define pat (car clause))
+    (define collect
+      (lambda (p)
+        (define walk
+          (lambda (expr acc)
+            (cond
+              ((null? expr) acc)
+              ((identifier? expr) (+ acc 1))
+              ((pair? expr) (walk (cdr expr) (walk (car expr) acc)))
+              (else acc))))
+        (walk (cdr p) 0)))
+    (collect pat)))
+(test-mac ()
+  ((test-mac x) 42))
+`
+	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		fst := args.First().(e.Integer)
+		t2, _ := args.Tail()
+		snd := t2.First().(e.Integer)
+		return e.Integer(fst + snd), nil
+	})
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	result, err := Evaluate(parsed.Expressions, env)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Should return 1 — one pattern variable 'x' in pattern (test-mac x)
+	if !result.Equiv(e.Integer(1)) {
+		t.Errorf("expected 1, got %s", result.Repr())
+	}
+}
+
+func TestGeneralTransformerRecursiveFnInsideLetInNestedCall(t *testing.T) {
+	// A recursive function defined inside a general transformer that uses
+	// `let`, called from another transformer. This is the pattern needed
+	// for syntax-case as a prelude macro.
+	in := `
+(define-syntax let (syntax-rules ()
+  ((let ((var val) ...) body ...)
+   ((lambda (var ...) body ...) val ...))))
+
+(define-syntax count-mac
+  (lambda (stx)
+    (define count
+      (lambda (lst acc)
+        (cond
+          ((null? lst) acc)
+          (else (count (cdr lst) (+ acc 1))))))
+    (let ((result (count (cdr stx) 0)))
+      result)))
+
+(define-syntax outer
+  (lambda (stx)
+    (count-mac a b c)))
+
+(outer)
+`
+	env := NewEnvironment()
+	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		fst := args.First().(e.Integer)
+		t, _ := args.Tail()
+		snd := t.First().(e.Integer)
+		return e.Integer(fst + snd), nil
+	})
+	env.Register("null?", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		return e.Boolean(args.First() == e.NIL), nil
+	})
+	env.Register("cdr", func(args e.List, ev *Evaluator) (e.Expr, error) {
+		if list, ok := args.First().(e.List); ok && list != e.NIL {
+			return list.Second(), nil
+		}
+		return e.NIL, nil
+	})
+	testInputGivesOutputWithinEnv(in, e.Integer(3), env, t)
 }
 
 func testInputGivesOutput(in string, out e.Expr, t *testing.T) {

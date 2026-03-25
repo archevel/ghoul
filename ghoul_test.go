@@ -759,6 +759,25 @@ func TestPreludeWhenMacro(t *testing.T) {
 	}
 }
 
+func TestPreludeSyntaxCaseAdd1(t *testing.T) {
+	// Verifies that syntax-case (defined as a prelude macro) works
+	// for a simple pattern-matching transformer.
+	g := newWithPrelude(t)
+	res, err := g.Process(strings.NewReader(`
+(define-syntax add1
+  (lambda (stx)
+    (syntax-case stx ()
+      ((add1 x) (list '+ (syntax->datum x) 1)))))
+(add1 41)
+`))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !e.Integer(42).Equiv(res) {
+		t.Errorf("Expected 42, got %s", res.Repr())
+	}
+}
+
 func testPrintlnExample() {
 	g := New()
 	g.Process(strings.NewReader(`(println "hello, world")`))

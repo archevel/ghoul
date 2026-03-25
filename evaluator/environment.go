@@ -162,7 +162,13 @@ func extractExports(env *environment) *ModuleExports {
 }
 
 func newEnvWithEmptyScope(env *environment) *environment {
-	newEnv := append(*env, &scope{})
+	// Copy the slice to avoid aliasing the underlying array.
+	// Without this, multiple calls to newEnvWithEmptyScope with the same
+	// parent env can overwrite each other's scopes when the parent slice
+	// has spare capacity.
+	copied := make(environment, len(*env), len(*env)+1)
+	copy(copied, *env)
+	newEnv := append(copied, &scope{})
 	return &newEnv
 }
 

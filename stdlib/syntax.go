@@ -7,6 +7,25 @@ import (
 	"github.com/archevel/ghoul/mummy"
 )
 
+// stripMarks recursively removes hygiene marks from expressions,
+// converting ScopedIdentifiers to plain Identifiers and unwrapping
+// SyntaxObjects. Used by syntax-match? to compare by name.
+func stripMarks(expr e.Expr) e.Expr {
+	if si, ok := expr.(e.ScopedIdentifier); ok {
+		return si.Name
+	}
+	if so, ok := expr.(macromancy.SyntaxObject); ok {
+		return stripMarks(so.Datum)
+	}
+	if expr == e.NIL {
+		return e.NIL
+	}
+	if pair, ok := expr.(*e.Pair); ok {
+		return e.Cons(stripMarks(pair.H), stripMarks(pair.T))
+	}
+	return expr
+}
+
 func registerSyntax(env *ev.Environment) {
 	env.Register("syntax->datum", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
 		arg := args.First()
@@ -45,10 +64,12 @@ func registerSyntax(env *ev.Environment) {
 
 	env.Register("syntax-match?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
 		// (syntax-match? expr pattern literals)
-		// Returns an association list of bindings or #f
-		expr := args.First()
+		// Returns an association list of bindings or #f.
+		// Both expr and pattern are stripped of hygiene marks before matching
+		// so that identifier comparison works by name.
+		expr := stripMarks(args.First())
 		t1, _ := args.Tail()
-		pattern := t1.First()
+		pattern := stripMarks(t1.First())
 		t2, _ := t1.Tail()
 		litList := t2.First()
 
