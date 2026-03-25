@@ -42,9 +42,6 @@ func WrapExpr(expr e.Expr, marks MarkSet) e.Expr {
 	if pair, ok := expr.(*e.Pair); ok {
 		return e.Cons(WrapExpr(pair.H, marks), WrapExpr(pair.T, marks))
 	}
-	if list, ok := expr.(e.List); ok && list != e.NIL {
-		return e.Cons(WrapExpr(list.First(), marks), WrapExpr(list.Second(), marks))
-	}
 	return SyntaxObject{Datum: expr, Marks: copyMarks(marks)}
 }
 

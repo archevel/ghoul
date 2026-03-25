@@ -350,14 +350,23 @@ func matchEllipsis(macroList e.List, macroLength int, codeList e.List, bound bin
 	return matchWalk(macroList.Second(), rest, bound, true, literals)
 }
 
+// matchFinalCodeExpression handles the case where the code is not a list
+// (e.g., the atom tail of a dotted pair) but the pattern still has elements.
+// If only one pattern element remains, it matches against the atom.
+// If the head is `...`, it binds to NIL (zero repetitions) and continues.
+// Otherwise the pattern expects more structure than the code provides.
 func matchFinalCodeExpression(macroList e.List, code e.Expr, bound bindings, hasEllipsis bool, literals map[e.Identifier]bool) (bool, bindings) {
 	if macroList != e.NIL && macroList.Second() == e.NIL {
 		return matchWalk(macroList.First(), code, bound, hasEllipsis, literals)
 	}
+	// When `...` faces a non-list code atom (e.g., from an improper list
+	// where the dotted tail has been consumed), treat it as zero repetitions.
 	if id := toIdentifier(macroList.First()); id == e.Identifier("...") {
 		bound.vars[id] = e.NIL
 		return matchWalk(macroList.Second(), code, bound, hasEllipsis, literals)
 	}
+	// Pattern has multiple elements remaining but code is a single atom —
+	// the pattern expects more structure than the code provides.
 	return false, bindings{}
 }
 

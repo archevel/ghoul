@@ -270,6 +270,341 @@ func TestNestedEllipsisPatternMatching(t *testing.T) {
 	}
 }
 
+func TestNestedEllipsisFourBindings(t *testing.T) {
+	// Test with 4+ bindings to exercise the let pattern beyond the old 3-clause limit
+	patternOk, pattern := parser.Parse(strings.NewReader("(let ((var val) ...) body ...)"))
+	if patternOk != 0 {
+		t.Fatal("parse failed")
+	}
+	codeOk, code := parser.Parse(strings.NewReader("(let ((a 1) (b 2) (c 3) (d 4)) (+ a b c d))"))
+	if codeOk != 0 {
+		t.Fatal("parse failed")
+	}
+
+	pat := pattern.Expressions.First()
+	macro := Macro{
+		Pattern:      pat,
+		PatternVars:  ExtractPatternVars(pat, nil),
+		EllipsisVars: ExtractEllipsisVars(pat, nil),
+	}
+
+	ok, result := macro.Matches(code.Expressions.First())
+	if !ok {
+		t.Fatal("should match")
+	}
+
+	varVals := result.repeated[e.Identifier("var")]
+	valVals := result.repeated[e.Identifier("val")]
+	if len(varVals) != 4 || len(valVals) != 4 {
+		t.Fatalf("expected 4 bindings each, got var=%d val=%d", len(varVals), len(valVals))
+	}
+
+	// Just verify the binding counts are correct — expansion is tested in hygiene_test.go
+	for i, expected := range []e.Identifier{"a", "b", "c", "d"} {
+		if !varVals[i].Equiv(e.Identifier(expected)) {
+			t.Errorf("expected var[%d]=%s, got %s", i, expected, varVals[i].Repr())
+		}
+	}
+	for i, expected := range []e.Integer{1, 2, 3, 4} {
+		if !valVals[i].Equiv(expected) {
+			t.Errorf("expected val[%d]=%d, got %s", i, expected, valVals[i].Repr())
+		}
+	}
+}
+
+func TestNestedEllipsisWithTrailingPattern(t *testing.T) {
+	// Pattern: (mac (x y) ... z) — structured ellipsis followed by a regular binding
+	patternOk, pattern := parser.Parse(strings.NewReader("(mac (x y) ... z)"))
+	if patternOk != 0 {
+		t.Fatal("parse failed")
+	}
+	codeOk, code := parser.Parse(strings.NewReader("(mac (1 2) (3 4) 5)"))
+	if codeOk != 0 {
+		t.Fatal("parse failed")
+	}
+
+	pat := pattern.Expressions.First()
+	macro := Macro{
+		Pattern:      pat,
+		PatternVars:  ExtractPatternVars(pat, nil),
+		EllipsisVars: ExtractEllipsisVars(pat, nil),
+	}
+
+	ok, result := macro.Matches(code.Expressions.First())
+	if !ok {
+		t.Fatal("should match")
+	}
+
+	xVals := result.repeated[e.Identifier("x")]
+	yVals := result.repeated[e.Identifier("y")]
+	if len(xVals) != 2 || len(yVals) != 2 {
+		t.Fatalf("expected 2 each, got x=%d y=%d", len(xVals), len(yVals))
+	}
+	if !result.vars[e.Identifier("z")].Equiv(e.Integer(5)) {
+		t.Errorf("expected z=5, got %s", result.vars[e.Identifier("z")].Repr())
+	}
+}
+
+func TestMatchesWithNonIdentifierPattern(t *testing.T) {
+	// Pattern that starts with a non-identifier should not match
+	macro := Macro{Pattern: e.Integer(42)}
+	ok, _ := macro.Matches(e.Integer(42))
+	if ok {
+		t.Error("non-identifier pattern should not match via Matches")
+	}
+}
+
+func TestMatchesWithNonIdentifierCode(t *testing.T) {
+	// Code that is a non-identifier atom when pattern expects identifier
+	macro := Macro{Pattern: e.Identifier("foo")}
+	ok, _ := macro.Matches(e.Integer(42))
+	if ok {
+		t.Error("non-identifier code should not match identifier pattern")
+	}
+}
+
+func TestMatchesPatternNameMismatch(t *testing.T) {
+	patternOk, pattern := parser.Parse(strings.NewReader("(foo x)"))
+	if patternOk != 0 {
+		t.Fatal("parse failed")
+	}
+	codeOk, code := parser.Parse(strings.NewReader("(bar 1)"))
+	if codeOk != 0 {
+		t.Fatal("parse failed")
+	}
+	macro := Macro{Pattern: pattern.Expressions.First()}
+	ok, _ := macro.Matches(code.Expressions.First())
+	if ok {
+		t.Error("macro name mismatch should not match")
+	}
+}
+
+func TestAppendExprsWithAtom(t *testing.T) {
+	// appendExprs with a non-list, non-NIL expression (atom) as the list arg
+	result := appendExprs(e.Integer(42), e.NIL)
+	list, ok := result.(e.List)
+	if !ok {
+		t.Fatalf("expected list, got %T", result)
+	}
+	if !list.First().Equiv(e.Integer(42)) {
+		t.Errorf("expected (42), got %s", result.Repr())
+	}
+}
+
+func TestAppendExprsWithProperList(t *testing.T) {
+	list := e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.NIL))
+	tail := e.Cons(e.Integer(3), e.NIL)
+	result := appendExprs(list, tail)
+	if result.Repr() != "(1 2 3)" {
+		t.Errorf("expected (1 2 3), got %s", result.Repr())
+	}
+}
+
+func TestAppendExprsWithNIL(t *testing.T) {
+	tail := e.Cons(e.Integer(1), e.NIL)
+	result := appendExprs(e.NIL, tail)
+	if result.Repr() != "(1)" {
+		t.Errorf("expected (1), got %s", result.Repr())
+	}
+}
+
+func TestMatchDottedPairPatternWithEllipsis(t *testing.T) {
+	// Pattern (mac ... . y) — ellipsis with dotted tail captures the rest
+	// This tests the old matchEllipsis path (... as head)
+	patternOk, pattern := parser.Parse(strings.NewReader("(mac ... . y)"))
+	if patternOk != 0 {
+		t.Fatal("parse failed")
+	}
+	codeOk, code := parser.Parse(strings.NewReader("(mac 1 . 2)"))
+	if codeOk != 0 {
+		t.Fatal("parse failed")
+	}
+	macro := Macro{Pattern: pattern.Expressions.First()}
+	ok, result := macro.Matches(code.Expressions.First())
+	if !ok {
+		t.Fatal("should match")
+	}
+	if result.vars[e.Identifier("y")] == nil {
+		t.Error("y should be bound to the dotted tail")
+	}
+}
+
+func TestFindRepeatedVarsWithScopedIdentifier(t *testing.T) {
+	// Template contains a ScopedIdentifier that references a repeated var
+	bound := newBindings()
+	bound.repeated[e.Identifier("x")] = []e.Expr{e.Integer(1), e.Integer(2)}
+
+	tmpl := e.ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}}
+	vars := findRepeatedVarsInTemplate(tmpl, bound)
+	if len(vars) != 1 || vars[0] != e.Identifier("x") {
+		t.Errorf("expected [x], got %v", vars)
+	}
+}
+
+func TestFindRepeatedVarsInNestedTemplate(t *testing.T) {
+	// Template is a list containing a repeated var: (+ x y)
+	bound := newBindings()
+	bound.repeated[e.Identifier("x")] = []e.Expr{e.Integer(1)}
+
+	tmpl := e.Cons(e.Identifier("+"), e.Cons(e.Identifier("x"), e.Cons(e.Identifier("y"), e.NIL)))
+	vars := findRepeatedVarsInTemplate(tmpl, bound)
+	if len(vars) != 1 || vars[0] != e.Identifier("x") {
+		t.Errorf("expected [x], got %v", vars)
+	}
+}
+
+func TestFindRepeatedVarsNoMatch(t *testing.T) {
+	bound := newBindings()
+	bound.repeated[e.Identifier("x")] = []e.Expr{e.Integer(1)}
+
+	// Template identifier not in repeated
+	vars := findRepeatedVarsInTemplate(e.Identifier("y"), bound)
+	if len(vars) != 0 {
+		t.Errorf("expected empty, got %v", vars)
+	}
+}
+
+func TestFindRepeatedVarsScopedIdentifierNoMatch(t *testing.T) {
+	bound := newBindings()
+	bound.repeated[e.Identifier("x")] = []e.Expr{e.Integer(1)}
+
+	vars := findRepeatedVarsInTemplate(e.ScopedIdentifier{Name: "y", Marks: map[uint64]bool{1: true}}, bound)
+	if len(vars) != 0 {
+		t.Errorf("expected empty, got %v", vars)
+	}
+}
+
+func TestMatchFinalCodeExpressionPatternTooLong(t *testing.T) {
+	// Pattern (mac x y) against code (mac . 1) — after matching mac,
+	// pattern has (x y) but code is just the atom 1.
+	// The pattern expects more structure than the code provides.
+	patternOk, pattern := parser.Parse(strings.NewReader("(mac x y)"))
+	if patternOk != 0 {
+		t.Fatal("parse failed")
+	}
+	codeOk, code := parser.Parse(strings.NewReader("(mac . 1)"))
+	if codeOk != 0 {
+		t.Fatal("parse failed")
+	}
+	macro := Macro{Pattern: pattern.Expressions.First()}
+	ok, _ := macro.Matches(code.Expressions.First())
+	if ok {
+		t.Error("pattern with 2 remaining elements should not match a single atom")
+	}
+}
+
+func TestMatchWalkScopedIdentifierInPattern(t *testing.T) {
+	// A ScopedIdentifier in the pattern should still match and bind
+	patternOk, pattern := parser.Parse(strings.NewReader("(mac x)"))
+	if patternOk != 0 {
+		t.Fatal("parse failed")
+	}
+	codeOk, code := parser.Parse(strings.NewReader("(mac 42)"))
+	if codeOk != 0 {
+		t.Fatal("parse failed")
+	}
+	macro := Macro{Pattern: pattern.Expressions.First()}
+	ok, result := macro.Matches(code.Expressions.First())
+	if !ok {
+		t.Fatal("should match")
+	}
+	if !result.vars[e.Identifier("x")].Equiv(e.Integer(42)) {
+		t.Errorf("expected x=42, got %v", result.vars[e.Identifier("x")])
+	}
+}
+
+func TestRepeatedEllipsisFewerCodeThanTailPatterns(t *testing.T) {
+	// Pattern (mac x ... y z) with code (mac 1) — only 1 code element
+	// but 2 tail patterns (y z), so x repeats 0 times
+	patternOk, pattern := parser.Parse(strings.NewReader("(mac x ... y z)"))
+	if patternOk != 0 {
+		t.Fatal("parse failed")
+	}
+	codeOk, code := parser.Parse(strings.NewReader("(mac 1 2)"))
+	if codeOk != 0 {
+		t.Fatal("parse failed")
+	}
+
+	pat := pattern.Expressions.First()
+	macro := Macro{
+		Pattern:      pat,
+		PatternVars:  ExtractPatternVars(pat, nil),
+		EllipsisVars: ExtractEllipsisVars(pat, nil),
+	}
+
+	ok, result := macro.Matches(code.Expressions.First())
+	if !ok {
+		t.Fatal("should match with 0 repetitions of x")
+	}
+	xVals := result.repeated[e.Identifier("x")]
+	if len(xVals) != 0 {
+		t.Errorf("expected 0 x repetitions, got %d", len(xVals))
+	}
+	if !result.vars[e.Identifier("y")].Equiv(e.Integer(1)) {
+		t.Errorf("expected y=1, got %s", result.vars[e.Identifier("y")].Repr())
+	}
+	if !result.vars[e.Identifier("z")].Equiv(e.Integer(2)) {
+		t.Errorf("expected z=2, got %s", result.vars[e.Identifier("z")].Repr())
+	}
+}
+
+func TestRepeatedEllipsisSubpatternMismatch(t *testing.T) {
+	// Pattern (mac (x y) ...) with code (mac 1 2) — code elements are atoms,
+	// not lists matching the (x y) subpattern
+	patternOk, pattern := parser.Parse(strings.NewReader("(mac (x y) ...)"))
+	if patternOk != 0 {
+		t.Fatal("parse failed")
+	}
+	codeOk, code := parser.Parse(strings.NewReader("(mac 1 2)"))
+	if codeOk != 0 {
+		t.Fatal("parse failed")
+	}
+
+	pat := pattern.Expressions.First()
+	macro := Macro{
+		Pattern:      pat,
+		PatternVars:  ExtractPatternVars(pat, nil),
+		EllipsisVars: ExtractEllipsisVars(pat, nil),
+	}
+
+	ok, _ := macro.Matches(code.Expressions.First())
+	if ok {
+		t.Error("should not match — code elements are atoms, not (x y) pairs")
+	}
+}
+
+func TestRepeatedEllipsisDottedCodeList(t *testing.T) {
+	// Pattern (mac x ...) with code (mac 1 . 2) — dotted pair in code
+	// x should capture [1] (the proper element before the dotted tail)
+	patternOk, pattern := parser.Parse(strings.NewReader("(mac x ...)"))
+	if patternOk != 0 {
+		t.Fatal("parse failed")
+	}
+	codeOk, code := parser.Parse(strings.NewReader("(mac 1 . 2)"))
+	if codeOk != 0 {
+		t.Fatal("parse failed")
+	}
+
+	pat := pattern.Expressions.First()
+	macro := Macro{
+		Pattern:      pat,
+		PatternVars:  ExtractPatternVars(pat, nil),
+		EllipsisVars: ExtractEllipsisVars(pat, nil),
+	}
+
+	ok, result := macro.Matches(code.Expressions.First())
+	if !ok {
+		t.Fatal("should match")
+	}
+	xVals := result.repeated[e.Identifier("x")]
+	if len(xVals) != 1 {
+		t.Fatalf("expected 1 x repetition, got %d", len(xVals))
+	}
+	if !xVals[0].Equiv(e.Integer(1)) {
+		t.Errorf("expected x[0]=1, got %s", xVals[0].Repr())
+	}
+}
+
 func TestWildcardPatternMatching(t *testing.T) {
 	cases := []struct {
 		name    string

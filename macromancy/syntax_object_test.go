@@ -502,6 +502,31 @@ func TestExtractEllipsisVarsExcludesLiterals(t *testing.T) {
 	}
 }
 
+func TestExtractEllipsisVarsNestedListWithoutEllipsis(t *testing.T) {
+	// Pattern: (mac ((a b)) x) — nested list but no ellipsis
+	inner := e.Cons(e.Cons(e.Identifier("a"), e.Cons(e.Identifier("b"), e.NIL)), e.NIL)
+	pattern := e.Cons(e.Identifier("mac"),
+		e.Cons(inner,
+			e.Cons(e.Identifier("x"), e.NIL)))
+
+	vars := ExtractEllipsisVars(pattern, nil)
+	if len(vars) != 0 {
+		t.Errorf("no ellipsis in pattern, expected 0 ellipsis vars, got %d", len(vars))
+	}
+}
+
+func TestExtractEllipsisVarsWithScopedIdentifierEllipsis(t *testing.T) {
+	// Pattern where `...` is a ScopedIdentifier (from meta-macro expansion)
+	pattern := e.Cons(e.Identifier("mac"),
+		e.Cons(e.Identifier("x"),
+			e.Cons(e.ScopedIdentifier{Name: "...", Marks: map[uint64]bool{1: true}}, e.NIL)))
+
+	vars := ExtractEllipsisVars(pattern, nil)
+	if !vars[e.Identifier("x")] {
+		t.Error("'x' should be an ellipsis variable even when ... is a ScopedIdentifier")
+	}
+}
+
 func TestSyntaxObjectEquivWithPlainExpr(t *testing.T) {
 	so := SyntaxObject{Datum: e.Integer(42), Marks: NewMarkSet()}
 
