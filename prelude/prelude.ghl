@@ -1,19 +1,27 @@
 ;; Ghoul Standard Prelude
 ;; Common macros and derived forms
 
-;; let — local bindings
+;; let -- local bindings
 ;; (let ((x 1) (y 2)) (+ x y))
 (define-syntax let (syntax-rules ()
   ((let ((var val) ...) body ...)
    ((lambda (var ...) body ...) val ...))))
 
-;; when — conditional execution
+;; let* -- sequential bindings where each can reference the previous
+;; (let* ((x 1) (y (+ x 1))) y) => 2
+(define-syntax let* (syntax-rules ()
+  ((let* () body ...)
+   (begin body ...))
+  ((let* ((var val) rest ...) body ...)
+   (let ((var val)) (let* (rest ...) body ...)))))
+
+;; when -- conditional execution
 ;; (when test body ...)
 (define-syntax when (syntax-rules ()
   ((when test body ...)
    (cond (test (begin body ...))))))
 
-;; unless — negated conditional
+;; unless -- negated conditional
 ;; (unless test body ...)
 (define-syntax unless (syntax-rules ()
   ((unless test body ...)

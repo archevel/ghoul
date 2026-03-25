@@ -13,6 +13,9 @@ func registerSyntax(env *ev.Environment) {
 		if so, ok := arg.(macromancy.SyntaxObject); ok {
 			return so.Datum, nil
 		}
+		if si, ok := arg.(e.ScopedIdentifier); ok {
+			return si.Name, nil
+		}
 		return arg, nil
 	})
 
@@ -33,8 +36,51 @@ func registerSyntax(env *ev.Environment) {
 			_, isId := so.Datum.(e.Identifier)
 			return e.Boolean(isId), nil
 		}
+		if _, ok := arg.(e.ScopedIdentifier); ok {
+			return e.Boolean(true), nil
+		}
 		_, isId := arg.(e.Identifier)
 		return e.Boolean(isId), nil
+	})
+
+	env.Register("syntax-match?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+		// (syntax-match? expr pattern literals)
+		// Returns an association list of bindings or #f
+		expr := args.First()
+		t1, _ := args.Tail()
+		pattern := t1.First()
+		t2, _ := t1.Tail()
+		litList := t2.First()
+
+		// Build literals map from the literals list
+		literals := map[e.Identifier]bool{}
+		if ll, ok := litList.(e.List); ok {
+			for ll != e.NIL {
+				if id, ok := ll.First().(e.Identifier); ok {
+					literals[id] = true
+				}
+				next, ok := ll.Tail()
+				if !ok {
+					break
+				}
+				ll = next
+			}
+		}
+
+		patternVars := macromancy.ExtractPatternVars(pattern, literals)
+		ellipsisVars := macromancy.ExtractEllipsisVars(pattern, literals)
+		macro := macromancy.Macro{
+			Pattern:      pattern,
+			PatternVars:  patternVars,
+			EllipsisVars: ellipsisVars,
+			Literals:     literals,
+		}
+
+		ok, alist := macro.MatchAndBind(expr)
+		if !ok {
+			return e.Boolean(false), nil
+		}
+		return alist, nil
 	})
 
 	// Mummy conversion functions

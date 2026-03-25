@@ -186,6 +186,27 @@ func registerLists(env *ev.Environment) {
 		return acc, nil
 	})
 
+	env.Register("assoc", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+		key := args.First()
+		t, _ := args.Tail()
+		lst, ok := t.First().(e.List)
+		if !ok {
+			return e.Boolean(false), nil
+		}
+		for lst != e.NIL {
+			pair, ok := lst.First().(*e.Pair)
+			if ok && pair.H.Equiv(key) {
+				return pair, nil
+			}
+			next, ok := lst.Tail()
+			if !ok {
+				break
+			}
+			lst = next
+		}
+		return e.Boolean(false), nil
+	})
+
 	env.Register("null?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
 		return e.Boolean(args.First() == e.NIL), nil
 	})

@@ -41,6 +41,29 @@ func (m Macro) Matches(expr e.Expr) (bool, bindings) {
 	return false, bindings{}
 }
 
+// MatchAndBind matches the given expression against this macro's pattern.
+// Returns (true, assocList) on success or (false, nil) on failure.
+// The association list contains (name . value) pairs for each bound variable.
+func (m Macro) MatchAndBind(expr e.Expr) (bool, e.Expr) {
+	ok, bound := m.Matches(expr)
+	if !ok {
+		return false, nil
+	}
+
+	var result e.Expr = e.NIL
+	for id, val := range bound.vars {
+		result = e.Cons(e.Cons(id, val), result)
+	}
+	for id, vals := range bound.repeated {
+		var valList e.Expr = e.NIL
+		for i := len(vals) - 1; i >= 0; i-- {
+			valList = e.Cons(vals[i], valList)
+		}
+		result = e.Cons(e.Cons(id, valList), result)
+	}
+	return true, result
+}
+
 func (m Macro) ExpandHygienic(bound bindings, mark Mark) e.Expr {
 	return walkAndReplaceHygienic(m.Body, bound, mark, m.PatternVars)
 }

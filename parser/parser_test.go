@@ -3,11 +3,37 @@ package parser
 import (
 	"fmt"
 	"math"
+	"os"
 	"strings"
 	"testing"
 
 	e "github.com/archevel/ghoul/expressions"
 )
+
+func TestParsePreludeFile(t *testing.T) {
+	// Regression test: the full prelude must parse without errors.
+
+	// Test via os.Open + file reader (same path as ProcessFile)
+	f, err := os.Open("../prelude/prelude.ghl")
+	if err != nil {
+		t.Fatalf("failed to open prelude: %v", err)
+	}
+	defer f.Close()
+	res, _ := Parse(f)
+	if res != 0 {
+		t.Errorf("Failed to parse prelude via file reader, parse result: %d", res)
+	}
+
+	// Also test via ReadFile + StringReader (same path as test helper)
+	content, err := os.ReadFile("../prelude/prelude.ghl")
+	if err != nil {
+		t.Fatalf("failed to read prelude: %v", err)
+	}
+	res2, _ := Parse(strings.NewReader(string(content)))
+	if res2 != 0 {
+		t.Errorf("Failed to parse prelude via string reader, parse result: %d", res2)
+	}
+}
 
 func TestParseInteger(t *testing.T) {
 	cases := []struct {

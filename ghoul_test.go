@@ -8,6 +8,23 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 )
 
+// newWithPrelude creates a Ghoul instance with the standard prelude loaded.
+// This makes prelude macros (let, let*, when, unless, syntax-case, etc.)
+// available for use in test code.
+func newWithPrelude(t *testing.T) Ghoul {
+	t.Helper()
+	g := New()
+	prelude, err := os.ReadFile("prelude/prelude.ghl")
+	if err != nil {
+		t.Fatalf("failed to read prelude: %v", err)
+	}
+	_, err = g.Process(strings.NewReader(string(prelude)))
+	if err != nil {
+		t.Fatalf("failed to load prelude: %v", err)
+	}
+	return g
+}
+
 const guidingScript = `
 (define fiz-buz (lambda (n)
   (cond ((and (eq? 0 (mod n 3)) (eq? 0 (mod n 5))) "FizzBuzz")
@@ -683,6 +700,62 @@ func TestWildcardInSyntaxRules(t *testing.T) {
 	}
 	if !expected.Equiv(res) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestPreludeLetMacro(t *testing.T) {
+	g := newWithPrelude(t)
+	res, err := g.Process(strings.NewReader("(let ((x 10) (y 20)) (+ x y))"))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !e.Integer(30).Equiv(res) {
+		t.Errorf("Expected 30, got %s", res.Repr())
+	}
+}
+
+func TestPreludeLetStarMacro(t *testing.T) {
+	g := newWithPrelude(t)
+	// let* allows each binding to reference the previous ones
+	res, err := g.Process(strings.NewReader("(let* ((x 1) (y (+ x 1)) (z (+ y 1))) z)"))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !e.Integer(3).Equiv(res) {
+		t.Errorf("Expected 3, got %s", res.Repr())
+	}
+}
+
+func TestPreludeLetStarEmptyBindings(t *testing.T) {
+	g := newWithPrelude(t)
+	res, err := g.Process(strings.NewReader("(let* () 42)"))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !e.Integer(42).Equiv(res) {
+		t.Errorf("Expected 42, got %s", res.Repr())
+	}
+}
+
+func TestPreludeLetStarSingleBinding(t *testing.T) {
+	g := newWithPrelude(t)
+	res, err := g.Process(strings.NewReader("(let* ((x 10)) (+ x 5))"))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !e.Integer(15).Equiv(res) {
+		t.Errorf("Expected 15, got %s", res.Repr())
+	}
+}
+
+func TestPreludeWhenMacro(t *testing.T) {
+	g := newWithPrelude(t)
+	res, err := g.Process(strings.NewReader("(when #t 42)"))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !e.Integer(42).Equiv(res) {
+		t.Errorf("Expected 42, got %s", res.Repr())
 	}
 }
 
