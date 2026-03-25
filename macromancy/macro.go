@@ -84,7 +84,7 @@ func walkAndReplaceHygienicImpl(toWalk e.Expr, bound bindings, mark Mark, patter
 		// When the head is `...`, splice its bound value into the parent list
 		// rather than nesting it, so (begin x ...) becomes (begin a b c) not (begin a (b c))
 		if isEllipsisIdentifier(h) {
-			ellipsisBinding := lookupEllipsisBinding(h, bound)
+			ellipsisBinding := lookupEllipsisBinding(bound)
 			if ellipsisBinding != nil {
 				return appendExprs(ellipsisBinding, walkAndReplaceHygienicImpl(list.Second(), bound, mark, patternVars, definitionBindings))
 			}
@@ -108,9 +108,8 @@ func isEllipsisIdentifier(expr e.Expr) bool {
 	return false
 }
 
-func lookupEllipsisBinding(expr e.Expr, bound bindings) e.Expr {
-	key := e.Identifier("...")
-	if val, ok := bound[key]; ok {
+func lookupEllipsisBinding(bound bindings) e.Expr {
+	if val, ok := bound[e.Identifier("...")]; ok {
 		return val
 	}
 	return nil

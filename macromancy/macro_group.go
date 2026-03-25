@@ -83,7 +83,7 @@ func extractLiterals(litExpr e.Expr) (map[e.Identifier]bool, error) {
 	literals := map[e.Identifier]bool{}
 	list, ok := litExpr.(e.List)
 	if !ok {
-		return literals, nil
+		return nil, fmt.Errorf("invalid syntax-rules: literals must be a list, got %s", litExpr.Repr())
 	}
 	for list != e.NIL {
 		id, ok := list.First().(e.Identifier)
