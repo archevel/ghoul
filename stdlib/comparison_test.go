@@ -61,6 +61,13 @@ func TestNumericEquality(t *testing.T) {
 	if !r2.Equiv(e.Boolean(false)) { t.Error("5 = 6 should be #f") }
 }
 
+func TestNumericEqualityFloats(t *testing.T) {
+	r, _ := evalWithStdlib("(= 5.0 5.0)")
+	if !r.Equiv(e.Boolean(true)) { t.Error("5.0 = 5.0 should be #t") }
+	r2, _ := evalWithStdlib("(= 5.0 6.0)")
+	if !r2.Equiv(e.Boolean(false)) { t.Error("5.0 = 6.0 should be #f") }
+}
+
 func TestNumericEqualityMixed(t *testing.T) {
 	r1, _ := evalWithStdlib("(= 5 5.0)")
 	if !r1.Equiv(e.Boolean(true)) { t.Error("5 = 5.0 should be #t") }
@@ -89,6 +96,21 @@ func TestLessEqualFloat(t *testing.T) {
 func TestGreaterEqualFloat(t *testing.T) {
 	r, _ := evalWithStdlib("(>= 3.0 3.0)")
 	if !r.Equiv(e.Boolean(true)) { t.Error("3.0 >= 3.0 should be #t") }
+}
+
+func TestGreaterThanFloats(t *testing.T) {
+	r, _ := evalWithStdlib("(> 5.0 3.0)")
+	if !r.Equiv(e.Boolean(true)) { t.Error("5.0 > 3.0 should be #t") }
+}
+
+func TestLessEqualMixed(t *testing.T) {
+	r, _ := evalWithStdlib("(<= 3 3.0)")
+	if !r.Equiv(e.Boolean(true)) { t.Error("3 <= 3.0 should be #t") }
+}
+
+func TestGreaterEqualMixed(t *testing.T) {
+	r, _ := evalWithStdlib("(>= 3.0 3)")
+	if !r.Equiv(e.Boolean(true)) { t.Error("3.0 >= 3 should be #t") }
 }
 
 func TestEqStructural(t *testing.T) {
