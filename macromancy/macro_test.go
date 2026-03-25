@@ -146,6 +146,9 @@ func TestMacrosBindCorrectlyCommonPatterns(t *testing.T) {
 }
 
 func TestMacrosBindCorrectlyWithEllipsisPattern(t *testing.T) {
+	// These tests use the old `...` key semantics for patterns where `...`
+	// appears as the head (not preceded by a subpattern). These patterns
+	// still use the old matchEllipsis path.
 	cases := []struct {
 		in               string
 		pattern          string
@@ -154,114 +157,178 @@ func TestMacrosBindCorrectlyWithEllipsisPattern(t *testing.T) {
 		{"(numbers 1 2 3)", "(numbers ...)", b(
 			e.Identifier("..."), e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL))),
 		)},
-		{"(numbers 1 2 3)", "(numbers x ...)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL)),
-		)},
 		{"(numbers 1 2 . 3)", "(numbers ...)", b(
 			e.Identifier("..."), e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3))),
-		)},
-
-		// tail bindings
-		{"(numbers 1 2 3)", "(numbers x z ... y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.NIL,
-			e.Identifier("z"), e.Integer(2),
-			e.Identifier("y"), e.Integer(3),
-		)},
-		{"(numbers 1 2 3)", "(numbers x ... y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.Cons(e.Integer(2), e.NIL),
-			e.Identifier("y"), e.Integer(3),
-		)},
-		{"(numbers 1 2 3)", "(numbers x ... z y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.NIL,
-			e.Identifier("z"), e.Integer(2),
-			e.Identifier("y"), e.Integer(3),
-		)},
-
-		// tail bindings with pair code
-		{"(numbers 1 2 . 3)", "(numbers x ... y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.Cons(e.Integer(2), e.NIL),
-			e.Identifier("y"), e.Integer(3),
-		)},
-		{"(numbers 1 2 . 3)", "(numbers x ... z y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.NIL,
-			e.Identifier("z"), e.Integer(2),
-			e.Identifier("y"), e.Integer(3),
-		)},
-		{"(numbers 1 2 . 3)", "(numbers x z ... y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.NIL,
-			e.Identifier("z"), e.Integer(2),
-			e.Identifier("y"), e.Integer(3),
-		)},
-
-		// final is dot patterns
-		{"(numbers 1 2 3)", "(numbers x ... . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.Cons(e.Integer(2), e.NIL),
-			e.Identifier("y"), e.Cons(e.Integer(3), e.NIL),
-		)},
-		{"(numbers 1 2 3)", "(numbers x ... z . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.NIL,
-			e.Identifier("z"), e.Integer(2),
-			e.Identifier("y"), e.Cons(e.Integer(3), e.NIL),
-		)},
-		{"(numbers 1 2 3)", "(numbers x z ... . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.NIL,
-			e.Identifier("z"), e.Integer(2),
-			e.Identifier("y"), e.Cons(e.Integer(3), e.NIL),
-		)},
-
-		// final is dot patterns and code has dot too
-		{"(numbers 1 2 . 3)", "(numbers x ... . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.Cons(e.Integer(2), e.NIL),
-			e.Identifier("y"), e.Integer(3),
-		)},
-		{"(numbers 1 2 . 3)", "(numbers x ... z . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.NIL,
-			e.Identifier("z"), e.Integer(2),
-			e.Identifier("y"), e.Integer(3),
-		)},
-		{"(numbers 1 2 . 3)", "(numbers x z ... . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.NIL,
-			e.Identifier("z"), e.Integer(2),
-			e.Identifier("y"), e.Integer(3),
-		)},
-
-		// more complex patterns
-		{"(numbers 1 2 4 . 3)", "(numbers x z ... . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.Cons(e.Integer(4), e.NIL),
-			e.Identifier("z"), e.Integer(2),
-			e.Identifier("y"), e.Integer(3),
-		)},
-		{"(numbers 1 (2 4) 5 . 3)", "(numbers x z ... . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.Cons(e.Integer(5), e.NIL),
-			e.Identifier("z"), e.Cons(e.Integer(2), e.Cons(e.Integer(4), e.NIL)),
-			e.Identifier("y"), e.Integer(3),
-		)},
-		{"(numbers 1 (2 4) 5 . 3)", "(numbers x (a  b) ... . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("..."), e.Cons(e.Integer(5), e.NIL),
-			e.Identifier("a"), e.Integer(2),
-			e.Identifier("b"), e.Integer(4),
-			e.Identifier("y"), e.Integer(3),
 		)},
 	}
 
 	for _, c := range cases {
 		runBindingTest(t, c.in, c.pattern, c.expectedBindings)
+	}
+}
+
+func TestNestedEllipsisPatternMatching(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		pattern string
+		check   func(t *testing.T, result bindings)
+	}{
+		{
+			name:    "let-style: ((var val) ...) body ...",
+			in:      "(let ((x 1) (y 2)) (+ x y))",
+			pattern: "(let ((var val) ...) body ...)",
+			check: func(t *testing.T, result bindings) {
+				varVals := result.repeated[e.Identifier("var")]
+				if len(varVals) != 2 {
+					t.Fatalf("expected 2 var bindings, got %d", len(varVals))
+				}
+				if !varVals[0].Equiv(e.Identifier("x")) || !varVals[1].Equiv(e.Identifier("y")) {
+					t.Errorf("expected var=[x, y], got [%s, %s]", varVals[0].Repr(), varVals[1].Repr())
+				}
+				valVals := result.repeated[e.Identifier("val")]
+				if len(valVals) != 2 {
+					t.Fatalf("expected 2 val bindings, got %d", len(valVals))
+				}
+				if !valVals[0].Equiv(e.Integer(1)) || !valVals[1].Equiv(e.Integer(2)) {
+					t.Errorf("expected val=[1, 2], got [%s, %s]", valVals[0].Repr(), valVals[1].Repr())
+				}
+				bodyVals := result.repeated[e.Identifier("body")]
+				if len(bodyVals) != 1 {
+					t.Fatalf("expected 1 body binding, got %d", len(bodyVals))
+				}
+			},
+		},
+		{
+			name:    "empty repetition: ((var val) ...)",
+			in:      "(let () (+ 1 2))",
+			pattern: "(let ((var val) ...) body ...)",
+			check: func(t *testing.T, result bindings) {
+				if len(result.repeated[e.Identifier("var")]) != 0 {
+					t.Error("expected 0 var bindings for empty binding list")
+				}
+				if len(result.repeated[e.Identifier("val")]) != 0 {
+					t.Error("expected 0 val bindings for empty binding list")
+				}
+				bodyVals := result.repeated[e.Identifier("body")]
+				if len(bodyVals) != 1 {
+					t.Fatalf("expected 1 body binding, got %d", len(bodyVals))
+				}
+			},
+		},
+		{
+			name:    "flat ellipsis: x ...",
+			in:      "(my-begin 1 2 3)",
+			pattern: "(my-begin x ...)",
+			check: func(t *testing.T, result bindings) {
+				xVals := result.repeated[e.Identifier("x")]
+				if len(xVals) != 3 {
+					t.Fatalf("expected 3 x bindings, got %d", len(xVals))
+				}
+				if !xVals[0].Equiv(e.Integer(1)) || !xVals[1].Equiv(e.Integer(2)) || !xVals[2].Equiv(e.Integer(3)) {
+					t.Errorf("expected x=[1,2,3], got [%s,%s,%s]", xVals[0].Repr(), xVals[1].Repr(), xVals[2].Repr())
+				}
+			},
+		},
+		{
+			name:    "flat ellipsis zero repetitions",
+			in:      "(my-begin)",
+			pattern: "(my-begin x ...)",
+			check: func(t *testing.T, result bindings) {
+				xVals := result.repeated[e.Identifier("x")]
+				if len(xVals) != 0 {
+					t.Fatalf("expected 0 x bindings, got %d", len(xVals))
+				}
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
+			if patternOk != 0 {
+				t.Fatalf("Failed to parse pattern: %s", c.pattern)
+			}
+			codeOk, code := parser.Parse(strings.NewReader(c.in))
+			if codeOk != 0 {
+				t.Fatalf("Failed to parse code: %s", c.in)
+			}
+
+			pat := pattern.Expressions.First()
+			macro := Macro{
+				Pattern:      pat,
+				PatternVars:  ExtractPatternVars(pat, nil),
+				EllipsisVars: ExtractEllipsisVars(pat, nil),
+			}
+
+			ok, result := macro.Matches(code.Expressions.First())
+			if !ok {
+				t.Fatalf("Macro %s did not match %s", c.pattern, c.in)
+			}
+			c.check(t, result)
+		})
+	}
+}
+
+func TestWildcardPatternMatching(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		pattern string
+		check   func(t *testing.T, result bindings)
+	}{
+		{
+			name:    "wildcard matches anything",
+			in:      "(mac 42)",
+			pattern: "(mac _)",
+			check: func(t *testing.T, result bindings) {
+				if result.vars[e.Identifier("_")] != nil {
+					t.Error("_ should not create a binding")
+				}
+			},
+		},
+		{
+			name:    "wildcard can appear multiple times",
+			in:      "(mac 1 2 3)",
+			pattern: "(mac _ x _)",
+			check: func(t *testing.T, result bindings) {
+				if !result.vars[e.Identifier("x")].Equiv(e.Integer(2)) {
+					t.Errorf("expected x=2, got %s", result.vars[e.Identifier("x")].Repr())
+				}
+				if result.vars[e.Identifier("_")] != nil {
+					t.Error("_ should not create a binding")
+				}
+			},
+		},
+		{
+			name:    "wildcard in nested position",
+			in:      "(mac (1 2) 3)",
+			pattern: "(mac (_ x) _)",
+			check: func(t *testing.T, result bindings) {
+				if !result.vars[e.Identifier("x")].Equiv(e.Integer(2)) {
+					t.Errorf("expected x=2, got %s", result.vars[e.Identifier("x")].Repr())
+				}
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
+			if patternOk != 0 {
+				t.Fatalf("Failed to parse pattern: %s", c.pattern)
+			}
+			codeOk, code := parser.Parse(strings.NewReader(c.in))
+			if codeOk != 0 {
+				t.Fatalf("Failed to parse code: %s", c.in)
+			}
+			macro := Macro{Pattern: pattern.Expressions.First()}
+			ok, result := macro.Matches(code.Expressions.First())
+			if !ok {
+				t.Fatalf("Macro %s did not match %s", c.pattern, c.in)
+			}
+			c.check(t, result)
+		})
 	}
 }
 

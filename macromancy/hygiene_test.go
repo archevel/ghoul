@@ -82,13 +82,15 @@ func TestExpandHygienicMarksTemplateIdentifiers(t *testing.T) {
 
 func TestExpandHygienicWithEllipsisSplicesBindings(t *testing.T) {
 	// Pattern: (my-begin x ...) with body (begin x ...)
-	// Matched against (my-begin a b c)
-	// Should expand to (begin a b c), not (begin a . (b c))
+	// Matched against (my-begin 1 2 3)
+	// x is a repeated variable: [1, 2, 3]
+	// Should expand to (begin 1 2 3)
 	pattern := parseExpr(t, "(my-begin x ...)")
 	body := parseExpr(t, "(begin x ...)")
 	patternVars := ExtractPatternVars(pattern, nil)
+	ellipsisVars := ExtractEllipsisVars(pattern, nil)
 
-	macro := Macro{Pattern: pattern, Body: body, PatternVars: patternVars}
+	macro := Macro{Pattern: pattern, Body: body, PatternVars: patternVars, EllipsisVars: ellipsisVars}
 
 	code := parseExpr(t, "(my-begin 1 2 3)")
 	ok, bound := macro.Matches(code)
@@ -229,6 +231,62 @@ func TestExpandHygienicScopedIdentifierDefinitionBinding(t *testing.T) {
 	}
 	if si.Marks[2] {
 		t.Error("definition binding should not get additional marks")
+	}
+}
+
+func TestExpandNestedEllipsisLetPattern(t *testing.T) {
+	// Pattern: (let ((var val) ...) body ...)
+	// Body: ((lambda (var ...) body ...) val ...)
+	// Code: (let ((x 1) (y 2)) (+ x y))
+	// Expected: ((lambda (x y) (+ x y)) 1 2)
+	pattern := parseExpr(t, "(let ((var val) ...) body ...)")
+	body := parseExpr(t, "((lambda (var ...) body ...) val ...)")
+	patternVars := ExtractPatternVars(pattern, nil)
+	ellipsisVars := ExtractEllipsisVars(pattern, nil)
+
+	macro := Macro{Pattern: pattern, Body: body, PatternVars: patternVars, EllipsisVars: ellipsisVars}
+
+	code := parseExpr(t, "(let ((x 1) (y 2)) (+ x y))")
+	ok, bound := macro.Matches(code)
+	if !ok {
+		t.Fatal("macro should match")
+	}
+
+	var mark Mark = 1
+	result := macro.ExpandHygienic(bound, mark)
+
+	// Result should be: ((lambda (x y) (+ x y)) 1 2)
+	resultList, ok2 := result.(e.List)
+	if !ok2 {
+		t.Fatalf("expected List result, got %T: %s", result, result.Repr())
+	}
+
+	// First element should be (lambda (x y) (+ x y))
+	lambdaExpr := resultList.First()
+	lambdaList, ok3 := lambdaExpr.(e.List)
+	if !ok3 {
+		t.Fatalf("expected lambda to be a list, got %T: %s", lambdaExpr, lambdaExpr.Repr())
+	}
+
+	// Check lambda params: (x y)
+	lambdaTail, _ := lambdaList.Tail()
+	params := lambdaTail.First().(e.List)
+	if !params.First().Equiv(e.Identifier("x")) {
+		t.Errorf("expected first param to be x, got %s", params.First().Repr())
+	}
+	paramsTail, _ := params.Tail()
+	if !paramsTail.First().Equiv(e.Identifier("y")) {
+		t.Errorf("expected second param to be y, got %s", paramsTail.First().Repr())
+	}
+
+	// Check args after lambda: 1 2
+	resultTail, _ := resultList.Tail()
+	if !resultTail.First().Equiv(e.Integer(1)) {
+		t.Errorf("expected first arg to be 1, got %s", resultTail.First().Repr())
+	}
+	resultTail2, _ := resultTail.Tail()
+	if !resultTail2.First().Equiv(e.Integer(2)) {
+		t.Errorf("expected second arg to be 2, got %s", resultTail2.First().Repr())
 	}
 }
 

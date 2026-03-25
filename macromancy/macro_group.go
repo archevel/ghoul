@@ -125,10 +125,11 @@ func extractMacros(rules e.List, literals map[e.Identifier]bool) ([]Macro, error
 			return nil, fmt.Errorf("invalid rule definition: rule must have pattern and body, got %s", r.Repr())
 		}
 		macros = append(macros, Macro{
-			Pattern:     pat,
-			Body:        bdyList.First(),
-			PatternVars: ExtractPatternVars(pat, literals),
-			Literals:    literals,
+			Pattern:      pat,
+			Body:         bdyList.First(),
+			PatternVars:  ExtractPatternVars(pat, literals),
+			EllipsisVars: ExtractEllipsisVars(pat, literals),
+			Literals:     literals,
 		})
 
 	}

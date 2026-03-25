@@ -615,6 +615,77 @@ func TestErrorShowsFilenameInLocation(t *testing.T) {
 	}
 }
 
+func TestNestedEllipsisLetMacro(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax let (syntax-rules ()
+  ((let ((var val) ...) body ...)
+   ((lambda (var ...) body ...) val ...))))
+(let ((x 1) (y 2)) (+ x y))
+`
+	expected := e.Integer(3)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestNestedEllipsisLetMacroMultipleBody(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax let (syntax-rules ()
+  ((let ((var val) ...) body ...)
+   ((lambda (var ...) body ...) val ...))))
+(let ((x 10) (y 20)) (define z (+ x y)) z)
+`
+	expected := e.Integer(30)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestNestedEllipsisLetMacroEmptyBindings(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax let (syntax-rules ()
+  ((let ((var val) ...) body ...)
+   ((lambda (var ...) body ...) val ...))))
+(let () 42)
+`
+	expected := e.Integer(42)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
+func TestWildcardInSyntaxRules(t *testing.T) {
+	g := New()
+	in := `
+(define-syntax first-of (syntax-rules ()
+  ((first-of x _) x)))
+(first-of 42 99)
+`
+	expected := e.Integer(42)
+	res, err := g.Process(strings.NewReader(in))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !expected.Equiv(res) {
+		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
+	}
+}
+
 func testPrintlnExample() {
 	g := New()
 	g.Process(strings.NewReader(`(println "hello, world")`))

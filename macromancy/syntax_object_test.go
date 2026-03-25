@@ -432,6 +432,76 @@ func TestExtractPatternVarsWithLiteralsNestedScopedIdentifier(t *testing.T) {
 	}
 }
 
+func TestExtractEllipsisVarsFlatPattern(t *testing.T) {
+	// Pattern: (my-begin x ...)
+	// x is under ellipsis
+	pattern := e.Cons(e.Identifier("my-begin"),
+		e.Cons(e.Identifier("x"),
+			e.Cons(e.Identifier("..."), e.NIL)))
+
+	vars := ExtractEllipsisVars(pattern, nil)
+	if !vars[e.Identifier("x")] {
+		t.Error("'x' should be an ellipsis variable")
+	}
+}
+
+func TestExtractEllipsisVarsStructuredPattern(t *testing.T) {
+	// Pattern: (let ((var val) ...) body ...)
+	// var and val are under the first ellipsis, body is under the second
+	inner := e.Cons(e.Identifier("var"), e.Cons(e.Identifier("val"), e.NIL))
+	bindings := e.Cons(inner, e.Cons(e.Identifier("..."), e.NIL))
+	pattern := e.Cons(e.Identifier("let"),
+		e.Cons(bindings,
+			e.Cons(e.Identifier("body"),
+				e.Cons(e.Identifier("..."), e.NIL))))
+
+	vars := ExtractEllipsisVars(pattern, nil)
+	if !vars[e.Identifier("var")] {
+		t.Error("'var' should be an ellipsis variable")
+	}
+	if !vars[e.Identifier("val")] {
+		t.Error("'val' should be an ellipsis variable")
+	}
+	if !vars[e.Identifier("body")] {
+		t.Error("'body' should be an ellipsis variable")
+	}
+	if vars[e.Identifier("let")] {
+		t.Error("'let' (macro name) should not be an ellipsis variable")
+	}
+}
+
+func TestExtractEllipsisVarsNoEllipsis(t *testing.T) {
+	// Pattern: (mac x y) — no ellipsis
+	pattern := e.Cons(e.Identifier("mac"),
+		e.Cons(e.Identifier("x"),
+			e.Cons(e.Identifier("y"), e.NIL)))
+
+	vars := ExtractEllipsisVars(pattern, nil)
+	if len(vars) != 0 {
+		t.Error("pattern without ellipsis should have no ellipsis vars")
+	}
+}
+
+func TestExtractEllipsisVarsExcludesLiterals(t *testing.T) {
+	// Pattern: (mac x arrow ...) with arrow as literal
+	// ... applies to the immediately preceding subpattern (arrow),
+	// but arrow is a literal so it doesn't produce an ellipsis var.
+	// x is not under ellipsis.
+	pattern := e.Cons(e.Identifier("mac"),
+		e.Cons(e.Identifier("x"),
+			e.Cons(e.Identifier("arrow"),
+				e.Cons(e.Identifier("..."), e.NIL))))
+	literals := map[e.Identifier]bool{e.Identifier("arrow"): true}
+
+	vars := ExtractEllipsisVars(pattern, literals)
+	if vars[e.Identifier("x")] {
+		t.Error("'x' is not under ellipsis, should not be an ellipsis variable")
+	}
+	if vars[e.Identifier("arrow")] {
+		t.Error("'arrow' is a literal, should not be an ellipsis variable")
+	}
+}
+
 func TestSyntaxObjectEquivWithPlainExpr(t *testing.T) {
 	so := SyntaxObject{Datum: e.Integer(42), Marks: NewMarkSet()}
 

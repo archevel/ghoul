@@ -91,15 +91,68 @@ func ExtractPatternVars(pattern e.Expr, literals map[e.Identifier]bool) map[e.Id
 	return vars
 }
 
+// ExtractEllipsisVars identifies which pattern variables are captured under
+// an ellipsis. It walks the pattern looking for `<subpattern> ...` sequences
+// and collects all identifiers within the subpattern.
+func ExtractEllipsisVars(pattern e.Expr, literals map[e.Identifier]bool) map[e.Identifier]bool {
+	vars := map[e.Identifier]bool{}
+	list, ok := pattern.(e.List)
+	if !ok || list == e.NIL {
+		return vars
+	}
+	// Skip the macro name (first element)
+	rest := list.Second()
+	collectEllipsisVars(rest, vars, literals)
+	return vars
+}
+
+func collectEllipsisVars(expr e.Expr, vars map[e.Identifier]bool, literals map[e.Identifier]bool) {
+	list, ok := expr.(e.List)
+	if !ok || list == e.NIL {
+		return
+	}
+
+	for list != e.NIL {
+		head := list.First()
+		tail, ok := list.Tail()
+		if !ok {
+			break
+		}
+
+		// Check if the next element is `...`
+		if tail != e.NIL {
+			nextId := toIdentifier(tail.First())
+			if nextId == e.Identifier("...") {
+				// Everything in head is an ellipsis variable
+				collectIdentifiers(head, vars, literals)
+				// Skip past the `...`
+				tail, ok = tail.Tail()
+				if !ok {
+					break
+				}
+				list = tail
+				continue
+			}
+		}
+
+		// Recurse into sub-lists that aren't themselves under ellipsis
+		if subList, ok := head.(e.List); ok {
+			collectEllipsisVars(subList, vars, literals)
+		}
+
+		list = tail
+	}
+}
+
 func collectIdentifiers(expr e.Expr, vars map[e.Identifier]bool, literals map[e.Identifier]bool) {
 	if id, ok := expr.(e.Identifier); ok {
-		if id != e.Identifier("...") && (literals == nil || !literals[id]) {
+		if id != e.Identifier("...") && id != e.Identifier("_") && (literals == nil || !literals[id]) {
 			vars[id] = true
 		}
 		return
 	}
 	if si, ok := expr.(e.ScopedIdentifier); ok {
-		if si.Name != e.Identifier("...") && (literals == nil || !literals[si.Name]) {
+		if si.Name != e.Identifier("...") && si.Name != e.Identifier("_") && (literals == nil || !literals[si.Name]) {
 			vars[si.Name] = true
 		}
 		return

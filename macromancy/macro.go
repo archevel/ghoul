@@ -16,10 +16,11 @@ func newBindings() bindings {
 }
 
 type Macro struct {
-	Pattern     e.Expr
-	Body        e.Expr
-	PatternVars map[e.Identifier]bool
-	Literals    map[e.Identifier]bool
+	Pattern      e.Expr
+	Body         e.Expr
+	PatternVars  map[e.Identifier]bool
+	EllipsisVars map[e.Identifier]bool
+	Literals     map[e.Identifier]bool
 }
 
 func (m Macro) Matches(expr e.Expr) (bool, bindings) {
@@ -87,21 +88,90 @@ func walkAndReplaceHygienicImpl(toWalk e.Expr, bound bindings, mark Mark, patter
 
 	if list, ok := toWalk.(e.List); ok && list != e.NIL {
 		h := list.First()
+		rest := list.Second()
+
 		// When the head is `...`, splice its bound value into the parent list
 		// rather than nesting it, so (begin x ...) becomes (begin a b c) not (begin a (b c))
 		if isEllipsisIdentifier(h) {
 			ellipsisBinding := lookupEllipsisBinding(bound)
 			if ellipsisBinding != nil {
-				return appendExprs(ellipsisBinding, walkAndReplaceHygienicImpl(list.Second(), bound, mark, patternVars, definitionBindings))
+				return appendExprs(ellipsisBinding, walkAndReplaceHygienicImpl(rest, bound, mark, patternVars, definitionBindings))
 			}
 		}
+
+		// Check if the next element is `...` and the head references repeated bindings.
+		// If so, iterate through the repeated bindings and splice the results.
+		if restList, restOk := rest.(e.List); restOk && restList != e.NIL && isEllipsisIdentifier(restList.First()) {
+			repeatedVars := findRepeatedVarsInTemplate(h, bound)
+			if len(repeatedVars) > 0 {
+				afterEllipsis := restList.Second()
+				expandedTail := walkAndReplaceHygienicImpl(afterEllipsis, bound, mark, patternVars, definitionBindings)
+
+				count := len(bound.repeated[repeatedVars[0]])
+				for i := count - 1; i >= 0; i-- {
+					iterBound := bindingsForIteration(bound, repeatedVars, i)
+					expanded := walkAndReplaceHygienicImpl(h, iterBound, mark, patternVars, definitionBindings)
+					expandedTail = e.Cons(expanded, expandedTail)
+				}
+				return expandedTail
+			}
+		}
+
 		return e.Cons(
 			walkAndReplaceHygienicImpl(h, bound, mark, patternVars, definitionBindings),
-			walkAndReplaceHygienicImpl(list.Second(), bound, mark, patternVars, definitionBindings),
+			walkAndReplaceHygienicImpl(rest, bound, mark, patternVars, definitionBindings),
 		)
 	}
 
 	return toWalk
+}
+
+// findRepeatedVarsInTemplate collects all identifiers in a template expression
+// that have repeated bindings.
+func findRepeatedVarsInTemplate(tmpl e.Expr, bound bindings) []e.Identifier {
+	var result []e.Identifier
+	findRepeatedVarsWalk(tmpl, bound, &result)
+	return result
+}
+
+func findRepeatedVarsWalk(expr e.Expr, bound bindings, result *[]e.Identifier) {
+	if id, ok := expr.(e.Identifier); ok {
+		if _, hasRepeated := bound.repeated[id]; hasRepeated {
+			*result = append(*result, id)
+		}
+		return
+	}
+	if si, ok := expr.(e.ScopedIdentifier); ok {
+		if _, hasRepeated := bound.repeated[si.Name]; hasRepeated {
+			*result = append(*result, si.Name)
+		}
+		return
+	}
+	if list, ok := expr.(e.List); ok && list != e.NIL {
+		findRepeatedVarsWalk(list.First(), bound, result)
+		findRepeatedVarsWalk(list.Second(), bound, result)
+	}
+}
+
+// bindingsForIteration creates a new bindings where each repeated variable
+// is bound to its i-th value as a single var.
+func bindingsForIteration(bound bindings, repeatedVars []e.Identifier, i int) bindings {
+	iter := newBindings()
+	// Copy all single vars
+	for k, v := range bound.vars {
+		iter.vars[k] = v
+	}
+	// Map repeated vars to their i-th value
+	for _, v := range repeatedVars {
+		if vals, ok := bound.repeated[v]; ok && i < len(vals) {
+			iter.vars[v] = vals[i]
+		}
+	}
+	// Copy repeated bindings for any nested ellipsis
+	for k, v := range bound.repeated {
+		iter.repeated[k] = v
+	}
+	return iter
 }
 
 func isEllipsisIdentifier(expr e.Expr) bool {
@@ -154,6 +224,10 @@ func matchWalk(macro e.Expr, code e.Expr, bound bindings, hasEllipsis bool, lite
 }
 
 func matchAndBindIdentifier(id e.Identifier, code e.Expr, bound bindings, literals map[e.Identifier]bool) (bool, bindings) {
+	// Wildcard matches anything without creating a binding
+	if id == e.Identifier("_") {
+		return true, bound
+	}
 	if literals != nil && literals[id] {
 		codeId := toIdentifier(code)
 		if codeId == id {
@@ -174,19 +248,93 @@ func matchHeadAndTail(macroList e.List, codeList e.List, bound bindings, hasElli
 		return true, bound
 	}
 	macroLength := listLength(macroList)
+
+	if id := toIdentifier(macroList.First()); macroList != e.NIL && id == e.Identifier("...") {
+		return matchEllipsis(macroList, macroLength, codeList, bound, literals)
+	}
+
+	// Check if the element after head is `...` — if so, use repeated matching.
+	// This must be checked before the NIL-codeList bail-out, since zero
+	// repetitions are valid for ellipsis patterns.
+	if macroList != e.NIL {
+		macroTail, tailOk := macroList.Tail()
+		if tailOk && macroTail != e.NIL {
+			if nextId := toIdentifier(macroTail.First()); nextId == e.Identifier("...") {
+				return matchRepeatedEllipsis(macroList.First(), macroTail, codeList, bound, literals)
+			}
+		}
+	}
+
 	if macroList == e.NIL || (codeList == e.NIL && (!hasEllipsis || macroLength > 1)) {
 		return false, bindings{}
 	}
 
-	if id := toIdentifier(macroList.First()); id == e.Identifier("...") {
-		return matchEllipsis(macroList, macroLength, codeList, bound, literals)
-	} else {
-		headMatch, bound := matchWalk(macroList.First(), codeList.First(), bound, hasEllipsis, literals)
-		if headMatch {
-			return matchWalk(macroList.Second(), codeList.Second(), bound, hasEllipsis, literals)
-		}
+	headMatch, bound := matchWalk(macroList.First(), codeList.First(), bound, hasEllipsis, literals)
+	if headMatch {
+		return matchWalk(macroList.Second(), codeList.Second(), bound, hasEllipsis, literals)
 	}
 	return false, bindings{}
+}
+
+// matchRepeatedEllipsis handles `<subpattern> ...` by matching each code
+// element against the subpattern and collecting per-variable repeated bindings.
+func matchRepeatedEllipsis(subPattern e.Expr, ellipsisAndRest e.List, codeList e.List, bound bindings, literals map[e.Identifier]bool) (bool, bindings) {
+	// Determine how many patterns follow the `...`
+	afterEllipsis, afterOk := ellipsisAndRest.Tail()
+	tailPatternCount := 0
+	if afterOk && afterEllipsis != e.NIL {
+		tailPatternCount = listLength(afterEllipsis)
+	}
+
+	// Split code: repeated portion vs tail
+	codeLength := listLength(codeList)
+	repeatedCount := codeLength - tailPatternCount
+	if repeatedCount < 0 {
+		repeatedCount = 0
+	}
+
+	// Collect identifiers in the subpattern to initialize repeated bindings
+	subVars := map[e.Identifier]bool{}
+	collectIdentifiers(subPattern, subVars, literals)
+	for v := range subVars {
+		if bound.repeated == nil {
+			bound.repeated = map[e.Identifier][]e.Expr{}
+		}
+		bound.repeated[v] = []e.Expr{}
+	}
+
+	// Match each element against the subpattern
+	current := codeList
+	for i := 0; i < repeatedCount && current != e.NIL; i++ {
+		localBound := newBindings()
+		ok, localBound := matchWalk(subPattern, current.First(), localBound, false, literals)
+		if !ok {
+			return false, bindings{}
+		}
+		for v := range subVars {
+			if val, exists := localBound.vars[v]; exists {
+				bound.repeated[v] = append(bound.repeated[v], val)
+			}
+		}
+		next, nextOk := current.Tail()
+		if !nextOk {
+			break
+		}
+		current = next
+	}
+
+	// Match remaining patterns after `...`
+	if !afterOk || afterEllipsis == e.NIL {
+		return true, bound
+	}
+
+	// Build the remaining code list (tail portion)
+	var tailCode e.Expr = e.NIL
+	if repeatedCount < codeLength {
+		_, tailCode = splitListAt(tailPatternCount, codeList)
+	}
+
+	return matchWalk(afterEllipsis, tailCode, bound, false, literals)
 }
 
 func matchEllipsis(macroList e.List, macroLength int, codeList e.List, bound bindings, literals map[e.Identifier]bool) (bool, bindings) {

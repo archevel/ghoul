@@ -4,12 +4,8 @@
 ;; let — local bindings
 ;; (let ((x 1) (y 2)) (+ x y))
 (define-syntax let (syntax-rules ()
-  ((let ((var val)) body ...)
-   ((lambda (var) body ...) val))
-  ((let ((var1 val1) (var2 val2)) body ...)
-   ((lambda (var1 var2) body ...) val1 val2))
-  ((let ((var1 val1) (var2 val2) (var3 val3)) body ...)
-   ((lambda (var1 var2 var3) body ...) val1 val2 val3))))
+  ((let ((var val) ...) body ...)
+   ((lambda (var ...) body ...) val ...))))
 
 ;; when — conditional execution
 ;; (when test body ...)
