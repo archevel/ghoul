@@ -423,6 +423,68 @@ func prepareScope(paramExpr e.Expr, args e.List, definitionEnv *environment) con
 	}
 }
 
+// expandSyntaxTransformer handles pattern-based macro expansion (syntax-rules).
+// The transformer directly produces expanded code without going through the
+// continuation stack, since pattern matching is a pure operation.
+func expandSyntaxTransformer(st SyntaxTransformer, callable e.List, maybeTailCall bool, ev *Evaluator) (e.Expr, error) {
+	ev.log.Trace("Expanding syntax transformer")
+	mark := ev.freshMark()
+	expanded, err := st.Transform(callable, mark)
+	if err != nil {
+		return e.NIL, WrapError(err.Error(), callable, err)
+	}
+	setMacroLocation(expanded, callable)
+	ev.pushContinuation(sexprEvalContinuationFor(expanded, callable, maybeTailCall))
+	return e.NIL, nil
+}
+
+// expandGeneralTransformer handles lambda-based macro expansion.
+// The transformer lambda is invoked through the continuation stack so it
+// can use the full language. Mark-based hygiene is applied:
+//
+//  1. Pre-mark the input (WrapExpr + ApplyMark)
+//  2. Invoke the transformer lambda with the marked input
+//  3. Post-mark the output (ApplyMark again + ResolveExpr)
+//
+// Identifiers from the input get marked twice (toggles cancel), so they
+// pass through unchanged. Identifiers introduced by the transformer get
+// marked once, keeping them hygienic.
+func expandGeneralTransformer(gst GeneralSyntaxTransformer, callable e.List, maybeTailCall bool, ev *Evaluator) (e.Expr, error) {
+	ev.log.Trace("Expanding general syntax transformer")
+	mark := ev.freshMark()
+
+	wrapped := macromancy.WrapExpr(callable, macromancy.NewMarkSet())
+	markedInput := macromancy.ApplyMark(wrapped, mark)
+
+	// Post-expansion: apply the mark again, resolve, and evaluate
+	ev.pushContinuation(func(result e.Expr, ev *Evaluator) (e.Expr, error) {
+		marked := macromancy.ApplyMark(result, mark)
+		resolved := macromancy.ResolveExpr(marked)
+		setMacroLocation(resolved, callable)
+		ev.pushContinuation(sexprEvalContinuationFor(resolved, callable, maybeTailCall))
+		return e.NIL, nil
+	})
+
+	// Restore the environment after the transformer executes
+	callEnv := ev.env
+	ev.pushContinuation(func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+		ev.env = callEnv
+		return arg, nil
+	})
+
+	// Invoke the transformer lambda
+	ev.pushContinuation(func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+		proc := gst.Fun.Fun
+		res, err := (*proc)(e.Cons(markedInput, e.NIL), ev)
+		if err != nil {
+			return e.NIL, WrapError(err.Error(), callable, err)
+		}
+		return res, nil
+	})
+
+	return e.NIL, nil
+}
+
 // functionCallContinuationFor sets up the continuation stack for a function call.
 // Continuations are pushed in reverse execution order (stack-based):
 //
@@ -446,51 +508,10 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 		// since macros receive unevaluated syntax, not values.
 		if headVal, _ := resolveCallableHead(callable.First(), ev.env); headVal != nil {
 			if st, ok := headVal.(SyntaxTransformer); ok {
-				ev.log.Trace("Expanding syntax transformer")
-				mark := ev.freshMark()
-				expanded, err := st.Transform(callable, mark)
-				if err != nil {
-					return e.NIL, WrapError(err.Error(), callable, err)
-				}
-				setMacroLocation(expanded, callable)
-				ev.pushContinuation(sexprEvalContinuationFor(expanded, callable, maybeTailCall))
-				return e.NIL, nil
+				return expandSyntaxTransformer(st, callable, maybeTailCall, ev)
 			}
 			if gst, ok := headVal.(GeneralSyntaxTransformer); ok {
-				ev.log.Trace("Expanding general syntax transformer")
-				mark := ev.freshMark()
-				// Apply the mark to the input before passing it to the transformer.
-				// After the transformer returns, we apply the same mark again.
-				// Identifiers from the input get the mark twice (cancels via toggle),
-				// while identifiers introduced by the transformer get it once (stays).
-				wrapped := macromancy.WrapExpr(callable, macromancy.NewMarkSet())
-				markedInput := macromancy.ApplyMark(wrapped, mark)
-
-				// Post-expansion: apply the mark again, resolve, and evaluate
-				ev.pushContinuation(func(result e.Expr, ev *Evaluator) (e.Expr, error) {
-					marked := macromancy.ApplyMark(result, mark)
-					resolved := macromancy.ResolveExpr(marked)
-					setMacroLocation(resolved, callable)
-					ev.pushContinuation(sexprEvalContinuationFor(resolved, callable, maybeTailCall))
-					return e.NIL, nil
-				})
-
-				// Push the transformer call onto the continuation stack
-				// so it participates in the trampoline loop
-				callEnv := ev.env
-				ev.pushContinuation(func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
-					ev.env = callEnv
-					return arg, nil
-				})
-				ev.pushContinuation(func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
-					proc := gst.Fun.Fun
-					res, err := (*proc)(e.Cons(markedInput, e.NIL), ev)
-					if err != nil {
-						return e.NIL, WrapError(err.Error(), callable, err)
-					}
-					return res, nil
-				})
-				return e.NIL, nil
+				return expandGeneralTransformer(gst, callable, maybeTailCall, ev)
 			}
 		}
 
