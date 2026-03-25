@@ -84,66 +84,60 @@ func TestMacrosBindCorrectlyCommonPatterns(t *testing.T) {
 		pattern          string
 		expectedBindings bindings
 	}{
-		{"foo", "foo", nil},
-		{"(bar)", "(bar)", nil},
-		{"(baz 1)", "(baz x)", bindings{
-			e.Identifier("x"): e.Integer(1),
-		}},
-		{"(baz 1 `foo`)", "(baz x y)", bindings{
-			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.String("foo"),
-		}},
-		{"(zoom 1 (love 'foo))", "(zoom x (zoomer z))", bindings{
-			e.Identifier("x"):      e.Integer(1),
-			e.Identifier("zoomer"): e.Identifier("love"),
-			e.Identifier("z"):      e.Quote{e.Identifier("foo")},
-		}},
-		{"(numbers 1 2 3)", "(numbers x y z)", bindings{
-			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.Integer(2),
-			e.Identifier("z"): e.Integer(3),
-		}},
-		{"(numbers 1 2 . 3)", "(numbers x y z)", bindings{
-			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.Integer(2),
-			e.Identifier("z"): e.Integer(3),
-		}},
-		{"(numbers 1 2 3)", "(numbers . x)", bindings{
-			e.Identifier("x"): e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL))),
-		}},
-		{"(numbers 1 2 . 3)", "(numbers . x)", bindings{
-			e.Identifier("x"): e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3))),
-		}},
-		{"(numbers 1 2 3)", "(numbers x . y)", bindings{
-			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL)),
-		}},
-		{"(numbers 1 2 . 3)", "(numbers x . y)", bindings{
-			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.Cons(e.Integer(2), e.Integer(3)),
-		}},
-		{"(numbers 1 2 3)", "(numbers x y . z)", bindings{
-			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.Integer(2),
-			e.Identifier("z"): e.Cons(e.Integer(3), e.NIL),
-		}},
-		{"(numbers 1 2 . 3)", "(numbers x y . z)", bindings{
-			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.Integer(2),
-			e.Identifier("z"): e.Integer(3),
-		}},
-		{"(numbers 1 2 3)", "(numbers x y z . å)", bindings{
-			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.Integer(2),
-			e.Identifier("z"): e.Integer(3),
-			e.Identifier("å"): e.NIL,
-		}},
-
-		{"(define (love foo za ba) foo bar 1)", "(define (f . a_1) . a_2)", bindings{
-			e.Identifier("f"):   e.Identifier("love"),
-			e.Identifier("a_1"): e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("za"), e.Cons(e.Identifier("ba"), e.NIL))),
-			e.Identifier("a_2"): e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("bar"), e.Cons(e.Integer(1), e.NIL))),
-		}},
+		{"foo", "foo", newBindings()},
+		{"(bar)", "(bar)", newBindings()},
+		{"(baz 1)", "(baz x)", b(e.Identifier("x"), e.Integer(1))},
+		{"(baz 1 `foo`)", "(baz x y)", b(e.Identifier("x"), e.Integer(1), e.Identifier("y"), e.String("foo"))},
+		{"(zoom 1 (love 'foo))", "(zoom x (zoomer z))", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("zoomer"), e.Identifier("love"),
+			e.Identifier("z"), e.Quote{e.Identifier("foo")},
+		)},
+		{"(numbers 1 2 3)", "(numbers x y z)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("y"), e.Integer(2),
+			e.Identifier("z"), e.Integer(3),
+		)},
+		{"(numbers 1 2 . 3)", "(numbers x y z)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("y"), e.Integer(2),
+			e.Identifier("z"), e.Integer(3),
+		)},
+		{"(numbers 1 2 3)", "(numbers . x)", b(
+			e.Identifier("x"), e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL))),
+		)},
+		{"(numbers 1 2 . 3)", "(numbers . x)", b(
+			e.Identifier("x"), e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3))),
+		)},
+		{"(numbers 1 2 3)", "(numbers x . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("y"), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL)),
+		)},
+		{"(numbers 1 2 . 3)", "(numbers x . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("y"), e.Cons(e.Integer(2), e.Integer(3)),
+		)},
+		{"(numbers 1 2 3)", "(numbers x y . z)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("y"), e.Integer(2),
+			e.Identifier("z"), e.Cons(e.Integer(3), e.NIL),
+		)},
+		{"(numbers 1 2 . 3)", "(numbers x y . z)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("y"), e.Integer(2),
+			e.Identifier("z"), e.Integer(3),
+		)},
+		{"(numbers 1 2 3)", "(numbers x y z . å)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("y"), e.Integer(2),
+			e.Identifier("z"), e.Integer(3),
+			e.Identifier("å"), e.NIL,
+		)},
+		{"(define (love foo za ba) foo bar 1)", "(define (f . a_1) . a_2)", b(
+			e.Identifier("f"), e.Identifier("love"),
+			e.Identifier("a_1"), e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("za"), e.Cons(e.Identifier("ba"), e.NIL))),
+			e.Identifier("a_2"), e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("bar"), e.Cons(e.Integer(1), e.NIL))),
+		)},
 	}
 
 	for _, c := range cases {
@@ -157,114 +151,113 @@ func TestMacrosBindCorrectlyWithEllipsisPattern(t *testing.T) {
 		pattern          string
 		expectedBindings bindings
 	}{
-		{"(numbers 1 2 3)", "(numbers ...)", bindings{
-			e.Identifier("..."): e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL))),
-		}},
-		{"(numbers 1 2 3)", "(numbers x ...)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL)),
-		}},
-		{"(numbers 1 2 . 3)", "(numbers ...)", bindings{
-			e.Identifier("..."): e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3))),
-		}},
+		{"(numbers 1 2 3)", "(numbers ...)", b(
+			e.Identifier("..."), e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL))),
+		)},
+		{"(numbers 1 2 3)", "(numbers x ...)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL)),
+		)},
+		{"(numbers 1 2 . 3)", "(numbers ...)", b(
+			e.Identifier("..."), e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3))),
+		)},
 
 		// tail bindings
-		{"(numbers 1 2 3)", "(numbers x z ... y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.NIL,
-			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.Integer(3),
-		}},
-		{"(numbers 1 2 3)", "(numbers x ... y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Cons(e.Integer(2), e.NIL),
-			e.Identifier("y"):   e.Integer(3),
-		}},
-		{"(numbers 1 2 3)", "(numbers x ... z y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.NIL,
-			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.Integer(3),
-		}},
+		{"(numbers 1 2 3)", "(numbers x z ... y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.NIL,
+			e.Identifier("z"), e.Integer(2),
+			e.Identifier("y"), e.Integer(3),
+		)},
+		{"(numbers 1 2 3)", "(numbers x ... y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.Cons(e.Integer(2), e.NIL),
+			e.Identifier("y"), e.Integer(3),
+		)},
+		{"(numbers 1 2 3)", "(numbers x ... z y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.NIL,
+			e.Identifier("z"), e.Integer(2),
+			e.Identifier("y"), e.Integer(3),
+		)},
 
 		// tail bindings with pair code
-		{"(numbers 1 2 . 3)", "(numbers x ... y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Cons(e.Integer(2), e.NIL),
-			e.Identifier("y"):   e.Integer(3),
-		}},
-		{"(numbers 1 2 . 3)", "(numbers x ... z y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.NIL,
-			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.Integer(3),
-		}},
-		{"(numbers 1 2 . 3)", "(numbers x z ... y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.NIL,
-			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.Integer(3),
-		}},
+		{"(numbers 1 2 . 3)", "(numbers x ... y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.Cons(e.Integer(2), e.NIL),
+			e.Identifier("y"), e.Integer(3),
+		)},
+		{"(numbers 1 2 . 3)", "(numbers x ... z y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.NIL,
+			e.Identifier("z"), e.Integer(2),
+			e.Identifier("y"), e.Integer(3),
+		)},
+		{"(numbers 1 2 . 3)", "(numbers x z ... y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.NIL,
+			e.Identifier("z"), e.Integer(2),
+			e.Identifier("y"), e.Integer(3),
+		)},
 
 		// final is dot patterns
-		{"(numbers 1 2 3)", "(numbers x ... . y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Cons(e.Integer(2), e.NIL),
-			e.Identifier("y"):   e.Cons(e.Integer(3), e.NIL),
-		}},
-		{"(numbers 1 2 3)", "(numbers x ... z . y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.NIL,
-
-			e.Identifier("z"): e.Integer(2),
-			e.Identifier("y"): e.Cons(e.Integer(3), e.NIL),
-		}},
-		{"(numbers 1 2 3)", "(numbers x z ... . y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.NIL,
-			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.Cons(e.Integer(3), e.NIL),
-		}},
+		{"(numbers 1 2 3)", "(numbers x ... . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.Cons(e.Integer(2), e.NIL),
+			e.Identifier("y"), e.Cons(e.Integer(3), e.NIL),
+		)},
+		{"(numbers 1 2 3)", "(numbers x ... z . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.NIL,
+			e.Identifier("z"), e.Integer(2),
+			e.Identifier("y"), e.Cons(e.Integer(3), e.NIL),
+		)},
+		{"(numbers 1 2 3)", "(numbers x z ... . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.NIL,
+			e.Identifier("z"), e.Integer(2),
+			e.Identifier("y"), e.Cons(e.Integer(3), e.NIL),
+		)},
 
 		// final is dot patterns and code has dot too
-		{"(numbers 1 2 . 3)", "(numbers x ... . y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Cons(e.Integer(2), e.NIL),
-			e.Identifier("y"):   e.Integer(3),
-		}},
-		{"(numbers 1 2 . 3)", "(numbers x ... z . y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.NIL,
-			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.Integer(3),
-		}},
-		{"(numbers 1 2 . 3)", "(numbers x z ... . y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.NIL,
-			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.Integer(3),
-		}},
+		{"(numbers 1 2 . 3)", "(numbers x ... . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.Cons(e.Integer(2), e.NIL),
+			e.Identifier("y"), e.Integer(3),
+		)},
+		{"(numbers 1 2 . 3)", "(numbers x ... z . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.NIL,
+			e.Identifier("z"), e.Integer(2),
+			e.Identifier("y"), e.Integer(3),
+		)},
+		{"(numbers 1 2 . 3)", "(numbers x z ... . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.NIL,
+			e.Identifier("z"), e.Integer(2),
+			e.Identifier("y"), e.Integer(3),
+		)},
 
 		// more complex patterns
-		{"(numbers 1 2 4 . 3)", "(numbers x z ... . y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Cons(e.Integer(4), e.NIL),
-			e.Identifier("z"):   e.Integer(2),
-			e.Identifier("y"):   e.Integer(3),
-		}},
-		{"(numbers 1 (2 4) 5 . 3)", "(numbers x z ... . y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Cons(e.Integer(5), e.NIL),
-			e.Identifier("z"):   e.Cons(e.Integer(2), e.Cons(e.Integer(4), e.NIL)),
-			e.Identifier("y"):   e.Integer(3),
-		}},
-		{"(numbers 1 (2 4) 5 . 3)", "(numbers x (a  b) ... . y)", bindings{
-			e.Identifier("x"):   e.Integer(1),
-			e.Identifier("..."): e.Cons(e.Integer(5), e.NIL),
-			e.Identifier("a"):   e.Integer(2),
-			e.Identifier("b"):   e.Integer(4),
-			e.Identifier("y"):   e.Integer(3),
-		}},
+		{"(numbers 1 2 4 . 3)", "(numbers x z ... . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.Cons(e.Integer(4), e.NIL),
+			e.Identifier("z"), e.Integer(2),
+			e.Identifier("y"), e.Integer(3),
+		)},
+		{"(numbers 1 (2 4) 5 . 3)", "(numbers x z ... . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.Cons(e.Integer(5), e.NIL),
+			e.Identifier("z"), e.Cons(e.Integer(2), e.Cons(e.Integer(4), e.NIL)),
+			e.Identifier("y"), e.Integer(3),
+		)},
+		{"(numbers 1 (2 4) 5 . 3)", "(numbers x (a  b) ... . y)", b(
+			e.Identifier("x"), e.Integer(1),
+			e.Identifier("..."), e.Cons(e.Integer(5), e.NIL),
+			e.Identifier("a"), e.Integer(2),
+			e.Identifier("b"), e.Integer(4),
+			e.Identifier("y"), e.Integer(3),
+		)},
 	}
 
 	for _, c := range cases {
@@ -313,16 +306,11 @@ func TestMacroExpansion(t *testing.T) {
 		body         string
 		bound        bindings
 	}{
-		{"foo", "foo", nil},
-		{"(bar)", "(bar)", nil},
+		{"foo", "foo", newBindings()},
+		{"(bar)", "(bar)", newBindings()},
 
-		{"(baz 1)", "(baz x)", bindings{
-			e.Identifier("x"): e.Integer(1),
-		}},
-		{"(baz 1 \"foo\")", "(baz x y)", bindings{
-			e.Identifier("x"): e.Integer(1),
-			e.Identifier("y"): e.String("foo"),
-		}},
+		{"(baz 1)", "(baz x)", b(e.Identifier("x"), e.Integer(1))},
+		{"(baz 1 \"foo\")", "(baz x y)", b(e.Identifier("x"), e.Integer(1), e.Identifier("y"), e.String("foo"))},
 	}
 
 	for _, c := range cases {
@@ -401,6 +389,17 @@ func TestMacroTransform(t *testing.T) {
 	}
 }
 
+// b creates a bindings struct with only single (non-repeated) vars for test convenience.
+func b(pairs ...interface{}) bindings {
+	result := newBindings()
+	for i := 0; i < len(pairs); i += 2 {
+		key := pairs[i].(e.Identifier)
+		val := pairs[i+1].(e.Expr)
+		result.vars[key] = val
+	}
+	return result
+}
+
 func runBindingTest(t *testing.T, in string, patternStr string, bound bindings) {
 
 	patternOk, pattern := parser.Parse(strings.NewReader(patternStr))
@@ -415,14 +414,14 @@ func runBindingTest(t *testing.T, in string, patternStr string, bound bindings) 
 	if parseOk != 0 {
 		t.Fatalf("Parsing code %s failed", in)
 	}
-	_, bindings := macro.Matches(parseRes.Expressions.First())
-	if len(bindings) != len(bound) {
-		t.Errorf(`Macro %s did not bind corretly for %s. Expected %d bindings got %d`,
-			patternStr, in, len(bound), len(bindings))
+	_, result := macro.Matches(parseRes.Expressions.First())
+	if len(result.vars) != len(bound.vars) {
+		t.Errorf(`Macro %s did not bind correctly for %s. Expected %d bindings got %d`,
+			patternStr, in, len(bound.vars), len(result.vars))
 	}
 
-	for k, expectedValue := range bound {
-		value := bindings[k]
+	for k, expectedValue := range bound.vars {
+		value := result.vars[k]
 		if value == nil {
 			t.Errorf("Expected value %s for key %s in %s using %s, but got nil!", expectedValue.Repr(), k.Repr(), in, patternStr)
 		} else if !expectedValue.Equiv(value) {
@@ -431,8 +430,8 @@ func runBindingTest(t *testing.T, in string, patternStr string, bound bindings) 
 		}
 	}
 
-	for k, value := range bindings {
-		if !value.Equiv(bound[k]) {
+	for k, value := range result.vars {
+		if !value.Equiv(bound.vars[k]) {
 			t.Errorf("Found value %s for key %s in macro bindings that is not present in the expected bindings", value.Repr(), k)
 		}
 	}

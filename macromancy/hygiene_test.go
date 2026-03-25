@@ -147,10 +147,10 @@ func TestMatchWithLiteralsRequiresExactMatch(t *testing.T) {
 	if !ok1 {
 		t.Error("should match when literal 'arrow' is present")
 	}
-	if bound1[e.Identifier("arrow")] != nil {
+	if bound1.vars[e.Identifier("arrow")] != nil {
 		t.Error("literal 'arrow' should NOT be bound as a variable")
 	}
-	if !bound1[e.Identifier("x")].Equiv(e.Integer(3)) {
+	if !bound1.vars[e.Identifier("x")].Equiv(e.Integer(3)) {
 		t.Error("x should be bound to 3")
 	}
 
@@ -194,7 +194,7 @@ func TestExpandHygienicWithScopedIdentifierInBody(t *testing.T) {
 		e.ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}},
 		e.NIL,
 	)
-	bound := bindings{e.Identifier("x"): e.Integer(42)}
+	bound := b(e.Identifier("x"), e.Integer(42))
 	patternVars := map[e.Identifier]bool{e.Identifier("x"): true}
 
 	result := ExpandHygienicWithDefinitionBindings(body, bound, 2, patternVars, nil)
@@ -207,7 +207,7 @@ func TestExpandHygienicWithScopedIdentifierInBody(t *testing.T) {
 func TestExpandHygienicScopedIdentifierAccumulatesMarks(t *testing.T) {
 	// A ScopedIdentifier that's not bound should accumulate the expansion mark
 	body := e.ScopedIdentifier{Name: "y", Marks: map[uint64]bool{1: true}}
-	result := ExpandHygienicWithDefinitionBindings(body, bindings{}, 2, nil, nil)
+	result := ExpandHygienicWithDefinitionBindings(body, newBindings(), 2, nil, nil)
 
 	si, ok := result.(e.ScopedIdentifier)
 	if !ok {
@@ -221,7 +221,7 @@ func TestExpandHygienicScopedIdentifierAccumulatesMarks(t *testing.T) {
 func TestExpandHygienicScopedIdentifierDefinitionBinding(t *testing.T) {
 	body := e.ScopedIdentifier{Name: "begin", Marks: map[uint64]bool{1: true}}
 	defBindings := map[e.Identifier]bool{e.Identifier("begin"): true}
-	result := ExpandHygienicWithDefinitionBindings(body, bindings{}, 2, nil, defBindings)
+	result := ExpandHygienicWithDefinitionBindings(body, newBindings(), 2, nil, defBindings)
 
 	si, ok := result.(e.ScopedIdentifier)
 	if !ok {
@@ -236,7 +236,7 @@ func TestExpandHygienicEllipsisNotBound(t *testing.T) {
 	// When ... isn't in the bindings, it should be treated as a regular
 	// template identifier and get marked
 	body := parseExpr(t, "(foo ...)")
-	result := ExpandHygienicWithDefinitionBindings(body, bindings{}, 1, nil, nil)
+	result := ExpandHygienicWithDefinitionBindings(body, newBindings(), 1, nil, nil)
 
 	list := result.(e.List)
 	second := list.Second()
@@ -258,10 +258,10 @@ func TestExpandHygienicEllipsisNotBound(t *testing.T) {
 func TestExpandHygienicEllipsisEmptyList(t *testing.T) {
 	// When ... is bound to NIL, splicing should produce nothing extra
 	body := parseExpr(t, "(begin x ...)")
-	bound := bindings{
-		e.Identifier("x"):   e.Integer(1),
-		e.Identifier("..."): e.NIL,
-	}
+	bound := b(
+		e.Identifier("x"), e.Integer(1),
+		e.Identifier("..."), e.NIL,
+	)
 
 	result := ExpandHygienicWithDefinitionBindings(body, bound, 1, nil, nil)
 	list := result.(e.List)

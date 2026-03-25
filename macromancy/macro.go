@@ -6,7 +6,14 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 )
 
-type bindings map[e.Identifier]e.Expr
+type bindings struct {
+	vars     map[e.Identifier]e.Expr
+	repeated map[e.Identifier][]e.Expr
+}
+
+func newBindings() bindings {
+	return bindings{vars: map[e.Identifier]e.Expr{}, repeated: map[e.Identifier][]e.Expr{}}
+}
 
 type Macro struct {
 	Pattern     e.Expr
@@ -18,20 +25,19 @@ type Macro struct {
 func (m Macro) Matches(expr e.Expr) (bool, bindings) {
 	macId, macPat, err := idAndRest(m.Pattern)
 	if err != nil {
-		return false, nil
+		return false, bindings{}
 	}
 	codeId, code, err := idAndRest(expr)
 	if err != nil {
-		return false, nil
+		return false, bindings{}
 	}
 	if macId.Equiv(codeId) {
 		if macPat == nil && code == nil {
-			return true, bindings{}
-
+			return true, newBindings()
 		}
-		return matchWalk(macPat, code, bindings{}, false, m.Literals)
+		return matchWalk(macPat, code, newBindings(), false, m.Literals)
 	}
-	return false, nil
+	return false, bindings{}
 }
 
 func (m Macro) ExpandHygienic(bound bindings, mark Mark) e.Expr {
@@ -51,7 +57,7 @@ func ExpandHygienicWithDefinitionBindings(body e.Expr, bound bindings, mark Mark
 
 func walkAndReplaceHygienicImpl(toWalk e.Expr, bound bindings, mark Mark, patternVars map[e.Identifier]bool, definitionBindings map[e.Identifier]bool) e.Expr {
 	if id, ok := toWalk.(e.Identifier); ok {
-		replacement, present := bound[id]
+		replacement, present := bound.vars[id]
 		if present {
 			return replacement
 		}
@@ -64,7 +70,7 @@ func walkAndReplaceHygienicImpl(toWalk e.Expr, bound bindings, mark Mark, patter
 		}
 	}
 	if si, ok := toWalk.(e.ScopedIdentifier); ok {
-		replacement, present := bound[si.Name]
+		replacement, present := bound.vars[si.Name]
 		if present {
 			return replacement
 		}
@@ -109,7 +115,7 @@ func isEllipsisIdentifier(expr e.Expr) bool {
 }
 
 func lookupEllipsisBinding(bound bindings) e.Expr {
-	if val, ok := bound[e.Identifier("...")]; ok {
+	if val, ok := bound.vars[e.Identifier("...")]; ok {
 		return val
 	}
 	return nil
@@ -144,7 +150,7 @@ func matchWalk(macro e.Expr, code e.Expr, bound bindings, hasEllipsis bool, lite
 	if code != nil && macro != nil && code.Equiv(macro) {
 		return true, bound
 	}
-	return false, nil
+	return false, bindings{}
 }
 
 func matchAndBindIdentifier(id e.Identifier, code e.Expr, bound bindings, literals map[e.Identifier]bool) (bool, bindings) {
@@ -153,13 +159,13 @@ func matchAndBindIdentifier(id e.Identifier, code e.Expr, bound bindings, litera
 		if codeId == id {
 			return true, bound
 		}
-		return false, nil
+		return false, bindings{}
 	}
-	b, present := bound[id]
+	b, present := bound.vars[id]
 	if present && !b.Equiv(code) {
 		return false, bound
 	}
-	bound[id] = code
+	bound.vars[id] = code
 	return true, bound
 }
 
@@ -169,7 +175,7 @@ func matchHeadAndTail(macroList e.List, codeList e.List, bound bindings, hasElli
 	}
 	macroLength := listLength(macroList)
 	if macroList == e.NIL || (codeList == e.NIL && (!hasEllipsis || macroLength > 1)) {
-		return false, nil
+		return false, bindings{}
 	}
 
 	if id := toIdentifier(macroList.First()); id == e.Identifier("...") {
@@ -180,7 +186,7 @@ func matchHeadAndTail(macroList e.List, codeList e.List, bound bindings, hasElli
 			return matchWalk(macroList.Second(), codeList.Second(), bound, hasEllipsis, literals)
 		}
 	}
-	return false, nil
+	return false, bindings{}
 }
 
 func matchEllipsis(macroList e.List, macroLength int, codeList e.List, bound bindings, literals map[e.Identifier]bool) (bool, bindings) {
@@ -201,10 +207,10 @@ func matchFinalCodeExpression(macroList e.List, code e.Expr, bound bindings, has
 		return matchWalk(macroList.First(), code, bound, hasEllipsis, literals)
 	}
 	if id := toIdentifier(macroList.First()); id == e.Identifier("...") {
-		bound[id] = e.NIL
+		bound.vars[id] = e.NIL
 		return matchWalk(macroList.Second(), code, bound, hasEllipsis, literals)
 	}
-	return false, nil
+	return false, bindings{}
 }
 
 func idAndRest(expr e.Expr) (e.Identifier, e.Expr, error) {
