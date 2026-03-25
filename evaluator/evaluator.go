@@ -2,6 +2,7 @@ package evaluator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync/atomic"
@@ -23,10 +24,8 @@ const DEFINE_SYNTAX_SPECIAL_FORM = e.Identifier("define-syntax")
 const SYNTAX_RULES_FORM = e.Identifier("syntax-rules")
 const REQUIRE_SPECIAL_FORM = e.Identifier("require")
 
-var markCounter uint64
-
-func freshMark() macromancy.Mark {
-	return atomic.AddUint64(&markCounter, 1)
+func (ev *Evaluator) freshMark() macromancy.Mark {
+	return atomic.AddUint64(ev.markCounter, 1)
 }
 
 // SyntaxTransformer is bound in the environment by define-syntax.
@@ -73,7 +72,8 @@ func EvaluateWithContext(ctx context.Context, exprs e.Expr, env *environment) (r
 }
 
 func New(logger logging.Logger, env *environment) *Evaluator {
-	return &Evaluator{log: logger, env: env, requiredModules: map[string]bool{}}
+	var counter uint64
+	return &Evaluator{log: logger, env: env, requiredModules: map[string]bool{}, markCounter: &counter}
 }
 
 type Evaluator struct {
@@ -82,6 +82,7 @@ type Evaluator struct {
 	conts            *contStack
 	requiredModules  map[string]bool
 	moduleState      *ModuleState
+	markCounter      *uint64
 }
 
 func (ev *Evaluator) Evaluate(exprs e.Expr) (e.Expr, error) {
@@ -97,6 +98,7 @@ func (ev *Evaluator) EvalSubExpression(expr e.Expr) (e.Expr, error) {
 		env:             ev.env,
 		requiredModules: ev.requiredModules,
 		moduleState:     ev.moduleState,
+		markCounter:     ev.markCounter,
 	}
 	return subEval.Evaluate(e.Cons(expr, e.NIL))
 }
@@ -251,7 +253,7 @@ func makeIdentificationLookupContinuationFor(ident e.Expr, parent e.List) contin
 		resExpr, err := lookupIdentifier(ident, env)
 		if err != nil {
 			ev.log.Trace("Failed looking up identifier: %s", ident)
-			err = NewEvaluationError(err.Error(), parent)
+			err = WrapError(err.Error(), parent, err)
 			return e.NIL, err
 		}
 		return resExpr, nil
@@ -322,7 +324,7 @@ func conditionalContinuationFor(conds e.List, maybeTailCall bool) continuation {
 		nextPredOrConsequent := func(truthy e.Expr, ev *Evaluator) (e.Expr, error) {
 			if isTruthy(truthy) {
 				ev.log.Trace("Found truthy alternative pushing evaluation of consequent")
-				ev.pushContinuation(sexprEvalContinuationFor(consequent.First(), conds, maybeTailCall))
+				ev.pushContinuation(sexprSeqEvalContinuationFor(consequent, maybeTailCall))
 				return e.NIL, nil
 			}
 
@@ -422,10 +424,10 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 		if headVal, _ := resolveCallableHead(callable.First(), ev.env); headVal != nil {
 			if st, ok := headVal.(SyntaxTransformer); ok {
 				ev.log.Trace("Expanding syntax transformer")
-				mark := freshMark()
+				mark := ev.freshMark()
 				expanded, err := st.Transform(callable, mark)
 				if err != nil {
-					return e.NIL, NewEvaluationError(err.Error(), callable)
+					return e.NIL, WrapError(err.Error(), callable, err)
 				}
 				setMacroLocation(expanded, callable)
 				ev.pushContinuation(sexprEvalContinuationFor(expanded, callable, maybeTailCall))
@@ -433,7 +435,7 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 			}
 			if gst, ok := headVal.(GeneralSyntaxTransformer); ok {
 				ev.log.Trace("Expanding general syntax transformer")
-				mark := freshMark()
+				mark := ev.freshMark()
 				// Apply the mark to the input before passing it to the transformer.
 				// After the transformer returns, we apply the same mark again.
 				// Identifiers from the input get the mark twice (cancels via toggle),
@@ -441,6 +443,7 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 				wrapped := macromancy.WrapExpr(callable, macromancy.NewMarkSet())
 				markedInput := macromancy.ApplyMark(wrapped, mark)
 
+				// Post-expansion: apply the mark again, resolve, and evaluate
 				ev.pushContinuation(func(result e.Expr, ev *Evaluator) (e.Expr, error) {
 					marked := macromancy.ApplyMark(result, mark)
 					resolved := macromancy.ResolveExpr(marked)
@@ -449,12 +452,22 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 					return e.NIL, nil
 				})
 
-				proc := gst.Fun.Fun
-				res, err := (*proc)(e.Cons(markedInput, e.NIL), ev)
-				if err != nil {
-					return e.NIL, NewEvaluationError(err.Error(), callable)
-				}
-				return res, nil
+				// Push the transformer call onto the continuation stack
+				// so it participates in the trampoline loop
+				callEnv := ev.env
+				ev.pushContinuation(func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+					ev.env = callEnv
+					return arg, nil
+				})
+				ev.pushContinuation(func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
+					proc := gst.Fun.Fun
+					res, err := (*proc)(e.Cons(markedInput, e.NIL), ev)
+					if err != nil {
+						return e.NIL, WrapError(err.Error(), callable, err)
+					}
+					return res, nil
+				})
+				return e.NIL, nil
 			}
 		}
 
@@ -485,10 +498,10 @@ func functionCallContinuationFor(callable e.List, maybeTailCall bool) continuati
 			ev.log.Trace("Applying function with arguments collected")
 			res, err := (*proc)(argList, ev)
 			if err != nil {
-				if err == context.Canceled || err == context.DeadlineExceeded {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					return res, err
 				}
-				return res, NewEvaluationError(err.Error(), callable)
+				return res, WrapError(err.Error(), callable, err)
 			}
 			return res, nil
 		}
@@ -728,7 +741,7 @@ func requireSarcophagus(entry *mummy.SarcophagusEntry, prefix string, only map[s
 func requireGhoulModule(moduleName string, prefix string, only map[string]bool, ev *Evaluator, args e.List) (e.Expr, error) {
 	filePath, err := ev.moduleState.ResolveFile(moduleName)
 	if err != nil {
-		return e.NIL, NewEvaluationError(fmt.Sprintf("require: %s", err), args)
+		return e.NIL, WrapError(fmt.Sprintf("require: %s", err), args, err)
 	}
 
 	// Check cache
@@ -738,13 +751,13 @@ func requireGhoulModule(moduleName string, prefix string, only map[string]bool, 
 
 	// Check cycles
 	if err := ev.moduleState.CheckCycle(filePath); err != nil {
-		return e.NIL, NewEvaluationError(fmt.Sprintf("require: %s", err), args)
+		return e.NIL, WrapError(fmt.Sprintf("require: %s", err), args, err)
 	}
 
 	// Load and parse the file
 	f, err := os.Open(filePath)
 	if err != nil {
-		return e.NIL, NewEvaluationError(fmt.Sprintf("require: failed to open %s: %s", filePath, err), args)
+		return e.NIL, WrapError(fmt.Sprintf("require: failed to open %s: %s", filePath, err), args, err)
 	}
 	defer f.Close()
 
@@ -763,12 +776,13 @@ func requireGhoulModule(moduleName string, prefix string, only map[string]bool, 
 		env:             moduleEnv,
 		requiredModules: map[string]bool{},
 		moduleState:     childState,
+		markCounter:     ev.markCounter,
 	}
 
 	_, err = moduleEval.Evaluate(parsed.Expressions)
 	childState.FinishLoading(filePath)
 	if err != nil {
-		return e.NIL, NewEvaluationError(fmt.Sprintf("require: error in module %s: %s", moduleName, err), args)
+		return e.NIL, WrapError(fmt.Sprintf("require: error in module %s: %s", moduleName, err), args, err)
 	}
 
 	// Extract top-level bindings as exports
@@ -819,7 +833,7 @@ func defineSyntaxContinuationFor(def e.List) continuation {
 		if SYNTAX_RULES_FORM.Equiv(transformerList.First()) {
 			transformer, err := buildSyntaxRulesTransformer(name, transformerList, ev.env)
 			if err != nil {
-				return e.NIL, NewEvaluationError(fmt.Sprintf("Bad syntax: %s", err), def)
+				return e.NIL, WrapError(fmt.Sprintf("Bad syntax: %s", err), def, err)
 			}
 
 			bindIdentifier(name, transformer, ev.env)
@@ -895,10 +909,15 @@ func collectBoundIdentifiers(env *environment) map[e.Identifier]bool {
 type EvaluationError struct {
 	msg       string
 	ErrorList e.List
+	cause     error
 }
 
 func NewEvaluationError(msg string, errorList e.List) EvaluationError {
-	return EvaluationError{msg, errorList}
+	return EvaluationError{msg: msg, ErrorList: errorList}
+}
+
+func WrapError(msg string, errorList e.List, cause error) EvaluationError {
+	return EvaluationError{msg: msg, ErrorList: errorList, cause: cause}
 }
 
 func (err EvaluationError) Error() string {
@@ -910,4 +929,8 @@ func (err EvaluationError) Error() string {
 		return msg
 	}
 	return err.msg
+}
+
+func (err EvaluationError) Unwrap() error {
+	return err.cause
 }
