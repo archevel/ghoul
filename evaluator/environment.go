@@ -139,6 +139,28 @@ func (env environment) LookupByName(name string) (e.Expr, error) {
 	return lookupIdentifier(e.Identifier(name), &env)
 }
 
+// newModuleEnvironment creates a fresh environment that shares the builtins
+// (bottom scope) from the parent but has its own top-level scope.
+func newModuleEnvironment(parent *environment) *environment {
+	builtins := bottomScope(parent)
+	newEnv := environment{builtins, &scope{}}
+	return &newEnv
+}
+
+// extractExports returns all bindings from the top scope (not builtins).
+func extractExports(env *environment) *ModuleExports {
+	topScope := currentScope(env)
+	exports := &ModuleExports{
+		Names:    make([]string, 0, len(*topScope)),
+		Bindings: make(map[string]e.Expr, len(*topScope)),
+	}
+	for key, val := range *topScope {
+		exports.Names = append(exports.Names, key.Name)
+		exports.Bindings[key.Name] = val
+	}
+	return exports
+}
+
 func newEnvWithEmptyScope(env *environment) *environment {
 	newEnv := append(*env, &scope{})
 	return &newEnv

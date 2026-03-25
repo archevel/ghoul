@@ -3,12 +3,14 @@ package evaluator
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync/atomic"
 
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
 	"github.com/archevel/ghoul/macromancy"
 	"github.com/archevel/ghoul/mummy"
+	"github.com/archevel/ghoul/parser"
 )
 
 const COND_SPECIAL_FORM = e.Identifier("cond")
@@ -79,10 +81,15 @@ type Evaluator struct {
 	env              *environment
 	conts            *contStack
 	requiredModules  map[string]bool
+	moduleState      *ModuleState
 }
 
 func (ev *Evaluator) Evaluate(exprs e.Expr) (e.Expr, error) {
 	return ev.EvaluateWithContext(context.Background(), exprs)
+}
+
+func (ev *Evaluator) SetModuleState(ms *ModuleState) {
+	ev.moduleState = ms
 }
 
 func (ev *Evaluator) GetEnvironment() *environment {
@@ -650,52 +657,128 @@ func requireContinuationFor(args e.List) continuation {
 			}
 		}
 
-		// Look up module
-		entry := mummy.LookupSarcophagus(string(moduleName))
-		if entry == nil {
-			return e.NIL, NewEvaluationError(fmt.Sprintf("require: module '%s' not found", moduleName), args)
-		}
-
-		// Determine prefix
 		prefix := string(moduleName)
 		if alias != "" {
 			prefix = alias
 		}
 
-		// Same module under same prefix is idempotent
-		requireKey := string(moduleName) + ":" + prefix
-		if ev.requiredModules[requireKey] {
-			return e.NIL, nil
+		// Try Go sarcophagus first
+		entry := mummy.LookupSarcophagus(string(moduleName))
+		if entry != nil {
+			requireKey := string(moduleName) + ":" + prefix
+			if ev.requiredModules[requireKey] {
+				return e.NIL, nil
+			}
+			result, err := requireSarcophagus(entry, prefix, only, ev, args)
+			if err == nil {
+				ev.requiredModules[requireKey] = true
+			}
+			return result, err
 		}
 
-		namesToRegister := entry.Names
-		if only != nil {
-			namesToRegister = make([]string, 0)
-			for _, n := range entry.Names {
-				if only[n] {
-					namesToRegister = append(namesToRegister, n)
-				}
-			}
-		}
-		for _, name := range namesToRegister {
-			qualifiedName := prefix + ":" + name
-			if _, err := lookupIdentifier(e.Identifier(qualifiedName), ev.env); err == nil {
-				return e.NIL, NewEvaluationError(
-					fmt.Sprintf("require: name '%s' already defined", qualifiedName), args)
-			}
+		// Try Ghoul file module
+		if ev.moduleState != nil {
+			return requireGhoulModule(string(moduleName), prefix, only, ev, args)
 		}
 
-		// Register functions via callback that adapts to our environment
-		register := func(name string, fn interface{}) {
-			if ghoulFn, ok := fn.(func(e.List, *Evaluator) (e.Expr, error)); ok {
-				bindIdentifier(e.Identifier(name), Function{&ghoulFn}, ev.env)
-			}
-		}
-		entry.Register(prefix, only, register)
-		ev.requiredModules[requireKey] = true
-
-		return e.NIL, nil
+		return e.NIL, NewEvaluationError(fmt.Sprintf("require: module '%s' not found", moduleName), args)
 	}
+}
+
+func requireSarcophagus(entry *mummy.SarcophagusEntry, prefix string, only map[string]bool, ev *Evaluator, args e.List) (e.Expr, error) {
+	namesToRegister := entry.Names
+	if only != nil {
+		namesToRegister = make([]string, 0)
+		for _, n := range entry.Names {
+			if only[n] {
+				namesToRegister = append(namesToRegister, n)
+			}
+		}
+	}
+	for _, name := range namesToRegister {
+		qualifiedName := prefix + ":" + name
+		if _, err := lookupIdentifier(e.Identifier(qualifiedName), ev.env); err == nil {
+			return e.NIL, NewEvaluationError(
+				fmt.Sprintf("require: name '%s' already defined", qualifiedName), args)
+		}
+	}
+
+	register := func(name string, fn interface{}) {
+		if ghoulFn, ok := fn.(func(e.List, *Evaluator) (e.Expr, error)); ok {
+			bindIdentifier(e.Identifier(name), Function{&ghoulFn}, ev.env)
+		}
+	}
+	entry.Register(prefix, only, register)
+	return e.NIL, nil
+}
+
+func requireGhoulModule(moduleName string, prefix string, only map[string]bool, ev *Evaluator, args e.List) (e.Expr, error) {
+	filePath, err := ev.moduleState.ResolveFile(moduleName)
+	if err != nil {
+		return e.NIL, NewEvaluationError(fmt.Sprintf("require: %s", err), args)
+	}
+
+	// Check cache
+	if cached := ev.moduleState.GetCached(filePath); cached != nil {
+		return registerModuleExports(cached, prefix, only, ev, args)
+	}
+
+	// Check cycles
+	if err := ev.moduleState.CheckCycle(filePath); err != nil {
+		return e.NIL, NewEvaluationError(fmt.Sprintf("require: %s", err), args)
+	}
+
+	// Load and parse the file
+	f, err := os.Open(filePath)
+	if err != nil {
+		return e.NIL, NewEvaluationError(fmt.Sprintf("require: failed to open %s: %s", filePath, err), args)
+	}
+	defer f.Close()
+
+	parseRes, parsed := parser.ParseWithFilename(f, &filePath)
+	if parseRes != 0 {
+		return e.NIL, NewEvaluationError(fmt.Sprintf("require: failed to parse %s", filePath), args)
+	}
+
+	// Evaluate in a fresh module environment sharing builtins
+	moduleEnv := newModuleEnvironment(ev.env)
+	childState := ev.moduleState.ForChild(filePath)
+	childState.BeginLoading(filePath)
+
+	moduleEval := &Evaluator{
+		log:             ev.log,
+		env:             moduleEnv,
+		requiredModules: map[string]bool{},
+		moduleState:     childState,
+	}
+
+	_, err = moduleEval.Evaluate(parsed.Expressions)
+	childState.FinishLoading(filePath)
+	if err != nil {
+		return e.NIL, NewEvaluationError(fmt.Sprintf("require: error in module %s: %s", moduleName, err), args)
+	}
+
+	// Extract top-level bindings as exports
+	exports := extractExports(moduleEnv)
+	ev.moduleState.CacheModule(filePath, exports)
+
+	return registerModuleExports(exports, prefix, only, ev, args)
+}
+
+func registerModuleExports(exports *ModuleExports, prefix string, only map[string]bool, ev *Evaluator, args e.List) (e.Expr, error) {
+	for _, name := range exports.Names {
+		if only != nil && !only[name] {
+			continue
+		}
+		qualifiedName := prefix + ":" + name
+		if _, err := lookupIdentifier(e.Identifier(qualifiedName), ev.env); err == nil {
+			return e.NIL, NewEvaluationError(
+				fmt.Sprintf("require: name '%s' already defined", qualifiedName), args)
+		}
+		bindIdentifier(e.Identifier(qualifiedName), exports.Bindings[name], ev.env)
+	}
+	ev.requiredModules[prefix+":ghoul"] = true
+	return e.NIL, nil
 }
 
 func defineSyntaxContinuationFor(def e.List) continuation {

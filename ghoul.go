@@ -53,6 +53,10 @@ func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader, fil
 		return nil, fmt.Errorf("failed to parse Lisp code: parse result %d", parseRes)
 	}
 
+	if filename != nil {
+		g.evaluator.SetModuleState(ev.NewModuleState(*filename))
+	}
+
 	result, err := g.evaluator.EvaluateWithContext(ctx, parsed.Expressions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process Lisp code: %w", err)
