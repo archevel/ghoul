@@ -59,6 +59,61 @@ func TestLexerFindsSimpleCasesWithWhitespaces(t *testing.T) {
 	}
 }
 
+func TestLexerHandlesUTF8InComments(t *testing.T) {
+	// Comments containing multi-byte UTF-8 characters (em-dash, etc.)
+	// must be skipped without causing parse errors.
+	cases := []struct {
+		name string
+		in   string
+		want []int
+	}{
+		{"em-dash in comment", ";; let \u2014 local bindings\n42", []int{INTEGER}},
+		{"indented comment with em-dash", "  ;; foo \u2014 bar\n42", []int{INTEGER}},
+		{"CJK in comment", ";; \u4f60\u597d\n42", []int{INTEGER}},
+		{"emoji in comment", ";; test \U0001F600\n42", []int{INTEGER}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := strings.NewReader(c.in)
+			var lexer yyLexer = NewLexer(r)
+			for i, expected := range c.want {
+				lval := yySymType{}
+				actual := lexer.Lex(&lval)
+				if actual != expected {
+					t.Errorf("Expected token %d at position %d, got %d (text: %q)", expected, i, actual, lval.tok)
+				}
+			}
+		})
+	}
+}
+
+func TestLexerHandlesUTF8InIdentifiers(t *testing.T) {
+	// Identifiers can contain Unicode letters (already supported via
+	// SPECIAL_IDENTIFIERS and unicode.IsLetter in isIdentRune).
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"Swedish chars", "\u00e5\u00e4\u00f6", "\u00e5\u00e4\u00f6"},
+		{"section sign", "\u00a7foo", "\u00a7foo"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := strings.NewReader(c.in)
+			var lexer yyLexer = NewLexer(r)
+			lval := yySymType{}
+			tok := lexer.Lex(&lval)
+			if tok != IDENTIFIER {
+				t.Errorf("Expected IDENTIFIER, got %d (text: %q)", tok, lval.tok)
+			}
+			if lval.tok != c.want {
+				t.Errorf("Expected identifier %q, got %q", c.want, lval.tok)
+			}
+		})
+	}
+}
+
 func TestLexerIgnoresComments(t *testing.T) {
 	cases := []struct {
 		in          string
