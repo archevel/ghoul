@@ -88,6 +88,19 @@ func (ev *Evaluator) Evaluate(exprs e.Expr) (e.Expr, error) {
 	return ev.EvaluateWithContext(context.Background(), exprs)
 }
 
+// EvalSubExpression evaluates a single expression in the current environment,
+// using a fresh continuation stack. Used by stdlib functions like map/filter
+// that need to call Ghoul functions from Go code.
+func (ev *Evaluator) EvalSubExpression(expr e.Expr) (e.Expr, error) {
+	subEval := &Evaluator{
+		log:             ev.log,
+		env:             ev.env,
+		requiredModules: ev.requiredModules,
+		moduleState:     ev.moduleState,
+	}
+	return subEval.Evaluate(e.Cons(expr, e.NIL))
+}
+
 func (ev *Evaluator) SetModuleState(ms *ModuleState) {
 	ev.moduleState = ms
 }

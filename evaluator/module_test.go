@@ -163,6 +163,50 @@ func TestModuleIsolation(t *testing.T) {
 	}
 }
 
+func TestRequireFromSubdirectory(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "lib"), 0755)
+	os.WriteFile(filepath.Join(dir, "lib", "helpers.ghl"), []byte("(define helper-val 123)"), 0644)
+
+	mainPath := filepath.Join(dir, "main.ghl")
+	env := NewEnvironment()
+	ms := NewModuleState(mainPath)
+	ev := New(logging.StandardLogger, env)
+	ev.moduleState = ms
+
+	r := strings.NewReader("(require lib/helpers) lib/helpers:helper-val")
+	_, parsed := p.Parse(r)
+	result, err := ev.Evaluate(parsed.Expressions)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.Integer(123)) {
+		t.Errorf("expected 123, got %s", result.Repr())
+	}
+}
+
+func TestRequireFromSubdirectoryWithAlias(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "lib"), 0755)
+	os.WriteFile(filepath.Join(dir, "lib", "helpers.ghl"), []byte("(define x 77)"), 0644)
+
+	mainPath := filepath.Join(dir, "main.ghl")
+	env := NewEnvironment()
+	ms := NewModuleState(mainPath)
+	ev := New(logging.StandardLogger, env)
+	ev.moduleState = ms
+
+	r := strings.NewReader("(require lib/helpers as h) h:x")
+	_, parsed := p.Parse(r)
+	result, err := ev.Evaluate(parsed.Expressions)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.Integer(77)) {
+		t.Errorf("expected 77, got %s", result.Repr())
+	}
+}
+
 func TestCircularDependencyError(t *testing.T) {
 	dir := t.TempDir()
 
