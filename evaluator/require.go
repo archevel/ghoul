@@ -156,7 +156,11 @@ func requireGhoulModule(moduleName string, prefix string, only map[string]bool, 
 		return e.NIL, WrapError(fmt.Sprintf("require: %s", err), args, err)
 	}
 
-	// Load and parse the file
+	// Load and parse the file.
+	// The Open error path is not covered by tests because ResolveFile already
+	// verifies the file exists via os.Stat, so Open only fails in unusual
+	// conditions (permission changes, filesystem errors) that are hard to
+	// reproduce reliably in tests.
 	f, err := os.Open(filePath)
 	if err != nil {
 		return e.NIL, WrapError(fmt.Sprintf("require: failed to open %s: %s", filePath, err), args, err)

@@ -196,3 +196,108 @@ func TestRequireEmptyForm(t *testing.T) {
 		t.Fatal("expected error for empty require")
 	}
 }
+
+func TestRequireNonIdentifierModuleName(t *testing.T) {
+	env := NewEnvironment()
+
+	in := `(require 42)`
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	_, err := Evaluate(parsed.Expressions, env)
+	if err == nil {
+		t.Fatal("expected error for non-identifier module name")
+	}
+	if !strings.Contains(err.Error(), "module name must be an identifier") {
+		t.Errorf("expected 'module name must be an identifier' in error, got: %v", err)
+	}
+}
+
+func TestRequireAsMissingAlias(t *testing.T) {
+	env := NewEnvironment()
+
+	in := `(require somemod as)`
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	_, err := Evaluate(parsed.Expressions, env)
+	if err == nil {
+		t.Fatal("expected error for missing alias after 'as'")
+	}
+	if !strings.Contains(err.Error(), "expected alias after 'as'") {
+		t.Errorf("expected 'expected alias after as' in error, got: %v", err)
+	}
+}
+
+func TestRequireAsNonIdentifierAlias(t *testing.T) {
+	env := NewEnvironment()
+
+	in := `(require somemod as 42)`
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	_, err := Evaluate(parsed.Expressions, env)
+	if err == nil {
+		t.Fatal("expected error for non-identifier alias")
+	}
+	if !strings.Contains(err.Error(), "alias must be an identifier") {
+		t.Errorf("expected 'alias must be an identifier' in error, got: %v", err)
+	}
+}
+
+func TestRequireOnlyMissingList(t *testing.T) {
+	env := NewEnvironment()
+
+	in := `(require somemod only)`
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	_, err := Evaluate(parsed.Expressions, env)
+	if err == nil {
+		t.Fatal("expected error for missing name list after 'only'")
+	}
+	if !strings.Contains(err.Error(), "expected name list after 'only'") {
+		t.Errorf("expected 'expected name list' in error, got: %v", err)
+	}
+}
+
+func TestRequireOnlyNonList(t *testing.T) {
+	env := NewEnvironment()
+
+	in := `(require somemod only foo)`
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	_, err := Evaluate(parsed.Expressions, env)
+	if err == nil {
+		t.Fatal("expected error when 'only' is followed by non-list")
+	}
+	if !strings.Contains(err.Error(), "'only' must be followed by a list") {
+		t.Errorf("expected 'only must be followed by a list' in error, got: %v", err)
+	}
+}
+
+func TestRequireOnlyListWithNonIdentifier(t *testing.T) {
+	env := NewEnvironment()
+
+	in := `(require somemod only (42))`
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	_, err := Evaluate(parsed.Expressions, env)
+	if err == nil {
+		t.Fatal("expected error for non-identifier in 'only' list")
+	}
+	if !strings.Contains(err.Error(), "'only' list must contain identifiers") {
+		t.Errorf("expected 'only list must contain identifiers' in error, got: %v", err)
+	}
+}
+
+func TestRequireUnexpectedKeyword(t *testing.T) {
+	env := NewEnvironment()
+
+	in := `(require somemod with stuff)`
+	r := strings.NewReader(in)
+	_, parsed := p.Parse(r)
+	_, err := Evaluate(parsed.Expressions, env)
+	if err == nil {
+		t.Fatal("expected error for unexpected keyword")
+	}
+	if !strings.Contains(err.Error(), "unexpected keyword 'with'") {
+		t.Errorf("expected 'unexpected keyword' in error, got: %v", err)
+	}
+}

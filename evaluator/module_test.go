@@ -230,6 +230,74 @@ func TestCircularDependencyError(t *testing.T) {
 	}
 }
 
+func TestRequireGhoulModuleNameConflict(t *testing.T) {
+	dir := t.TempDir()
+
+	os.WriteFile(filepath.Join(dir, "a.ghl"), []byte("(define x 1)"), 0644)
+	os.WriteFile(filepath.Join(dir, "b.ghl"), []byte("(define x 2)"), 0644)
+
+	mainPath := filepath.Join(dir, "main.ghl")
+	env := NewEnvironment()
+	ms := NewModuleState(mainPath)
+	ev := New(logging.StandardLogger, env)
+	ev.moduleState = ms
+
+	// Both modules export x, requiring with same alias causes conflict
+	r := strings.NewReader("(require a as m) (require b as m)")
+	_, parsed := p.Parse(r)
+	_, err := ev.Evaluate(parsed.Expressions)
+	if err == nil {
+		t.Fatal("expected name conflict error")
+	}
+	if !strings.Contains(err.Error(), "already defined") {
+		t.Errorf("expected 'already defined' in error, got: %v", err)
+	}
+}
+
+func TestRequireGhoulModuleParseError(t *testing.T) {
+	dir := t.TempDir()
+
+	os.WriteFile(filepath.Join(dir, "bad.ghl"), []byte("(define x"), 0644)
+
+	mainPath := filepath.Join(dir, "main.ghl")
+	env := NewEnvironment()
+	ms := NewModuleState(mainPath)
+	ev := New(logging.StandardLogger, env)
+	ev.moduleState = ms
+
+	r := strings.NewReader("(require bad)")
+	_, parsed := p.Parse(r)
+	_, err := ev.Evaluate(parsed.Expressions)
+	if err == nil {
+		t.Fatal("expected parse error for malformed module")
+	}
+	if !strings.Contains(err.Error(), "failed to parse") {
+		t.Errorf("expected 'failed to parse' in error, got: %v", err)
+	}
+}
+
+func TestRequireGhoulModuleEvalError(t *testing.T) {
+	dir := t.TempDir()
+
+	os.WriteFile(filepath.Join(dir, "broken.ghl"), []byte("(undefined-func 1 2)"), 0644)
+
+	mainPath := filepath.Join(dir, "main.ghl")
+	env := NewEnvironment()
+	ms := NewModuleState(mainPath)
+	ev := New(logging.StandardLogger, env)
+	ev.moduleState = ms
+
+	r := strings.NewReader("(require broken)")
+	_, parsed := p.Parse(r)
+	_, err := ev.Evaluate(parsed.Expressions)
+	if err == nil {
+		t.Fatal("expected evaluation error for broken module")
+	}
+	if !strings.Contains(err.Error(), "error in module") {
+		t.Errorf("expected 'error in module' in error, got: %v", err)
+	}
+}
+
 func TestRequireSameModuleFromTwoModules(t *testing.T) {
 	dir := t.TempDir()
 
