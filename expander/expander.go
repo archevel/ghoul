@@ -235,9 +235,6 @@ func (exp *Expander) processDefineSyntax(form e.List) (e.Expr, error) {
 			return nil, fmt.Errorf("bad syntax: %s", err)
 		}
 		exp.scopes.define(name, macroBinding{syntaxTransformer: &st})
-		// Also register in the evaluator's environment so that general
-		// transformer bodies can use this macro during expansion.
-		exp.evalEnv.RegisterExpr(string(name), st)
 		return nil, nil
 	}
 
@@ -258,9 +255,6 @@ func (exp *Expander) processDefineSyntax(form e.List) (e.Expr, error) {
 	}
 	gst := ev.GeneralSyntaxTransformer{Fun: fun}
 	exp.scopes.define(name, macroBinding{generalTransformer: &gst})
-	// Also register in the evaluator's environment so that nested general
-	// transformer bodies can call this macro during expansion.
-	exp.evalEnv.RegisterExpr(string(name), gst)
 	return nil, nil
 }
 
@@ -281,17 +275,11 @@ func (exp *Expander) expandMacroCall(binding macroBinding, callable e.List) (e.E
 		wrapped := macromancy.WrapExpr(callable, macromancy.NewMarkSet())
 		markedInput := macromancy.ApplyMark(wrapped, mark)
 
-		// Register the transformer as a temporary function in the evaluator's
-		// environment, then call it via EvalSubExpression. This ensures the
-		// transformer body runs through the full evaluator (with its macro
-		// interception for nested macro calls) and has access to all
-		// previously defined macros and stdlib functions.
-		proc := binding.generalTransformer.Fun.Fun
-		exp.evalEnv.Register("__expander_transformer__", func(a e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-			return (*proc)(a, evaluator)
-		})
+		// Invoke the transformer via EvalSubExpression. The Function value
+		// is embedded directly in the call expression (it self-evaluates),
+		// and the marked input is quoted so it's passed as data.
 		quotedInput := &e.Quote{Quoted: markedInput}
-		callExpr := e.Cons(e.Identifier("__expander_transformer__"), e.Cons(quotedInput, e.NIL))
+		callExpr := e.Cons(binding.generalTransformer.Fun, e.Cons(quotedInput, e.NIL))
 		result, err := exp.evaluator.EvalSubExpression(callExpr)
 		if err != nil {
 			return nil, err

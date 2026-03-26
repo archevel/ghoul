@@ -35,9 +35,9 @@ func (ev *Evaluator) freshMark() macromancy.Mark {
 	return atomic.AddUint64(ev.markCounter, 1)
 }
 
-// SyntaxTransformer is bound in the environment by define-syntax.
-// When the evaluator sees a call whose head resolves to one, it
-// expands the macro instead of evaluating arguments.
+// SyntaxTransformer holds a pattern-based macro transformer (syntax-rules).
+// Created by BuildSyntaxRulesTransformer and used by the expander to
+// expand macro calls during the expansion phase.
 type SyntaxTransformer struct {
 	Transform func(code e.List, mark macromancy.Mark) (e.Expr, error)
 }
@@ -52,8 +52,8 @@ func (st SyntaxTransformer) Equiv(other e.Expr) bool {
 
 // GeneralSyntaxTransformer holds a user-defined lambda that acts as a
 // macro transformer. Unlike SyntaxTransformer (which does pattern-based
-// expansion directly), this invokes the lambda through the continuation
-// stack so the transformer body can use the full language.
+// expansion directly), this invokes the lambda through the evaluator
+// so the transformer body can use the full language.
 type GeneralSyntaxTransformer struct {
 	Fun Function
 }
