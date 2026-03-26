@@ -73,6 +73,13 @@ func RegisterFuncAs(name string, f func(e.List, *Evaluator) (e.Expr, error), env
 	bindFuncAtBottomAs(e.Identifier(name), Function{&f}, env)
 }
 
+// RegisterExpr binds an arbitrary expression value (e.g. a SyntaxTransformer)
+// to a name in the bottom scope of the environment.
+func (env environment) RegisterExpr(name string, val e.Expr) {
+	scope := bottomScope(&env)
+	(*scope)[keyFromIdentifier(e.Identifier(name))] = val
+}
+
 func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
 	key, ok := keyFromExpr(variable)
 	if !ok {

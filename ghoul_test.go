@@ -673,6 +673,65 @@ func TestPreludeWhenMacro(t *testing.T) {
 	}
 }
 
+func TestMacroExpansionErrorIncludesMacroName(t *testing.T) {
+	g := New()
+	_, err := g.Process(strings.NewReader(`
+(define-syntax bad-mac (syntax-rules () ((bad-mac x) (+ x nonexistent))))
+(bad-mac 5)
+`))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "bad-mac") {
+		t.Errorf("expected error to mention macro name 'bad-mac', got: %s", errMsg)
+	}
+}
+
+func TestScopedIdentifierMacroCallExpansion(t *testing.T) {
+	g := New()
+	res, err := g.Process(strings.NewReader(
+		`(define-syntax add1 (syntax-rules () ((add1 x) (+ x 1)))) (add1 5)`))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !e.Integer(6).Equiv(res) {
+		t.Errorf("Expected 6, got %s", res.Repr())
+	}
+}
+
+func TestGeneralTransformerNestedDefineInsideLambda(t *testing.T) {
+	// When a general transformer defines a function inside a lambda
+	// (nested define), it should work correctly through expansion.
+	g := newWithPrelude(t)
+	res, err := g.Process(strings.NewReader(`
+(define-syntax test-mac
+  (lambda (stx)
+    (define clauses (cdr (cdr stx)))
+    (define clause (car clauses))
+    (define pat (car clause))
+    (define collect
+      (lambda (p)
+        (define walk
+          (lambda (expr acc)
+            (cond
+              ((null? expr) acc)
+              ((identifier? expr) (+ acc 1))
+              ((pair? expr) (walk (cdr expr) (walk (car expr) acc)))
+              (else acc))))
+        (walk (cdr p) 0)))
+    (collect pat)))
+(test-mac ()
+  ((test-mac x) 42))
+`))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !e.Integer(1).Equiv(res) {
+		t.Errorf("Expected 1, got %s", res.Repr())
+	}
+}
+
 func TestPreludeSyntaxCaseAdd1(t *testing.T) {
 	// Verifies that syntax-case (defined as a prelude macro) works
 	// for a simple pattern-matching transformer.

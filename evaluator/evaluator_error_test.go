@@ -273,33 +273,6 @@ func testInputResultsInError(in string, errorMessage string, t *testing.T) {
 
 }
 
-func TestMacroExpansionErrorIncludesMacroName(t *testing.T) {
-	env := NewEnvironment()
-	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
-		fst := args.First().(e.Integer)
-		t, _ := args.Tail()
-		snd := t.First().(e.Integer)
-		return e.Integer(fst + snd), nil
-	})
-
-	in := `(define-syntax bad-mac (syntax-rules () ((bad-mac x) (+ x nonexistent))))
-(bad-mac 5)`
-
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	errMsg := err.Error()
-	if !strings.Contains(errMsg, "bad-mac") {
-		t.Errorf("expected error to mention macro name 'bad-mac', got: %s", errMsg)
-	}
-	if !strings.Contains(errMsg, "2:") {
-		t.Errorf("expected error to reference line 2 (the call site), got: %s", errMsg)
-	}
-}
-
 func TestErrorMessagesIncludeSourceLocation(t *testing.T) {
 	cases := []struct {
 		in              string

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	ev "github.com/archevel/ghoul/evaluator"
+	"github.com/archevel/ghoul/expander"
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
 	"github.com/archevel/ghoul/parser"
@@ -24,11 +25,14 @@ func New() Ghoul {
 }
 
 func NewLoggingGhoul(logger logging.Logger) Ghoul {
-	evaluator := prepareEvaluator(logger)
-	return ghoul{evaluator}
+	var markCounter uint64
+	exp := expander.New(logger, &markCounter)
+	evaluator := prepareEvaluator(logger, &markCounter)
+	return ghoul{expander: exp, evaluator: evaluator}
 }
 
 type ghoul struct {
+	expander  *expander.Expander
 	evaluator *ev.Evaluator
 }
 
@@ -51,19 +55,26 @@ func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader, fil
 		return nil, fmt.Errorf("failed to parse Lisp code: parse result %d", parseRes)
 	}
 
+	// Phase 1: Macro expansion
+	expanded, err := g.expander.ExpandAll(parsed.Expressions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to expand macros: %w", err)
+	}
+
+	// Phase 2: Evaluation
 	if filename != nil {
 		g.evaluator.SetModuleState(ev.NewModuleState(*filename))
 	}
 
-	result, err := g.evaluator.EvaluateWithContext(ctx, parsed.Expressions)
+	result, err := g.evaluator.EvaluateWithContext(ctx, expanded)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process Lisp code: %w", err)
 	}
 	return result, nil
 }
 
-func prepareEvaluator(logger logging.Logger) *ev.Evaluator {
+func prepareEvaluator(logger logging.Logger, markCounter *uint64) *ev.Evaluator {
 	env := ev.NewEnvironment()
 	stdlib.RegisterAll(env)
-	return ev.New(logger, env)
+	return ev.NewWithMarkCounter(logger, env, markCounter)
 }

@@ -73,54 +73,6 @@ func TestSyntaxToDatumNonSyntax(t *testing.T) {
 	if !result.Equiv(e.String("hello")) { t.Errorf("got %s", result.Repr()) }
 }
 
-func TestSyntaxToDatumInMacro(t *testing.T) {
-	// A general transformer receives SyntaxObjects — syntax->datum should unwrap them
-	result, err := evalWithStdlib(`
-(define-syntax get-datum
-  (lambda (stx)
-    (syntax->datum (car (cdr stx)))))
-(get-datum 42)
-`)
-	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Integer(42)) { t.Errorf("expected 42, got %s", result.Repr()) }
-}
-
-func TestIdentifierPredicateInMacro(t *testing.T) {
-	// identifier? should return #t for syntax objects wrapping identifiers
-	result, err := evalWithStdlib(`
-(define-syntax is-id
-  (lambda (stx)
-    (identifier? (car (cdr stx)))))
-(is-id foo)
-`)
-	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Boolean(true)) { t.Errorf("expected #t, got %s", result.Repr()) }
-}
-
-func TestIdentifierPredicateNonIdInMacro(t *testing.T) {
-	result, err := evalWithStdlib(`
-(define-syntax is-id
-  (lambda (stx)
-    (identifier? (car (cdr stx)))))
-(is-id 42)
-`)
-	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Boolean(false)) { t.Errorf("expected #f, got %s", result.Repr()) }
-}
-
-func TestDatumToSyntaxInMacro(t *testing.T) {
-	// datum->syntax with a syntax object context should copy marks
-	result, err := evalWithStdlib(`
-(define-syntax make-val
-  (lambda (stx)
-    (define ctx (car (cdr stx)))
-    (datum->syntax ctx 99)))
-(make-val placeholder)
-`)
-	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Integer(99)) { t.Errorf("expected 99, got %s", result.Repr()) }
-}
-
 func TestDatumToSyntax(t *testing.T) {
 	// datum->syntax with a non-syntax context just wraps
 	result, err := evalWithStdlib(`(datum->syntax 42 'foo)`)

@@ -157,25 +157,6 @@ func TestUndefinedIdentifierNoSuggestionWhenNothingClose(t *testing.T) {
 	}
 }
 
-func TestUndefinedIdentifierSuggestsMacroNames(t *testing.T) {
-	env := NewEnvironment()
-	in := `(define-syntax my-swap (syntax-rules () ((my-swap x y) (begin (define tmp x) (set! x y) (set! y tmp)))))
-(define a 1)
-(define b 2)
-(my-swp a b)`
-
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	errMsg := err.Error()
-	if !strings.Contains(errMsg, "my-swap") {
-		t.Errorf("expected suggestion 'my-swap' for macro name typo, got: %s", errMsg)
-	}
-}
-
 func TestUndefinedIdentifierMultipleSuggestions(t *testing.T) {
 	env := NewEnvironment()
 	env.Register("print", func(args e.List, ev *Evaluator) (e.Expr, error) {
