@@ -403,7 +403,6 @@ func TestParseIgnoresInitialHashbangLine(t *testing.T) {
 }
 
 func TestParserRegistersPositionOfPairs(t *testing.T) {
-
 	cases := []struct {
 		in                    string
 		expectedPosOfLastExpr Position
@@ -413,28 +412,25 @@ func TestParserRegistersPositionOfPairs(t *testing.T) {
 	}
 
 	for _, c := range cases {
-
 		r := strings.NewReader(c.in)
-		lex := NewLexer(r)
-		res := yyParse(lex)
-
+		res, parsed := Parse(r)
 		if res != 0 {
-			t.Fatalf("Parser failed to parse \"%s\"", c.in)
+			t.Fatalf("Parser failed to parse %q", c.in)
 		}
 
-		expr := lex.lpair
+		// Walk to the last top-level pair
+		expr := parsed.Expressions
 		var last e.List
 		for expr != e.NIL {
 			last = expr
 			expr, _ = last.Tail()
 		}
 
-		lastPos, ok := lex.PairSrcPositions[*last.(*e.Pair)]
+		lastPos, ok := parsed.PositionOf(*last.(*e.Pair))
 		if !ok || lastPos != c.expectedPosOfLastExpr {
-			t.Errorf("Expected position of last id in %q tobe %q was %q", c.in, c.expectedPosOfLastExpr, lastPos)
+			t.Errorf("Expected position of last expr in %q to be %q, was %q", c.in, c.expectedPosOfLastExpr, lastPos)
 		}
 	}
-
 }
 
 func TestInnerPairsHavePositionsRegistered(t *testing.T) {
@@ -446,25 +442,23 @@ func TestInnerPairsHavePositionsRegistered(t *testing.T) {
 	}
 
 	for _, c := range cases {
-
 		r := strings.NewReader(c.in)
-		lex := NewLexer(r)
-		res := yyParse(lex)
-
+		res, parsed := Parse(r)
 		if res != 0 {
-			t.Fatalf("Parser failed to parse \"%s\"", c.in)
+			t.Fatalf("Parser failed to parse %q", c.in)
 		}
 
-		expr := lex.lpair.First().(e.List)
+		// Walk into the first expression (a list), then to its last pair
+		expr := parsed.Expressions.First().(e.List)
 		var last e.List
 		for expr != e.NIL {
 			last = expr
 			expr, _ = last.Tail()
 		}
 
-		lastPos, ok := lex.PairSrcPositions[*last.(*e.Pair)]
+		lastPos, ok := parsed.PositionOf(*last.(*e.Pair))
 		if !ok || lastPos != c.expectedPosOfLastExpr {
-			t.Errorf("Expected position of last id in %q tobe %q was %q", c.in, c.expectedPosOfLastExpr, lastPos)
+			t.Errorf("Expected position of last expr in %q to be %q, was %q", c.in, c.expectedPosOfLastExpr, lastPos)
 		}
 	}
 }
