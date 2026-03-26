@@ -109,6 +109,79 @@ func BenchmarkParseStringHeavy(b *testing.B) {
 	}
 }
 
+// Larger variants — these exceeded the yacc parser's limits but should
+// work with the SIMD parser. On the yacc parser these will fail or be
+// very slow, showing where the old parser hit scaling walls.
+
+func BenchmarkParseLargeInput5000(b *testing.B) {
+	var buf strings.Builder
+	for i := 0; i < 5000; i++ {
+		fmt.Fprintf(&buf, "(+ %d %d)\n", i, i+1)
+	}
+	input := buf.String()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		res, _ := Parse(strings.NewReader(input))
+		if res != 0 {
+			b.Fatal("parse failed")
+		}
+	}
+}
+
+func BenchmarkParseManyAtoms1000(b *testing.B) {
+	var buf strings.Builder
+	buf.WriteString("(begin")
+	for i := 0; i < 1000; i++ {
+		fmt.Fprintf(&buf, " x%d", i)
+	}
+	buf.WriteString(")")
+	input := buf.String()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		res, _ := Parse(strings.NewReader(input))
+		if res != 0 {
+			b.Fatal("parse failed")
+		}
+	}
+}
+
+func BenchmarkParseStringHeavy500(b *testing.B) {
+	var buf strings.Builder
+	buf.WriteString("(begin")
+	for i := 0; i < 500; i++ {
+		fmt.Fprintf(&buf, ` "string number %d with some longer content inside"`, i)
+	}
+	buf.WriteString(")")
+	input := buf.String()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		res, _ := Parse(strings.NewReader(input))
+		if res != 0 {
+			b.Fatal("parse failed")
+		}
+	}
+}
+
+func BenchmarkParseDeepNesting1000(b *testing.B) {
+	var buf strings.Builder
+	depth := 1000
+	for i := 0; i < depth; i++ {
+		buf.WriteByte('(')
+	}
+	buf.WriteString("42")
+	for i := 0; i < depth; i++ {
+		buf.WriteByte(')')
+	}
+	input := buf.String()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		res, _ := Parse(strings.NewReader(input))
+		if res != 0 {
+			b.Fatal("parse failed")
+		}
+	}
+}
+
 func BenchmarkParseCommentHeavy(b *testing.B) {
 	var buf strings.Builder
 	for i := 0; i < 500; i++ {
