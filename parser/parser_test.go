@@ -462,3 +462,4 @@ func TestInnerPairsHavePositionsRegistered(t *testing.T) {
 		}
 	}
 }
+
