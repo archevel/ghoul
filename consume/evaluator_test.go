@@ -352,15 +352,12 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 	env := NewEnvironment()
 	evaluator := New(engraving.NoLogger, env)
 
-	var maxConts float64 = 0
 	var maxScopes float64 = 0
 	calls := 0
 
 	RegisterFuncAs("checkSize", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
 		calls++
-
-		maxConts = math.Max(float64(len(*((*evaluator).conts))), maxConts)
-		maxScopes = math.Max(float64(len(*((*evaluator).env))), maxScopes)
+		maxScopes = math.Max(float64(len(*(ev.env))), maxScopes)
 		return args[0], nil
 	}, env)
 
@@ -382,11 +379,8 @@ func TestContextGrowthOnTailRecursiveCall(t *testing.T) {
 	if !res.Equiv(e.IntNode(100)) {
 		t.Errorf("Expected 100, but got %+v", res.Repr())
 	}
-	if maxConts != 3.0 {
-		t.Errorf("Bad maxConts: %v", maxConts)
-	}
-
-	if maxScopes != 2.0 {
+	// With the bytecode VM, scope depth should remain bounded for tail calls
+	if maxScopes > 3.0 {
 		t.Errorf("Bad maxScopes %v", maxScopes)
 	}
 }

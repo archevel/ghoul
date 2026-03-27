@@ -14,15 +14,15 @@ func (ev *Evaluator) ConsumeNodes(nodes []*bones.Node) (*bones.Node, error) {
 }
 
 func (ev *Evaluator) ConsumeNodesWithContext(ctx context.Context, nodes []*bones.Node) (*bones.Node, error) {
-	if len(nodes) == 0 {
-		return bones.Nil, nil
+	code, err := compileTopLevel(nodes)
+	if err != nil {
+		return nil, err
 	}
-	ev.conts = &contStack{contItem{fn: seqContinuation(nodes, false)}}
-	return ev.stepThroughContinuationsWithContext(ctx)
+	vm := newVM(ev)
+	return vm.run(ctx, code)
 }
 
-// EvalSubExpression evaluates a single Node expression using a fresh
-// continuation stack.
+// EvalSubExpression evaluates a single Node expression using a fresh VM.
 func (ev *Evaluator) EvalSubExpression(node *bones.Node) (*bones.Node, error) {
 	subEval := &Evaluator{
 		log:             ev.log,
@@ -30,6 +30,7 @@ func (ev *Evaluator) EvalSubExpression(node *bones.Node) (*bones.Node, error) {
 		requiredModules: ev.requiredModules,
 		moduleState:     ev.moduleState,
 		markCounter:     ev.markCounter,
+		moduleLoader:    ev.moduleLoader,
 	}
 	return subEval.ConsumeNodes([]*bones.Node{node})
 }
