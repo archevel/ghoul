@@ -36,3 +36,23 @@ TODO: Make `Pair` struct private and replace usages with a `Cons(Expr, Expr)` fu
 TODO: Replace `cond` with `match` keyword and have it use pattern matching.
 TODO: Implement a symbol table and use integers instead of strings to compare/find the right values
 ~~TODO: Add logging (to lowest log level) essentially everywhere and make sure it is disabled in `ghoul` command unless some param is given.~~
+
+## Package Structure
+
+The ghoul feeds in three phases: **exhume** (parse) → **reanimate** (expand macros) → **consume** (evaluate).
+
+All packages follow an undead/occult naming theme:
+
+| Package | Role |
+|---------|------|
+| `ghoul` | The creature itself — public API orchestrating the three phases |
+| `bones` | The skeletal structure — expression types (`Pair`, `Identifier`, etc.) |
+| `exhumer` | Digs up structure from raw text — lexer and parser |
+| `reanimator` | Brings macros to life — expansion phase before evaluation |
+| `consume` | How the ghoul feeds — CPS evaluator with tail call optimization |
+| `macromancy` | The dark arts — macro pattern matching and hygienic expansion |
+| `tome` | The book of spells — standard library functions |
+| `engraving` | Carved records — logging |
+| `mummy` | Wraps Go values for use in Ghoul |
+| `wraith` | Possesses Go packages and generates sarcophagi (FFI wrappers) |
+| `prelude` | Standard macros: `let`, `let*`, `when`, `unless`, `syntax-case` |
