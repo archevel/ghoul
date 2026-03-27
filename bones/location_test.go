@@ -25,7 +25,8 @@ func TestSourcePositionString(t *testing.T) {
 
 func TestNodeCarriesLocation(t *testing.T) {
 	loc := &SourcePosition{Ln: 3, Col: 5}
-	node := IntNode(1)
+	// Use a value outside the int cache to avoid mutating a cached singleton
+	node := IntNode(999)
 	node.Loc = loc
 
 	if node.Loc == nil {
@@ -37,7 +38,7 @@ func TestNodeCarriesLocation(t *testing.T) {
 }
 
 func TestNodeCreatesNilLocation(t *testing.T) {
-	node := IntNode(1)
+	node := IntNode(999)
 	if node.Loc != nil {
 		t.Error("node constructor should create node with nil Loc by default")
 	}

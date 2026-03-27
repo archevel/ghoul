@@ -93,7 +93,30 @@ var Nil = &Node{Kind: NilNode}
 
 // --- Constructors ---
 
+// Pre-allocated singletons for common values to reduce allocation pressure.
+var (
+	trueNode  = &Node{Kind: BooleanNode, BoolVal: true}
+	falseNode = &Node{Kind: BooleanNode, BoolVal: false}
+)
+
+// Small integer cache for -128..127 (same range as Java's Integer cache).
+const (
+	intCacheMin = -128
+	intCacheMax = 127
+)
+
+var intCache [intCacheMax - intCacheMin + 1]*Node
+
+func init() {
+	for i := int64(intCacheMin); i <= intCacheMax; i++ {
+		intCache[i-intCacheMin] = &Node{Kind: IntegerNode, IntVal: i}
+	}
+}
+
 func IntNode(v int64) *Node {
+	if v >= intCacheMin && v <= intCacheMax {
+		return intCache[v-intCacheMin]
+	}
 	return &Node{Kind: IntegerNode, IntVal: v}
 }
 
@@ -106,7 +129,10 @@ func StrNode(v string) *Node {
 }
 
 func BoolNode(v bool) *Node {
-	return &Node{Kind: BooleanNode, BoolVal: v}
+	if v {
+		return trueNode
+	}
+	return falseNode
 }
 
 func IdentNode(name string) *Node {
