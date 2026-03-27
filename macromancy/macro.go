@@ -7,8 +7,8 @@ import (
 )
 
 // SyntaxTransformer holds a pattern-based macro transformer (syntax-rules).
-// Created by BuildSyntaxRulesTransformer and used by the expander to
-// expand macro calls during the expansion phase.
+// Created by BuildSyntaxRulesTransformer and used by the reanimator to
+// expand macro calls during the reanimation phase.
 type SyntaxTransformer struct {
 	Transform func(code e.List, mark Mark) (e.Expr, error)
 }

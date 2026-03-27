@@ -1,4 +1,4 @@
-package expander
+package reanimator
 
 // These tests exercise defensive code paths that are only reachable by
 // constructing malformed internal state. They exist to document these
@@ -16,7 +16,7 @@ import (
 // practice — processDefineSyntax always sets one. This tests the
 // fallthrough error in expandMacroCall.
 func TestExpandMacroCall_EmptyBinding(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	binding := macroBinding{}
 	_, err := exp.expandMacroCall(binding, e.Cons(e.Identifier("x"), e.NIL))
 	if err == nil {
@@ -30,7 +30,7 @@ func TestExpandMacroCall_EmptyBinding(t *testing.T) {
 // expandEachInList with an improper list whose dotted tail is a macro
 // call that errors during expansion.
 func TestExpandEachInList_ImproperTailError(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("bad"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -60,7 +60,7 @@ func TestExpandEachInList_ImproperTailError(t *testing.T) {
 // fails. This happens when the transformer lambda body contains a macro
 // call that errors during pre-expansion.
 func TestProcessDefineSyntax_TransformerExpansionError(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("bad"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -79,10 +79,10 @@ func TestProcessDefineSyntax_TransformerExpansionError(t *testing.T) {
 	}
 }
 
-// expandCond where a clause is an atom (not a list). The expander
+// expandCond where a clause is an atom (not a list). The reanimator
 // passes it through unchanged since there's nothing to expand.
 func TestExpandCond_AtomClause(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("wrap"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -110,7 +110,7 @@ func TestExpandCond_AtomClause(t *testing.T) {
 // ExpandAll with source positions set on input pairs — the Loc
 // preservation path where resultPairs[i].Loc is non-nil.
 func TestExpandAll_PreservesSourcePositions(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	// Build a pair with Loc set
 	pair := e.Cons(e.Integer(42), e.NIL)
 	pair.Loc = &e.SourcePosition{Ln: 5, Col: 10}
@@ -131,7 +131,7 @@ func TestExpandAll_PreservesSourcePositions(t *testing.T) {
 
 // expandExpr with require form — should pass through unchanged.
 func TestExpandExpr_RequirePassthrough(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	// containsMacroCall needs to return true for this path to be reached,
 	// but require forms are returned before the containsMacroCall check.
 	// This tests the direct path.

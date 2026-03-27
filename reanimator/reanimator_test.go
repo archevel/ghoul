@@ -1,4 +1,4 @@
-package expander
+package reanimator
 
 import (
 	"fmt"
@@ -21,7 +21,7 @@ func parseExprs(t *testing.T, code string) e.List {
 	return parsed.Expressions
 }
 
-func newTestExpander() *Expander {
+func newTestReanimator() *Reanimator {
 	var counter uint64
 	return New(logging.StandardLogger, &counter)
 }
@@ -29,12 +29,12 @@ func newTestExpander() *Expander {
 func TestExpandSyntaxRulesSimple(t *testing.T) {
 	// define-syntax with syntax-rules should be stripped from output,
 	// and subsequent macro calls should be expanded.
-	expander := newTestExpander()
+	r := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax add-one (syntax-rules () ((add-one x) (+ x 1))))
 (add-one 5)
 `)
-	expanded, err := expander.ExpandAll(exprs)
+	expanded, err := r.ExpandAll(exprs)
 	if err != nil {
 		t.Fatalf("expansion failed: %v", err)
 	}
@@ -59,12 +59,12 @@ func TestExpandSyntaxRulesSimple(t *testing.T) {
 func TestExpandGeneralTransformerSimple(t *testing.T) {
 	// General transformer (lambda-based macro) should work through
 	// the sub-evaluator during expansion.
-	expander := newTestExpander()
+	r := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax always-42 (lambda (stx) 42))
 (always-42 anything)
 `)
-	expanded, err := expander.ExpandAll(exprs)
+	expanded, err := r.ExpandAll(exprs)
 	if err != nil {
 		t.Fatalf("expansion failed: %v", err)
 	}
@@ -79,12 +79,12 @@ func TestExpandGeneralTransformerSimple(t *testing.T) {
 }
 
 func TestExpandDefineSyntaxIsStripped(t *testing.T) {
-	expander := newTestExpander()
+	r := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax my-mac (syntax-rules () ((my-mac) 42)))
 (define x 10)
 `)
-	expanded, err := expander.ExpandAll(exprs)
+	expanded, err := r.ExpandAll(exprs)
 	if err != nil {
 		t.Fatalf("expansion failed: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestExpandDefineSyntaxIsStripped(t *testing.T) {
 func TestExpandMetaMacro(t *testing.T) {
 	// A macro that expands to define-syntax should register the new macro,
 	// which can then be used.
-	expander := newTestExpander()
+	r := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax def-adder (syntax-rules ()
   ((def-adder name val)
@@ -118,7 +118,7 @@ func TestExpandMetaMacro(t *testing.T) {
 (def-adder add-five 5)
 (add-five 10)
 `)
-	expanded, err := expander.ExpandAll(exprs)
+	expanded, err := r.ExpandAll(exprs)
 	if err != nil {
 		t.Fatalf("expansion failed: %v", err)
 	}
@@ -135,12 +135,12 @@ func TestExpandMetaMacro(t *testing.T) {
 }
 
 func TestExpandPreservesNonMacroCode(t *testing.T) {
-	expander := newTestExpander()
+	r := newTestReanimator()
 	exprs := parseExprs(t, `
 (define x 42)
 (+ x 1)
 `)
-	expanded, err := expander.ExpandAll(exprs)
+	expanded, err := r.ExpandAll(exprs)
 	if err != nil {
 		t.Fatalf("expansion failed: %v", err)
 	}
@@ -158,14 +158,14 @@ func TestExpandPreservesNonMacroCode(t *testing.T) {
 func TestExpandHygienePreserved(t *testing.T) {
 	// The classic hygiene test: macro introduces "tmp", user also has "tmp".
 	// After expansion, the macro's tmp should have hygiene marks.
-	expander := newTestExpander()
+	r := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax my-or (syntax-rules ()
   ((my-or a b) (begin (define tmp a) (cond (tmp tmp) (else b))))))
 (define tmp 5)
 (my-or #f tmp)
 `)
-	expanded, err := expander.ExpandAll(exprs)
+	expanded, err := r.ExpandAll(exprs)
 	if err != nil {
 		t.Fatalf("expansion failed: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestExpandHygienePreserved(t *testing.T) {
 // --- Tests for macro calls nested inside core forms ---
 
 func TestExpandMacroInsideDefine(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax wrap (syntax-rules () ((wrap x) (+ x 1))))
 (define y (wrap 5))
@@ -197,7 +197,7 @@ func TestExpandMacroInsideDefine(t *testing.T) {
 }
 
 func TestExpandMacroInsideSetBang(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax wrap (syntax-rules () ((wrap x) (+ x 1))))
 (set! y (wrap 5))
@@ -213,7 +213,7 @@ func TestExpandMacroInsideSetBang(t *testing.T) {
 }
 
 func TestExpandMacroInsideCond(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax tt (syntax-rules () ((tt) #t)))
 (cond ((tt) 42))
@@ -229,7 +229,7 @@ func TestExpandMacroInsideCond(t *testing.T) {
 }
 
 func TestExpandMacroInsideBegin(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax wrap (syntax-rules () ((wrap x) (+ x 1))))
 (begin (wrap 1) (wrap 2))
@@ -245,7 +245,7 @@ func TestExpandMacroInsideBegin(t *testing.T) {
 }
 
 func TestExpandMacroInsideLambdaBody(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax wrap (syntax-rules () ((wrap x) (+ x 1))))
 (lambda (x) (wrap x))
@@ -261,7 +261,7 @@ func TestExpandMacroInsideLambdaBody(t *testing.T) {
 }
 
 func TestExpandMacroInsideFunctionCallArgs(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax wrap (syntax-rules () ((wrap x) (+ x 1))))
 (foo (wrap 1) (wrap 2))
@@ -278,7 +278,7 @@ func TestExpandMacroInsideFunctionCallArgs(t *testing.T) {
 
 func TestExpandDefineSyntaxInsideLambda(t *testing.T) {
 	// define-syntax inside a lambda body creates a locally-scoped macro
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (lambda ()
   (define-syntax local-mac (syntax-rules () ((local-mac) 99)))
@@ -299,7 +299,7 @@ func TestExpandDefineSyntaxInsideLambda(t *testing.T) {
 }
 
 func TestExpandDefineSyntaxInsideBegin(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (begin
   (define-syntax wrap (syntax-rules () ((wrap x) (+ x 1))))
@@ -319,7 +319,7 @@ func TestExpandDefineSyntaxInsideBegin(t *testing.T) {
 // --- Error path tests ---
 
 func TestExpandDefineSyntaxMissingName(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `(define-syntax)`)
 	_, err := exp.ExpandAll(exprs)
 	if err == nil {
@@ -328,7 +328,7 @@ func TestExpandDefineSyntaxMissingName(t *testing.T) {
 }
 
 func TestExpandDefineSyntaxNonIdentifierName(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `(define-syntax 42 (syntax-rules () ((foo) 1)))`)
 	_, err := exp.ExpandAll(exprs)
 	if err == nil {
@@ -337,7 +337,7 @@ func TestExpandDefineSyntaxNonIdentifierName(t *testing.T) {
 }
 
 func TestExpandDefineSyntaxMissingTransformer(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `(define-syntax foo)`)
 	_, err := exp.ExpandAll(exprs)
 	if err == nil {
@@ -346,7 +346,7 @@ func TestExpandDefineSyntaxMissingTransformer(t *testing.T) {
 }
 
 func TestExpandDefineSyntaxNonListTransformer(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `(define-syntax foo 42)`)
 	_, err := exp.ExpandAll(exprs)
 	if err == nil {
@@ -355,7 +355,7 @@ func TestExpandDefineSyntaxNonListTransformer(t *testing.T) {
 }
 
 func TestExpandDefineSyntaxBadSyntaxRules(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `(define-syntax foo (syntax-rules))`)
 	_, err := exp.ExpandAll(exprs)
 	if err == nil {
@@ -364,7 +364,7 @@ func TestExpandDefineSyntaxBadSyntaxRules(t *testing.T) {
 }
 
 func TestExpandDefineSyntaxNonProcedureTransformer(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `(define-syntax foo (begin 42))`)
 	_, err := exp.ExpandAll(exprs)
 	if err == nil {
@@ -375,7 +375,7 @@ func TestExpandDefineSyntaxNonProcedureTransformer(t *testing.T) {
 // --- Edge cases ---
 
 func TestExpandEmptyInput(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	expanded, err := exp.ExpandAll(e.NIL)
 	if err != nil {
 		t.Fatalf("expansion failed: %v", err)
@@ -386,7 +386,7 @@ func TestExpandEmptyInput(t *testing.T) {
 }
 
 func TestExpandAtomExpression(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	// Non-list expressions should pass through unchanged
 	result, err := exp.expandExpr(e.Integer(42))
 	if err != nil {
@@ -398,7 +398,7 @@ func TestExpandAtomExpression(t *testing.T) {
 }
 
 func TestExpandNILExpression(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	result, err := exp.expandExpr(e.NIL)
 	if err != nil {
 		t.Fatal(err)
@@ -410,7 +410,7 @@ func TestExpandNILExpression(t *testing.T) {
 
 func TestExpandQuoteNotRecursed(t *testing.T) {
 	// Macro calls inside quote should NOT be expanded
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax wrap (syntax-rules () ((wrap x) (+ x 1))))
 (quote (wrap 5))
@@ -428,7 +428,7 @@ func TestExpandQuoteNotRecursed(t *testing.T) {
 func TestExpandScopedIdentifierHead(t *testing.T) {
 	// A ScopedIdentifier at the head of a list should still be checked
 	// for macro names.
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("my-mac"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -451,7 +451,7 @@ func TestExpandIdentNameNonIdentifier(t *testing.T) {
 
 func TestExpandMacroCallError(t *testing.T) {
 	// A syntax-rules macro with no matching pattern should error
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax only-one-arg (syntax-rules () ((only-one-arg x) x)))
 (only-one-arg 1 2 3)
@@ -464,7 +464,7 @@ func TestExpandMacroCallError(t *testing.T) {
 
 func TestExpandMacroLocationSetOnExpansion(t *testing.T) {
 	// Expanded code should have macro call site location set
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax wrap (syntax-rules () ((wrap x) (+ x 1))))
 (wrap 5)
@@ -486,7 +486,7 @@ func TestExpandMacroLocationSetOnExpansion(t *testing.T) {
 
 func TestExpandCondWithNonListClause(t *testing.T) {
 	// cond clause where the predicate is a macro call
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax tt (syntax-rules () ((tt) #t)))
 (cond ((tt) 42) (else 0))
@@ -503,7 +503,7 @@ func TestExpandCondWithNonListClause(t *testing.T) {
 
 func TestExpandLambdaMalformed(t *testing.T) {
 	// (lambda) with no params or body — should pass through
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("wrap"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -526,7 +526,7 @@ func TestExpandLambdaMalformed(t *testing.T) {
 
 func TestExpandBeginMalformed(t *testing.T) {
 	// (begin) with no body — should pass through
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	form := e.Cons(e.Identifier("begin"), e.Integer(42)) // improper
 	result, err := exp.expandBegin(form)
 	if err != nil {
@@ -538,7 +538,7 @@ func TestExpandBeginMalformed(t *testing.T) {
 }
 
 func TestExpandDefineMalformed(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	// (define) — no name or value
 	form := e.Cons(e.Identifier("define"), e.NIL)
 	result, err := exp.expandDefine(form)
@@ -561,7 +561,7 @@ func TestExpandDefineMalformed(t *testing.T) {
 }
 
 func TestExpandCondMalformed(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	// (cond) with improper tail
 	form := e.Cons(e.Identifier("cond"), e.Integer(42)) // improper
 	result, err := exp.expandCond(form)
@@ -575,7 +575,7 @@ func TestExpandCondMalformed(t *testing.T) {
 
 func TestExpandMacroInImproperList(t *testing.T) {
 	// Function call with dotted pair containing a macro call
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("wrap"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -627,7 +627,7 @@ func TestExpandMacroScopeParentLookup(t *testing.T) {
 
 func TestExpandLambdaNoBody(t *testing.T) {
 	// (lambda (x)) — params but no body, improper form
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	form := e.Cons(e.Identifier("lambda"), e.Cons(
 		e.Cons(e.Identifier("x"), e.NIL),
 		e.Integer(42))) // improper tail
@@ -642,7 +642,7 @@ func TestExpandLambdaNoBody(t *testing.T) {
 
 func TestExpandSequenceWithDefineSyntax(t *testing.T) {
 	// define-syntax inside a sequence should be stripped
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	seq := parseExprs(t, `
 (define-syntax wrap (syntax-rules () ((wrap x) (+ x 1))))
 (wrap 5)
@@ -663,7 +663,7 @@ func TestExpandSequenceWithDefineSyntax(t *testing.T) {
 
 func TestExpandCondWithImproperClauseList(t *testing.T) {
 	// cond where the clause list is improper — the break path
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("wrap"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -683,7 +683,7 @@ func TestExpandCondWithImproperClauseList(t *testing.T) {
 
 func TestExpandContainsMacroCallImproperList(t *testing.T) {
 	// containsMacroCall on an improper list should not panic
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	improper := e.Cons(e.Integer(1), e.Integer(2))
 	result := exp.containsMacroCall(improper)
 	if result {
@@ -696,7 +696,7 @@ func TestExpandEachInListImproperWithMacro(t *testing.T) {
 	// (f x . (wrap 1)) parsed as Cons(f, Cons(x, Cons(wrap, Cons(1, NIL))))
 	// We need an actual improper list: Cons(f, Cons(x, Integer(42)))
 	// where expandEachInList hits the !ok path on Tail()
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("wrap"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -722,7 +722,7 @@ func TestExpandEachInListImproperWithMacro(t *testing.T) {
 
 func TestExpandSequenceImproperList(t *testing.T) {
 	// expandSequence with an improper list should handle the break path
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	// (expr1 . expr2) — improper
 	seq := e.Cons(e.Integer(1), e.Integer(2))
 	result, err := exp.expandSequence(seq)
@@ -737,7 +737,7 @@ func TestExpandSequenceImproperList(t *testing.T) {
 
 func TestExpandBeginWithMacroError(t *testing.T) {
 	// begin containing a macro that errors during expansion
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("bad"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -754,7 +754,7 @@ func TestExpandBeginWithMacroError(t *testing.T) {
 }
 
 func TestExpandLambdaWithMacroError(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("bad"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -772,7 +772,7 @@ func TestExpandLambdaWithMacroError(t *testing.T) {
 }
 
 func TestExpandDefineWithMacroError(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("bad"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -790,7 +790,7 @@ func TestExpandDefineWithMacroError(t *testing.T) {
 }
 
 func TestExpandCondWithMacroError(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("bad"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -807,7 +807,7 @@ func TestExpandCondWithMacroError(t *testing.T) {
 }
 
 func TestExpandCallWithMacroError(t *testing.T) {
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exp.scopes.define(e.Identifier("bad"), macroBinding{
 		syntaxTransformer: &macromancy.SyntaxTransformer{
 			Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
@@ -825,7 +825,7 @@ func TestExpandCallWithMacroError(t *testing.T) {
 
 func TestExpandGeneralTransformerError(t *testing.T) {
 	// A general transformer whose body errors during expansion
-	exp := newTestExpander()
+	exp := newTestReanimator()
 	exprs := parseExprs(t, `
 (define-syntax bad-gen (lambda (stx) (undefined-function)))
 (bad-gen 1)
@@ -847,13 +847,13 @@ func TestExpandIntegrationWithEvaluator(t *testing.T) {
 	// End-to-end: expand then evaluate. This verifies the expanded code
 	// is valid for the evaluator.
 	var counter uint64
-	expander := New(logging.StandardLogger, &counter)
+	r := New(logging.StandardLogger, &counter)
 
 	exprs := parseExprs(t, `
 (define-syntax add-one (syntax-rules () ((add-one x) (+ x 1))))
 (add-one 41)
 `)
-	expanded, err := expander.ExpandAll(exprs)
+	expanded, err := r.ExpandAll(exprs)
 	if err != nil {
 		t.Fatalf("expansion failed: %v", err)
 	}

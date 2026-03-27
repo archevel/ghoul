@@ -7,7 +7,7 @@ import (
 	"os"
 
 	ev "github.com/archevel/ghoul/evaluator"
-	"github.com/archevel/ghoul/expander"
+	"github.com/archevel/ghoul/reanimator"
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
 	"github.com/archevel/ghoul/parser"
@@ -26,13 +26,13 @@ func New() Ghoul {
 
 func NewLoggingGhoul(logger logging.Logger) Ghoul {
 	var markCounter uint64
-	exp := expander.New(logger, &markCounter)
+	exp := reanimator.New(logger, &markCounter)
 	evaluator := prepareEvaluator(logger, &markCounter)
-	return ghoul{expander: exp, evaluator: evaluator}
+	return ghoul{reanimator: exp, evaluator: evaluator}
 }
 
 type ghoul struct {
-	expander  *expander.Expander
+	reanimator *reanimator.Reanimator
 	evaluator *ev.Evaluator
 }
 
@@ -56,7 +56,7 @@ func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader, fil
 	}
 
 	// Phase 1: Macro expansion
-	expanded, err := g.expander.ExpandAll(parsed.Expressions)
+	expanded, err := g.reanimator.ExpandAll(parsed.Expressions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to expand macros: %w", err)
 	}

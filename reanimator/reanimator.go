@@ -1,12 +1,13 @@
-// Package expander implements a macro expansion phase that runs between
-// parsing and evaluation. After expansion, the expression tree contains no
-// define-syntax forms and no macro calls — only core forms (lambda, define,
+// Package reanimator brings macromancy macros to life by expanding them
+// into concrete expressions. It runs as a separate phase between parsing
+// and evaluation — after reanimation, the expression tree contains no
+// define-syntax forms and no macro calls, only core forms (lambda, define,
 // set!, cond, begin, quote, require) and function calls.
 //
-// The expander maintains its own macro environment and uses a sub-evaluator
+// The reanimator maintains its own macro environment and uses a sub-evaluator
 // (with stdlib registered) to execute general transformer bodies during
 // expansion.
-package expander
+package reanimator
 
 import (
 	"fmt"
@@ -19,7 +20,7 @@ import (
 	"github.com/archevel/ghoul/stdlib"
 )
 
-type Expander struct {
+type Reanimator struct {
 	scopes      *macroScope
 	evalEnv     *ev.Environment
 	evaluator   *ev.Evaluator
@@ -66,14 +67,14 @@ func (s *macroScope) define(name e.Identifier, b macroBinding) {
 	s.bindings[name] = b
 }
 
-// New creates an Expander with its own evaluation environment for running
+// New creates an Reanimator with its own evaluation environment for running
 // general transformer bodies. The mark counter is shared with the evaluator
 // that will process the expanded code.
-func New(logger logging.Logger, markCounter *uint64) *Expander {
+func New(logger logging.Logger, markCounter *uint64) *Reanimator {
 	env := ev.NewEnvironment()
 	stdlib.RegisterAll(env)
 	evaluator := ev.NewWithMarkCounter(logger, env, markCounter)
-	return &Expander{
+	return &Reanimator{
 		scopes:      newMacroScope(nil),
 		evalEnv:     env,
 		evaluator:   evaluator,
@@ -82,14 +83,14 @@ func New(logger logging.Logger, markCounter *uint64) *Expander {
 	}
 }
 
-func (exp *Expander) freshMark() macromancy.Mark {
+func (exp *Reanimator) freshMark() macromancy.Mark {
 	return atomic.AddUint64(exp.markCounter, 1)
 }
 
 // ExpandAll walks a top-level expression list and expands all macros.
 // Returns a new expression list with no define-syntax forms or macro calls.
 // Preserves source positions from the original parsed pairs.
-func (exp *Expander) ExpandAll(exprs e.List) (e.List, error) {
+func (exp *Reanimator) ExpandAll(exprs e.List) (e.List, error) {
 	var results []e.Expr
 	var resultPairs []*e.Pair // original pairs for source position preservation
 	current := exprs
@@ -127,7 +128,7 @@ func (exp *Expander) ExpandAll(exprs e.List) (e.List, error) {
 
 // expandExpr returns the original expression unchanged when no macros are
 // present, preserving source position information.
-func (exp *Expander) expandExpr(expr e.Expr) (e.Expr, error) {
+func (exp *Reanimator) expandExpr(expr e.Expr) (e.Expr, error) {
 	list, isList := expr.(e.List)
 	if !isList || list == e.NIL {
 		return expr, nil
@@ -179,9 +180,9 @@ func (exp *Expander) expandExpr(expr e.Expr) (e.Expr, error) {
 }
 
 // containsMacroCall checks whether any sub-expression in the list is a
-// macro call or define-syntax. This allows the expander to skip unchanged
+// macro call or define-syntax. This allows the reanimator to skip unchanged
 // expressions and preserve their source positions.
-func (exp *Expander) containsMacroCall(list e.List) bool {
+func (exp *Reanimator) containsMacroCall(list e.List) bool {
 	current := list
 	for current != e.NIL {
 		elem := current.First()
@@ -210,7 +211,7 @@ func (exp *Expander) containsMacroCall(list e.List) bool {
 
 // processDefineSyntax handles (define-syntax name transformer).
 // Returns nil to strip the form from the output.
-func (exp *Expander) processDefineSyntax(form e.List) (e.Expr, error) {
+func (exp *Reanimator) processDefineSyntax(form e.List) (e.Expr, error) {
 	rest, ok := form.Tail()
 	if !ok || rest == e.NIL {
 		return nil, fmt.Errorf("bad syntax: define-syntax requires name and transformer")
@@ -263,7 +264,7 @@ func (exp *Expander) processDefineSyntax(form e.List) (e.Expr, error) {
 	return nil, nil
 }
 
-func (exp *Expander) expandMacroCall(binding macroBinding, callable e.List) (e.Expr, error) {
+func (exp *Reanimator) expandMacroCall(binding macroBinding, callable e.List) (e.Expr, error) {
 	if binding.syntaxTransformer != nil {
 		mark := exp.freshMark()
 		expanded, err := binding.syntaxTransformer.Transform(callable, mark)
@@ -300,7 +301,7 @@ func (exp *Expander) expandMacroCall(binding macroBinding, callable e.List) (e.E
 
 // --- Recursive expansion into sub-expressions ---
 
-func (exp *Expander) expandLambda(form e.List) (e.Expr, error) {
+func (exp *Reanimator) expandLambda(form e.List) (e.Expr, error) {
 	// (lambda params body ...)
 	rest, ok := form.Tail()
 	if !ok || rest == e.NIL {
@@ -325,7 +326,7 @@ func (exp *Expander) expandLambda(form e.List) (e.Expr, error) {
 	return rebuildList(form.First(), e.Cons(params, expandedBody)), nil
 }
 
-func (exp *Expander) expandBegin(form e.List) (e.Expr, error) {
+func (exp *Reanimator) expandBegin(form e.List) (e.Expr, error) {
 	// (begin expr ...)
 	rest, ok := form.Tail()
 	if !ok {
@@ -338,7 +339,7 @@ func (exp *Expander) expandBegin(form e.List) (e.Expr, error) {
 	return rebuildList(form.First(), expandedBody), nil
 }
 
-func (exp *Expander) expandCond(form e.List) (e.Expr, error) {
+func (exp *Reanimator) expandCond(form e.List) (e.Expr, error) {
 	// (cond (pred consequent ...) ...)
 	rest, ok := form.Tail()
 	if !ok {
@@ -367,7 +368,7 @@ func (exp *Expander) expandCond(form e.List) (e.Expr, error) {
 	return rebuildList(form.First(), listFromSlice(clauses)), nil
 }
 
-func (exp *Expander) expandDefine(form e.List) (e.Expr, error) {
+func (exp *Reanimator) expandDefine(form e.List) (e.Expr, error) {
 	// (define name value)
 	rest, ok := form.Tail()
 	if !ok || rest == e.NIL {
@@ -385,19 +386,19 @@ func (exp *Expander) expandDefine(form e.List) (e.Expr, error) {
 	return rebuildList(form.First(), e.Cons(name, e.Cons(expandedVal, e.NIL))), nil
 }
 
-func (exp *Expander) expandSetBang(form e.List) (e.Expr, error) {
+func (exp *Reanimator) expandSetBang(form e.List) (e.Expr, error) {
 	// (set! name value) — same structure as define
 	return exp.expandDefine(form)
 }
 
-func (exp *Expander) expandCall(form e.List) (e.Expr, error) {
+func (exp *Reanimator) expandCall(form e.List) (e.Expr, error) {
 	// (f arg1 arg2 ...) — expand each sub-expression
 	return exp.expandEachInList(form)
 }
 
 // expandSequence expands a sequence of expressions (as in begin or lambda body).
 // define-syntax forms are processed and stripped from the output.
-func (exp *Expander) expandSequence(exprs e.List) (e.List, error) {
+func (exp *Reanimator) expandSequence(exprs e.List) (e.List, error) {
 	var results []e.Expr
 	current := exprs
 	for current != e.NIL {
@@ -418,7 +419,7 @@ func (exp *Expander) expandSequence(exprs e.List) (e.List, error) {
 	return listFromSlice(results), nil
 }
 
-func (exp *Expander) expandEachInList(list e.List) (e.Expr, error) {
+func (exp *Reanimator) expandEachInList(list e.List) (e.Expr, error) {
 	var elems []e.Expr
 	current := list
 	for current != e.NIL {
