@@ -4,9 +4,9 @@
 // (stepThroughContinuationsWithContext). Each continuation receives the result
 // of the previous one and the evaluator state, returning the next result.
 //
-// Special forms (cond, begin, lambda, define, set!, define-syntax, quote, require)
+// Special forms (cond, begin, lambda, define, set!, quote, require)
 // are dispatched in chooseEvaluation. Function calls go through
-// functionCallContinuationFor which handles both regular calls and macro expansion.
+// functionCallContinuationFor.
 package evaluator
 
 import (
@@ -24,26 +24,8 @@ const BEGIN_SPECIAL_FORM = e.Identifier("begin")
 const LAMBDA_SPECIAL_FORM = e.Identifier("lambda")
 const DEFINE_SPECIAL_FORM = e.Identifier("define")
 const ASSIGNMENT_SPECIAL_FORM = e.Identifier("set!")
-const DEFINE_SYNTAX_SPECIAL_FORM = e.Identifier("define-syntax")
-const SYNTAX_RULES_FORM = e.Identifier("syntax-rules")
 const REQUIRE_SPECIAL_FORM = e.Identifier("require")
 const QUOTE_SPECIAL_FORM = e.Identifier("quote")
-
-// GeneralSyntaxTransformer holds a user-defined lambda that acts as a
-// macro transformer. Unlike SyntaxTransformer (which does pattern-based
-// expansion directly), this invokes the lambda through the evaluator
-// so the transformer body can use the full language.
-type GeneralSyntaxTransformer struct {
-	Fun Function
-}
-
-func (gst GeneralSyntaxTransformer) Repr() string {
-	return "#<general-syntax-transformer>"
-}
-
-func (gst GeneralSyntaxTransformer) Equiv(other e.Expr) bool {
-	return false
-}
 
 type continuation func(arg e.Expr, ev *Evaluator) (e.Expr, error)
 type contStack []continuation
@@ -184,8 +166,7 @@ func sexprEvalContinuationFor(expr e.Expr, parent e.List, maybeTailCall bool) co
 }
 
 // specialFormName extracts the identifier name from h for special form
-// matching, ignoring hygiene marks. Special forms are language primitives,
-// not bindings, so a macro-introduced "begin" should still be recognized.
+// matching, ignoring hygiene marks on ScopedIdentifiers.
 func specialFormName(h e.Expr) e.Identifier {
 	switch v := h.(type) {
 	case e.Identifier:
@@ -518,79 +499,8 @@ func bindVar(expr e.Expr) continuation {
 	}
 }
 
-// setMacroLocation stamps expanded code with the macro call site's location
-// so errors in expanded code point back to where the macro was used.
-func setMacroLocation(expanded e.Expr, callSite e.List) {
-	expandedPair, ok := expanded.(*e.Pair)
-	if !ok {
-		return
-	}
-	callPair, ok := callSite.(*e.Pair)
-	if !ok {
-		return
-	}
-
-	var callLoc e.CodeLocation
-	if callPair.Loc != nil {
-		callLoc = callPair.Loc
-	} else {
-		return
-	}
-
-	macroName := ""
-	switch h := callPair.H.(type) {
-	case e.Identifier:
-		macroName = string(h)
-	case e.ScopedIdentifier:
-		macroName = string(h.Name)
-	}
-
-	loc := &e.MacroExpansionLocation{MacroName: macroName, CallSite: callLoc}
-	setLocationRecursive(expandedPair, loc)
-}
-
-// setLocationRecursive sets the location on all Pairs in a tree
-// that don't already have one.
-func setLocationRecursive(pair *e.Pair, loc e.CodeLocation) {
-	if pair.Loc == nil {
-		pair.Loc = loc
-	}
-	if child, ok := pair.H.(*e.Pair); ok {
-		setLocationRecursive(child, loc)
-	}
-	if child, ok := pair.T.(*e.Pair); ok {
-		setLocationRecursive(child, loc)
-	}
-}
 
 
-// CollectBoundIdentifiers returns a map of all identifiers currently bound
-// in the environment, plus special form keywords. Used during macro definition
-// to determine which template identifiers should NOT receive hygiene marks.
-func CollectBoundIdentifiers(env *environment) map[e.Identifier]bool {
-	// Special form keywords are recognised by the evaluator via Equiv checks,
-	// so marking them would prevent recognition after expansion.
-	result := map[e.Identifier]bool{
-		COND_SPECIAL_FORM:          true,
-		ELSE_SPECIAL_FORM:          true,
-		BEGIN_SPECIAL_FORM:         true,
-		LAMBDA_SPECIAL_FORM:       true,
-		DEFINE_SPECIAL_FORM:       true,
-		ASSIGNMENT_SPECIAL_FORM:   true,
-		DEFINE_SYNTAX_SPECIAL_FORM: true,
-		SYNTAX_RULES_FORM:         true,
-		QUOTE_SPECIAL_FORM:        true,
-		REQUIRE_SPECIAL_FORM:      true,
-	}
-	for i := range *env {
-		for key := range *(*env)[i] {
-			if key.MarksKey == "" { // only plain identifiers
-				result[e.Identifier(key.Name)] = true
-			}
-		}
-	}
-	return result
-}
 
 type EvaluationError struct {
 	msg       string

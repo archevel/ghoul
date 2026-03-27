@@ -28,6 +28,13 @@ type Expander struct {
 	log         logging.Logger
 }
 
+// generalSyntaxTransformer holds a user-defined lambda that acts as a
+// macro transformer. The lambda is invoked through the evaluator during
+// expansion so the transformer body can use the full language.
+type generalSyntaxTransformer struct {
+	fun ev.Function
+}
+
 // macroScope holds macro bindings with parent-chain scoping for inner
 // define-syntax forms (e.g., inside lambda or begin blocks).
 type macroScope struct {
@@ -37,7 +44,7 @@ type macroScope struct {
 
 type macroBinding struct {
 	syntaxTransformer  *macromancy.SyntaxTransformer
-	generalTransformer *ev.GeneralSyntaxTransformer
+	generalTransformer *generalSyntaxTransformer
 }
 
 func newMacroScope(parent *macroScope) *macroScope {
@@ -230,7 +237,7 @@ func (exp *Expander) processDefineSyntax(form e.List) (e.Expr, error) {
 
 	// syntax-rules: build transformer directly (no evaluation needed)
 	if e.Identifier("syntax-rules").Equiv(transformerList.First()) {
-		definitionBindings := ev.CollectBoundIdentifiers(exp.evalEnv)
+		definitionBindings := exp.evalEnv.BoundIdentifierNames()
 		st, err := macromancy.BuildSyntaxRulesTransformer(name, transformerList, definitionBindings)
 		if err != nil {
 			return nil, fmt.Errorf("bad syntax: %s", err)
@@ -254,8 +261,8 @@ func (exp *Expander) processDefineSyntax(form e.List) (e.Expr, error) {
 	if !isFun {
 		return nil, fmt.Errorf("bad syntax: transformer must be a procedure")
 	}
-	gst := ev.GeneralSyntaxTransformer{Fun: fun}
-	exp.scopes.define(name, macroBinding{generalTransformer: &gst})
+	gst := &generalSyntaxTransformer{fun: fun}
+	exp.scopes.define(name, macroBinding{generalTransformer: gst})
 	return nil, nil
 }
 
@@ -280,7 +287,7 @@ func (exp *Expander) expandMacroCall(binding macroBinding, callable e.List) (e.E
 		// is embedded directly in the call expression (it self-evaluates),
 		// and the marked input is quoted so it's passed as data.
 		quotedInput := &e.Quote{Quoted: markedInput}
-		callExpr := e.Cons(binding.generalTransformer.Fun, e.Cons(quotedInput, e.NIL))
+		callExpr := e.Cons(binding.generalTransformer.fun, e.Cons(quotedInput, e.NIL))
 		result, err := exp.evaluator.EvalSubExpression(callExpr)
 		if err != nil {
 			return nil, err

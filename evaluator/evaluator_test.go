@@ -513,16 +513,6 @@ func TestResolveCallableHeadWithNonIdentifier(t *testing.T) {
 	}
 }
 
-func TestGeneralSyntaxTransformerReprAndEquiv(t *testing.T) {
-	gst := GeneralSyntaxTransformer{}
-	if gst.Repr() != "#<general-syntax-transformer>" {
-		t.Errorf("expected '#<general-syntax-transformer>', got '%s'", gst.Repr())
-	}
-	if gst.Equiv(gst) {
-		t.Error("GeneralSyntaxTransformer should never be Equiv to anything")
-	}
-}
-
 func TestScopedIdentifierLookupDuringEvaluation(t *testing.T) {
 	env := NewEnvironment()
 

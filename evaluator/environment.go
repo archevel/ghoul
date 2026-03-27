@@ -60,6 +60,32 @@ func NewEnvironment() *environment {
 	return newEnvWithEmptyScope(&environment{})
 }
 
+// BoundIdentifierNames returns a map of all identifiers currently bound in
+// the environment, plus special form keywords. Used during macro definition
+// to determine which template identifiers should NOT receive hygiene marks.
+func (env environment) BoundIdentifierNames() map[e.Identifier]bool {
+	result := map[e.Identifier]bool{
+		e.Identifier("cond"):          true,
+		e.Identifier("else"):          true,
+		e.Identifier("begin"):         true,
+		e.Identifier("lambda"):        true,
+		e.Identifier("define"):        true,
+		e.Identifier("set!"):          true,
+		e.Identifier("define-syntax"): true,
+		e.Identifier("syntax-rules"):  true,
+		e.Identifier("quote"):         true,
+		e.Identifier("require"):       true,
+	}
+	for i := range env {
+		for key := range *env[i] {
+			if key.MarksKey == "" {
+				result[e.Identifier(key.Name)] = true
+			}
+		}
+	}
+	return result
+}
+
 func (env environment) Register(name string, f func(e.List, *Evaluator) (e.Expr, error)) {
 	bindFuncAtBottomAs(e.Identifier(name), Function{&f}, &env)
 }
