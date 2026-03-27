@@ -13,11 +13,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync/atomic"
 
 	e "github.com/archevel/ghoul/expressions"
 	"github.com/archevel/ghoul/logging"
-	"github.com/archevel/ghoul/macromancy"
 )
 
 const COND_SPECIAL_FORM = e.Identifier("cond")
@@ -30,25 +28,6 @@ const DEFINE_SYNTAX_SPECIAL_FORM = e.Identifier("define-syntax")
 const SYNTAX_RULES_FORM = e.Identifier("syntax-rules")
 const REQUIRE_SPECIAL_FORM = e.Identifier("require")
 const QUOTE_SPECIAL_FORM = e.Identifier("quote")
-
-func (ev *Evaluator) freshMark() macromancy.Mark {
-	return atomic.AddUint64(ev.markCounter, 1)
-}
-
-// SyntaxTransformer holds a pattern-based macro transformer (syntax-rules).
-// Created by BuildSyntaxRulesTransformer and used by the expander to
-// expand macro calls during the expansion phase.
-type SyntaxTransformer struct {
-	Transform func(code e.List, mark macromancy.Mark) (e.Expr, error)
-}
-
-func (st SyntaxTransformer) Repr() string {
-	return "#<syntax-transformer>"
-}
-
-func (st SyntaxTransformer) Equiv(other e.Expr) bool {
-	return false
-}
 
 // GeneralSyntaxTransformer holds a user-defined lambda that acts as a
 // macro transformer. Unlike SyntaxTransformer (which does pattern-based
@@ -584,35 +563,6 @@ func setLocationRecursive(pair *e.Pair, loc e.CodeLocation) {
 	}
 }
 
-
-// BuildSyntaxRulesTransformer creates a SyntaxTransformer from a syntax-rules
-// form. It parses the pattern/template pairs and captures the current
-// environment's bound identifiers for hygiene.
-func BuildSyntaxRulesTransformer(name e.Identifier, syntaxRules e.List, defEnv *environment) (SyntaxTransformer, error) {
-	// NewMacroGroup expects the full (define-syntax name (syntax-rules ...)) form
-	defineSyntaxForm := e.Cons(e.Identifier("define-syntax"),
-		e.Cons(name, e.Cons(syntaxRules, e.NIL)))
-
-	mg, err := macromancy.NewMacroGroup(defineSyntaxForm)
-	if err != nil {
-		return SyntaxTransformer{}, err
-	}
-
-	macros := mg.Macros()
-
-	definitionBindings := CollectBoundIdentifiers(defEnv)
-
-	return SyntaxTransformer{
-		Transform: func(code e.List, mark macromancy.Mark) (e.Expr, error) {
-			for _, m := range macros {
-				if ok, bound := m.Matches(code); ok {
-					return macromancy.ExpandHygienicWithDefinitionBindings(m.Body, bound, mark, m.PatternVars, definitionBindings), nil
-				}
-			}
-			return nil, fmt.Errorf("no matching pattern for %s", code.Repr())
-		},
-	}, nil
-}
 
 // CollectBoundIdentifiers returns a map of all identifiers currently bound
 // in the environment, plus special form keywords. Used during macro definition

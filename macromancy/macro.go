@@ -6,6 +6,48 @@ import (
 	e "github.com/archevel/ghoul/expressions"
 )
 
+// SyntaxTransformer holds a pattern-based macro transformer (syntax-rules).
+// Created by BuildSyntaxRulesTransformer and used by the expander to
+// expand macro calls during the expansion phase.
+type SyntaxTransformer struct {
+	Transform func(code e.List, mark Mark) (e.Expr, error)
+}
+
+func (st SyntaxTransformer) Repr() string {
+	return "#<syntax-transformer>"
+}
+
+func (st SyntaxTransformer) Equiv(other e.Expr) bool {
+	return false
+}
+
+// BuildSyntaxRulesTransformer creates a SyntaxTransformer from a syntax-rules
+// form. It parses the pattern/template pairs, and uses the provided set of
+// definition-time bound identifiers for hygiene (identifiers in the set are
+// not marked during expansion).
+func BuildSyntaxRulesTransformer(name e.Identifier, syntaxRules e.List, definitionBindings map[e.Identifier]bool) (SyntaxTransformer, error) {
+	defineSyntaxForm := e.Cons(e.Identifier("define-syntax"),
+		e.Cons(name, e.Cons(syntaxRules, e.NIL)))
+
+	mg, err := NewMacroGroup(defineSyntaxForm)
+	if err != nil {
+		return SyntaxTransformer{}, err
+	}
+
+	macros := mg.Macros()
+
+	return SyntaxTransformer{
+		Transform: func(code e.List, mark Mark) (e.Expr, error) {
+			for _, m := range macros {
+				if ok, bound := m.Matches(code); ok {
+					return ExpandHygienicWithDefinitionBindings(m.Body, bound, mark, m.PatternVars, definitionBindings), nil
+				}
+			}
+			return nil, fmt.Errorf("no matching pattern for %s", code.Repr())
+		},
+	}, nil
+}
+
 type bindings struct {
 	vars     map[e.Identifier]e.Expr
 	repeated map[e.Identifier][]e.Expr

@@ -36,7 +36,7 @@ type macroScope struct {
 }
 
 type macroBinding struct {
-	syntaxTransformer  *ev.SyntaxTransformer
+	syntaxTransformer  *macromancy.SyntaxTransformer
 	generalTransformer *ev.GeneralSyntaxTransformer
 }
 
@@ -230,7 +230,8 @@ func (exp *Expander) processDefineSyntax(form e.List) (e.Expr, error) {
 
 	// syntax-rules: build transformer directly (no evaluation needed)
 	if e.Identifier("syntax-rules").Equiv(transformerList.First()) {
-		st, err := ev.BuildSyntaxRulesTransformer(name, transformerList, exp.evalEnv)
+		definitionBindings := ev.CollectBoundIdentifiers(exp.evalEnv)
+		st, err := macromancy.BuildSyntaxRulesTransformer(name, transformerList, definitionBindings)
 		if err != nil {
 			return nil, fmt.Errorf("bad syntax: %s", err)
 		}

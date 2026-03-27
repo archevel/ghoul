@@ -513,19 +513,6 @@ func TestResolveCallableHeadWithNonIdentifier(t *testing.T) {
 	}
 }
 
-func TestSyntaxTransformerReprAndEquiv(t *testing.T) {
-	st := SyntaxTransformer{Transform: func(code e.List, mark uint64) (e.Expr, error) { return e.NIL, nil }}
-	if st.Repr() != "#<syntax-transformer>" {
-		t.Errorf("expected '#<syntax-transformer>', got '%s'", st.Repr())
-	}
-	if st.Equiv(st) {
-		t.Error("SyntaxTransformer should never be Equiv to anything")
-	}
-	if st.Equiv(e.Integer(1)) {
-		t.Error("SyntaxTransformer should never be Equiv to anything")
-	}
-}
-
 func TestGeneralSyntaxTransformerReprAndEquiv(t *testing.T) {
 	gst := GeneralSyntaxTransformer{}
 	if gst.Repr() != "#<general-syntax-transformer>" {
