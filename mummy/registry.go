@@ -1,7 +1,7 @@
 package mummy
 
 import (
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 // Registrar is the function signature for registering a Ghoul function by name.

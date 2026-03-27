@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	e "github.com/archevel/ghoul/expressions"
-	"github.com/archevel/ghoul/parser"
+	e "github.com/archevel/ghoul/bones"
+	"github.com/archevel/ghoul/exhumer"
 )
 
 func TestBuildMacroGroupFromCode(t *testing.T) {
@@ -32,7 +32,7 @@ func TestBuildMacroGroupFromCode(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		codeOk, code := parser.Parse(strings.NewReader(c.in))
+		codeOk, code := exhumer.Parse(strings.NewReader(c.in))
 		if codeOk != 0 {
 			t.Fatal("Parsing code failed")
 		}
@@ -66,7 +66,7 @@ func TestBuildMacroGroupFromCode(t *testing.T) {
 
 func TestMacroGroupMacrosAccessor(t *testing.T) {
 	code := `(define-syntax foo (syntax-rules () (foo bar)))`
-	codeOk, parsed := parser.Parse(strings.NewReader(code))
+	codeOk, parsed := exhumer.Parse(strings.NewReader(code))
 	if codeOk != 0 {
 		t.Fatal("Parsing code failed")
 	}
@@ -82,7 +82,7 @@ func TestMacroGroupMacrosAccessor(t *testing.T) {
 
 func TestBuildMacroGroupWithLiterals(t *testing.T) {
 	code := `(define-syntax foo (syntax-rules (bar baz) (foo 1)))`
-	codeOk, parsed := parser.Parse(strings.NewReader(code))
+	codeOk, parsed := exhumer.Parse(strings.NewReader(code))
 	if codeOk != 0 {
 		t.Fatal("Parsing code failed")
 	}
@@ -101,7 +101,7 @@ func TestBuildMacroGroupWithLiterals(t *testing.T) {
 
 func TestBuildMacroGroupMultipleRules(t *testing.T) {
 	code := `(define-syntax foo (syntax-rules () ((foo x y) (+ x y)) ((foo x) x)))`
-	codeOk, parsed := parser.Parse(strings.NewReader(code))
+	codeOk, parsed := exhumer.Parse(strings.NewReader(code))
 	if codeOk != 0 {
 		t.Fatal("Parsing code failed")
 	}
@@ -117,7 +117,7 @@ func TestBuildMacroGroupMultipleRules(t *testing.T) {
 
 func TestBuildMacroGroupWithNonIdentifierLiteralFails(t *testing.T) {
 	code := `(define-syntax foo (syntax-rules (42) (foo bar)))`
-	codeOk, parsed := parser.Parse(strings.NewReader(code))
+	codeOk, parsed := exhumer.Parse(strings.NewReader(code))
 	if codeOk != 0 {
 		t.Fatal("Parsing code failed")
 	}
@@ -148,15 +148,15 @@ func TestFailingCodeForBuildingMacroGroups(t *testing.T) {
 		{`(define-syntax a (syntax-rules foo))`, "invalid rules in syntax definition: missing rules list in (foo)"},
 		{`(define-syntax a (syntax-rules . foo))`, "invalid rules in syntax definition: expected literals and rules, got (syntax-rules . foo)"},
 		{`(define-syntax a (syntax-rules () . foo))`, "invalid rules in syntax definition: expected rules after literals, got (() . foo)"},
-		{`(define-syntax a (syntax-rules () foo))`, "invalid rule definition: expected list for rule, got expressions.Identifier at position 0"},
+		{`(define-syntax a (syntax-rules () foo))`, "invalid rule definition: expected list for rule, got identifier at position 0"},
 		{`(define-syntax a (syntax-rules () (foo)))`, "invalid rule definition: rule must have pattern and body, got (foo)"},
 		{`(define-syntax a (syntax-rules () (foo . bar)))`, "invalid rule definition: rule must have pattern and body, got (foo . bar)"},
 		{`(define-syntax a (syntax-rules () (foo bar) (foo . bar)))`, "invalid rule definition: rule must have pattern and body, got (foo . bar)"},
-		{`(define-syntax a (syntax-rules () (foo bar) foo))`, "invalid rule definition: expected list for rule, got expressions.Identifier at position 1"},
+		{`(define-syntax a (syntax-rules () (foo bar) foo))`, "invalid rule definition: expected list for rule, got identifier at position 1"},
 		{`(define-syntax a (syntax-rules () (foo bar) . foo))`, "invalid rule definition: malformed rules list at position 0"},
 	}
 	for _, c := range cases {
-		codeOk, code := parser.Parse(strings.NewReader(c.in))
+		codeOk, code := exhumer.Parse(strings.NewReader(c.in))
 		if codeOk != 0 {
 			t.Fatal("Parsing code failed")
 		}

@@ -1,5 +1,5 @@
 // Package reanimator brings macromancy macros to life by expanding them
-// into concrete expressions. It runs as a separate phase between parsing
+// into living code. It runs as a separate phase between parsing
 // and evaluation — after reanimation, the expression tree contains no
 // define-syntax forms and no macro calls, only core forms (lambda, define,
 // set!, cond, begin, quote, require) and function calls.
@@ -13,11 +13,11 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	ev "github.com/archevel/ghoul/evaluator"
-	e "github.com/archevel/ghoul/expressions"
-	"github.com/archevel/ghoul/logging"
+	ev "github.com/archevel/ghoul/consume"
+	e "github.com/archevel/ghoul/bones"
+	"github.com/archevel/ghoul/engraving"
 	"github.com/archevel/ghoul/macromancy"
-	"github.com/archevel/ghoul/stdlib"
+	"github.com/archevel/ghoul/tome"
 )
 
 type Reanimator struct {
@@ -25,7 +25,7 @@ type Reanimator struct {
 	evalEnv     *ev.Environment
 	evaluator   *ev.Evaluator
 	markCounter *uint64
-	log         logging.Logger
+	log         engraving.Logger
 }
 
 // generalSyntaxTransformer holds a user-defined lambda that acts as a
@@ -70,9 +70,9 @@ func (s *macroScope) define(name e.Identifier, b macroBinding) {
 // New creates an Reanimator with its own evaluation environment for running
 // general transformer bodies. The mark counter is shared with the evaluator
 // that will process the expanded code.
-func New(logger logging.Logger, markCounter *uint64) *Reanimator {
+func New(logger engraving.Logger, markCounter *uint64) *Reanimator {
 	env := ev.NewEnvironment()
-	stdlib.RegisterAll(env)
+	tome.RegisterAll(env)
 	evaluator := ev.NewWithMarkCounter(logger, env, markCounter)
 	return &Reanimator{
 		scopes:      newMacroScope(nil),

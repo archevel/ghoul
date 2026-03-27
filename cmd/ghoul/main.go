@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/archevel/ghoul"
-	"github.com/archevel/ghoul/logging"
+	"github.com/archevel/ghoul/engraving"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 func runFile(path string, verbose bool) {
 	var g ghoul.Ghoul
 	if verbose {
-		g = ghoul.NewLoggingGhoul(logging.VerboseLogger)
+		g = ghoul.NewLoggingGhoul(engraving.VerboseLogger)
 	} else {
 		g = ghoul.New()
 	}
@@ -44,7 +44,7 @@ func runFile(path string, verbose bool) {
 func repl(verbose bool) {
 	var g ghoul.Ghoul
 	if verbose {
-		g = ghoul.NewLoggingGhoul(logging.VerboseLogger)
+		g = ghoul.NewLoggingGhoul(engraving.VerboseLogger)
 	} else {
 		g = ghoul.New()
 	}

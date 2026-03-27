@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	e "github.com/archevel/ghoul/expressions"
-	"github.com/archevel/ghoul/parser"
+	e "github.com/archevel/ghoul/bones"
+	"github.com/archevel/ghoul/exhumer"
 )
 
 func TestMacrosCanMatchAnExpression(t *testing.T) {
@@ -26,14 +26,14 @@ func TestMacrosCanMatchAnExpression(t *testing.T) {
 		{"(zoom 1 (love 'foo))", "(zoom x (zoomer z))"},
 	}
 	for _, c := range cases {
-		patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
+		patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
 		if patternOk != 0 {
 			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
 		}
 
 		macro := Macro{Pattern: pattern.Expressions.First()}
 
-		codeOk, code := parser.Parse(strings.NewReader(c.in))
+		codeOk, code := exhumer.Parse(strings.NewReader(c.in))
 
 		if codeOk != 0 {
 			t.Fatal("Parsing code failed")
@@ -58,14 +58,14 @@ func TestMacrosCanPatternMatch(t *testing.T) {
 		{"(numbers 1.5 '(a 1.5) 1.5)", "(numbers x '(a 1.5) x)"},
 	}
 	for _, c := range cases {
-		patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
+		patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
 		if patternOk != 0 {
 			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
 		}
 
 		macro := Macro{Pattern: pattern.Expressions.First()}
 
-		codeOk, code := parser.Parse(strings.NewReader(c.in))
+		codeOk, code := exhumer.Parse(strings.NewReader(c.in))
 
 		if codeOk != 0 {
 			t.Fatal("Parsing code failed")
@@ -245,11 +245,11 @@ func TestNestedEllipsisPatternMatching(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
+			patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
 			if patternOk != 0 {
 				t.Fatalf("Failed to parse pattern: %s", c.pattern)
 			}
-			codeOk, code := parser.Parse(strings.NewReader(c.in))
+			codeOk, code := exhumer.Parse(strings.NewReader(c.in))
 			if codeOk != 0 {
 				t.Fatalf("Failed to parse code: %s", c.in)
 			}
@@ -272,11 +272,11 @@ func TestNestedEllipsisPatternMatching(t *testing.T) {
 
 func TestNestedEllipsisFourBindings(t *testing.T) {
 	// Test with 4+ bindings to exercise the let pattern beyond the old 3-clause limit
-	patternOk, pattern := parser.Parse(strings.NewReader("(let ((var val) ...) body ...)"))
+	patternOk, pattern := exhumer.Parse(strings.NewReader("(let ((var val) ...) body ...)"))
 	if patternOk != 0 {
 		t.Fatal("parse failed")
 	}
-	codeOk, code := parser.Parse(strings.NewReader("(let ((a 1) (b 2) (c 3) (d 4)) (+ a b c d))"))
+	codeOk, code := exhumer.Parse(strings.NewReader("(let ((a 1) (b 2) (c 3) (d 4)) (+ a b c d))"))
 	if codeOk != 0 {
 		t.Fatal("parse failed")
 	}
@@ -314,11 +314,11 @@ func TestNestedEllipsisFourBindings(t *testing.T) {
 
 func TestNestedEllipsisWithTrailingPattern(t *testing.T) {
 	// Pattern: (mac (x y) ... z) — structured ellipsis followed by a regular binding
-	patternOk, pattern := parser.Parse(strings.NewReader("(mac (x y) ... z)"))
+	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac (x y) ... z)"))
 	if patternOk != 0 {
 		t.Fatal("parse failed")
 	}
-	codeOk, code := parser.Parse(strings.NewReader("(mac (1 2) (3 4) 5)"))
+	codeOk, code := exhumer.Parse(strings.NewReader("(mac (1 2) (3 4) 5)"))
 	if codeOk != 0 {
 		t.Fatal("parse failed")
 	}
@@ -364,11 +364,11 @@ func TestMatchesWithNonIdentifierCode(t *testing.T) {
 }
 
 func TestMatchesPatternNameMismatch(t *testing.T) {
-	patternOk, pattern := parser.Parse(strings.NewReader("(foo x)"))
+	patternOk, pattern := exhumer.Parse(strings.NewReader("(foo x)"))
 	if patternOk != 0 {
 		t.Fatal("parse failed")
 	}
-	codeOk, code := parser.Parse(strings.NewReader("(bar 1)"))
+	codeOk, code := exhumer.Parse(strings.NewReader("(bar 1)"))
 	if codeOk != 0 {
 		t.Fatal("parse failed")
 	}
@@ -411,11 +411,11 @@ func TestAppendExprsWithNIL(t *testing.T) {
 func TestMatchDottedPairPatternWithEllipsis(t *testing.T) {
 	// Pattern (mac ... . y) — ellipsis with dotted tail captures the rest
 	// This tests the old matchEllipsis path (... as head)
-	patternOk, pattern := parser.Parse(strings.NewReader("(mac ... . y)"))
+	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac ... . y)"))
 	if patternOk != 0 {
 		t.Fatal("parse failed")
 	}
-	codeOk, code := parser.Parse(strings.NewReader("(mac 1 . 2)"))
+	codeOk, code := exhumer.Parse(strings.NewReader("(mac 1 . 2)"))
 	if codeOk != 0 {
 		t.Fatal("parse failed")
 	}
@@ -478,11 +478,11 @@ func TestMatchFinalCodeExpressionPatternTooLong(t *testing.T) {
 	// Pattern (mac x y) against code (mac . 1) — after matching mac,
 	// pattern has (x y) but code is just the atom 1.
 	// The pattern expects more structure than the code provides.
-	patternOk, pattern := parser.Parse(strings.NewReader("(mac x y)"))
+	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac x y)"))
 	if patternOk != 0 {
 		t.Fatal("parse failed")
 	}
-	codeOk, code := parser.Parse(strings.NewReader("(mac . 1)"))
+	codeOk, code := exhumer.Parse(strings.NewReader("(mac . 1)"))
 	if codeOk != 0 {
 		t.Fatal("parse failed")
 	}
@@ -495,11 +495,11 @@ func TestMatchFinalCodeExpressionPatternTooLong(t *testing.T) {
 
 func TestMatchWalkScopedIdentifierInPattern(t *testing.T) {
 	// A ScopedIdentifier in the pattern should still match and bind
-	patternOk, pattern := parser.Parse(strings.NewReader("(mac x)"))
+	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac x)"))
 	if patternOk != 0 {
 		t.Fatal("parse failed")
 	}
-	codeOk, code := parser.Parse(strings.NewReader("(mac 42)"))
+	codeOk, code := exhumer.Parse(strings.NewReader("(mac 42)"))
 	if codeOk != 0 {
 		t.Fatal("parse failed")
 	}
@@ -516,11 +516,11 @@ func TestMatchWalkScopedIdentifierInPattern(t *testing.T) {
 func TestRepeatedEllipsisFewerCodeThanTailPatterns(t *testing.T) {
 	// Pattern (mac x ... y z) with code (mac 1) — only 1 code element
 	// but 2 tail patterns (y z), so x repeats 0 times
-	patternOk, pattern := parser.Parse(strings.NewReader("(mac x ... y z)"))
+	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac x ... y z)"))
 	if patternOk != 0 {
 		t.Fatal("parse failed")
 	}
-	codeOk, code := parser.Parse(strings.NewReader("(mac 1 2)"))
+	codeOk, code := exhumer.Parse(strings.NewReader("(mac 1 2)"))
 	if codeOk != 0 {
 		t.Fatal("parse failed")
 	}
@@ -551,11 +551,11 @@ func TestRepeatedEllipsisFewerCodeThanTailPatterns(t *testing.T) {
 func TestRepeatedEllipsisSubpatternMismatch(t *testing.T) {
 	// Pattern (mac (x y) ...) with code (mac 1 2) — code elements are atoms,
 	// not lists matching the (x y) subpattern
-	patternOk, pattern := parser.Parse(strings.NewReader("(mac (x y) ...)"))
+	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac (x y) ...)"))
 	if patternOk != 0 {
 		t.Fatal("parse failed")
 	}
-	codeOk, code := parser.Parse(strings.NewReader("(mac 1 2)"))
+	codeOk, code := exhumer.Parse(strings.NewReader("(mac 1 2)"))
 	if codeOk != 0 {
 		t.Fatal("parse failed")
 	}
@@ -576,11 +576,11 @@ func TestRepeatedEllipsisSubpatternMismatch(t *testing.T) {
 func TestRepeatedEllipsisDottedCodeList(t *testing.T) {
 	// Pattern (mac x ...) with code (mac 1 . 2) — dotted pair in code
 	// x should capture [1] (the proper element before the dotted tail)
-	patternOk, pattern := parser.Parse(strings.NewReader("(mac x ...)"))
+	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac x ...)"))
 	if patternOk != 0 {
 		t.Fatal("parse failed")
 	}
-	codeOk, code := parser.Parse(strings.NewReader("(mac 1 . 2)"))
+	codeOk, code := exhumer.Parse(strings.NewReader("(mac 1 . 2)"))
 	if codeOk != 0 {
 		t.Fatal("parse failed")
 	}
@@ -649,11 +649,11 @@ func TestWildcardPatternMatching(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
+			patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
 			if patternOk != 0 {
 				t.Fatalf("Failed to parse pattern: %s", c.pattern)
 			}
-			codeOk, code := parser.Parse(strings.NewReader(c.in))
+			codeOk, code := exhumer.Parse(strings.NewReader(c.in))
 			if codeOk != 0 {
 				t.Fatalf("Failed to parse code: %s", c.in)
 			}
@@ -683,14 +683,14 @@ func TestMacrosDoesNotMatchNonMatchingPatterns(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
+		patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
 		if patternOk != 0 {
 			t.Fatal("Parsing pattern failed")
 		}
 
 		macro := Macro{Pattern: pattern.Expressions.First()}
 
-		parseOk, parseRes := parser.Parse(strings.NewReader(c.in))
+		parseOk, parseRes := exhumer.Parse(strings.NewReader(c.in))
 		if parseOk != 0 {
 			t.Fatal("Parsing code failed")
 		}
@@ -717,7 +717,7 @@ func TestMacroExpansion(t *testing.T) {
 
 	for _, c := range cases {
 
-		bodyOk, body := parser.Parse(strings.NewReader(c.body))
+		bodyOk, body := exhumer.Parse(strings.NewReader(c.body))
 		if bodyOk != 0 {
 			t.Fatal("Parsing pattern failed")
 		}
@@ -734,9 +734,9 @@ func TestMacroExpansion(t *testing.T) {
 
 func swapMacroExample() {
 
-	_, pattern := parser.Parse(strings.NewReader("(swap x y)"))
-	_, body := parser.Parse(strings.NewReader("(let ((tmp x)) (set! x y) (set! y tmp))"))
-	_, code := parser.Parse(strings.NewReader("(swap foo bar)"))
+	_, pattern := exhumer.Parse(strings.NewReader("(swap x y)"))
+	_, body := exhumer.Parse(strings.NewReader("(let ((tmp x)) (set! x y) (set! y tmp))"))
+	_, code := exhumer.Parse(strings.NewReader("(swap foo bar)"))
 
 	macro := Macro{Pattern: pattern.Expressions.(e.List).First(), Body: body.Expressions.(e.List).First()}
 	_, bound := macro.Matches(code.Expressions.(e.List).First())
@@ -759,19 +759,19 @@ func TestMacroTransform(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		patternOk, pattern := parser.Parse(strings.NewReader(c.pattern))
+		patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
 		if patternOk != 0 {
 			t.Fatal("Parsing pattern failed")
 		}
 
-		bodyOk, body := parser.Parse(strings.NewReader(c.body))
+		bodyOk, body := exhumer.Parse(strings.NewReader(c.body))
 		if bodyOk != 0 {
 			t.Fatal("Parsing pattern failed")
 		}
 
 		macro := Macro{Pattern: pattern.Expressions.First(), Body: body.Expressions.First()}
 
-		codeOk, code := parser.Parse(strings.NewReader(c.in))
+		codeOk, code := exhumer.Parse(strings.NewReader(c.in))
 
 		if codeOk != 0 {
 			t.Fatal("Parsing code failed")
@@ -804,14 +804,14 @@ func b(pairs ...interface{}) bindings {
 
 func runBindingTest(t *testing.T, in string, patternStr string, bound bindings) {
 
-	patternOk, pattern := parser.Parse(strings.NewReader(patternStr))
+	patternOk, pattern := exhumer.Parse(strings.NewReader(patternStr))
 	if patternOk != 0 {
 		t.Fatalf("Parsing pattern '%s' failed", pattern)
 	}
 
 	macro := Macro{Pattern: pattern.Expressions.First()}
 
-	parseOk, parseRes := parser.Parse(strings.NewReader(in))
+	parseOk, parseRes := exhumer.Parse(strings.NewReader(in))
 
 	if parseOk != 0 {
 		t.Fatalf("Parsing code %s failed", in)

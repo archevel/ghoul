@@ -76,8 +76,8 @@ import (
 {{range .Imports}}	"{{.}}"
 {{end}}
 	"github.com/archevel/ghoul/mummy"
-	ghoulEval "github.com/archevel/ghoul/evaluator"
-	e "github.com/archevel/ghoul/expressions"
+	ghoulEval "github.com/archevel/ghoul/consume"
+	e "github.com/archevel/ghoul/bones"
 )
 
 var _ = mummy.Entomb

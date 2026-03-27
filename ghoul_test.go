@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 // newWithPrelude creates a Ghoul instance with the standard prelude loaded.

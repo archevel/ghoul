@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 	"github.com/archevel/ghoul/macromancy"
 )
 

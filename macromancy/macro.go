@@ -3,7 +3,7 @@ package macromancy
 import (
 	"fmt"
 
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 // SyntaxTransformer holds a pattern-based macro transformer (syntax-rules).
@@ -432,13 +432,13 @@ func idAndRest(expr e.Expr) (e.Identifier, e.Expr, error) {
 	if list, ok := expr.(e.List); ok {
 		id := toIdentifier(list.First())
 		if id == "" {
-			return "", nil, fmt.Errorf("macro pattern must contain identifiers, got %T", list.First())
+			return "", nil, fmt.Errorf("macro pattern must contain identifiers, got %s", e.TypeName(list.First()))
 		}
 		return id, list.Second(), nil
 	}
 	id := toIdentifier(identifier)
 	if id == "" {
-		return "", nil, fmt.Errorf("macro pattern must contain identifiers, got %T", identifier)
+		return "", nil, fmt.Errorf("macro pattern must contain identifiers, got %s", e.TypeName(identifier))
 	}
 	return id, nil, nil
 }

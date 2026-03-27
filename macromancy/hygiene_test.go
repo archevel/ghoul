@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	e "github.com/archevel/ghoul/expressions"
-	"github.com/archevel/ghoul/parser"
+	e "github.com/archevel/ghoul/bones"
+	"github.com/archevel/ghoul/exhumer"
 )
 
 func parseExpr(t *testing.T, code string) e.Expr {
 	t.Helper()
-	res, parsed := parser.Parse(strings.NewReader(code))
+	res, parsed := exhumer.Parse(strings.NewReader(code))
 	if res != 0 {
 		t.Fatalf("failed to parse: %s", code)
 	}

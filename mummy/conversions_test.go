@@ -3,7 +3,7 @@ package mummy
 import (
 	"testing"
 
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 func TestBytesConvertsStringToByteSlice(t *testing.T) {

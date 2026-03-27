@@ -11,7 +11,7 @@ package macromancy
 import (
 	"testing"
 
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 // --- matchFinalCodeExpression: `...` as head facing a non-list atom ---

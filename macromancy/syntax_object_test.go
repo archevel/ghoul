@@ -3,7 +3,7 @@ package macromancy
 import (
 	"testing"
 
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 func TestSyntaxObjectWrapsExprAndPreservesDatum(t *testing.T) {

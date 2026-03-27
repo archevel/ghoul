@@ -3,7 +3,7 @@ package mummy
 import (
 	"fmt"
 
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 // ConversionFunc is the signature for conversion functions.

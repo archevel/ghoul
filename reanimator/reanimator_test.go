@@ -5,16 +5,16 @@ import (
 	"strings"
 	"testing"
 
-	ev "github.com/archevel/ghoul/evaluator"
-	e "github.com/archevel/ghoul/expressions"
-	"github.com/archevel/ghoul/logging"
+	ev "github.com/archevel/ghoul/consume"
+	e "github.com/archevel/ghoul/bones"
+	"github.com/archevel/ghoul/engraving"
 	"github.com/archevel/ghoul/macromancy"
-	"github.com/archevel/ghoul/parser"
+	"github.com/archevel/ghoul/exhumer"
 )
 
 func parseExprs(t *testing.T, code string) e.List {
 	t.Helper()
-	res, parsed := parser.Parse(strings.NewReader(code))
+	res, parsed := exhumer.Parse(strings.NewReader(code))
 	if res != 0 {
 		t.Fatalf("failed to parse: %s", code)
 	}
@@ -23,7 +23,7 @@ func parseExprs(t *testing.T, code string) e.List {
 
 func newTestReanimator() *Reanimator {
 	var counter uint64
-	return New(logging.StandardLogger, &counter)
+	return New(engraving.StandardLogger, &counter)
 }
 
 func TestExpandSyntaxRulesSimple(t *testing.T) {
@@ -845,9 +845,9 @@ func TestExpandListFromSliceEmpty(t *testing.T) {
 
 func TestExpandIntegrationWithEvaluator(t *testing.T) {
 	// End-to-end: expand then evaluate. This verifies the expanded code
-	// is valid for the evaluator.
+	// is valid for the consume.
 	var counter uint64
-	r := New(logging.StandardLogger, &counter)
+	r := New(engraving.StandardLogger, &counter)
 
 	exprs := parseExprs(t, `
 (define-syntax add-one (syntax-rules () ((add-one x) (+ x 1))))
@@ -866,7 +866,7 @@ func TestExpandIntegrationWithEvaluator(t *testing.T) {
 		snd := tl.First().(e.Integer)
 		return e.Integer(fst + snd), nil
 	})
-	evaluator := ev.NewWithMarkCounter(logging.StandardLogger, env, &counter)
+	evaluator := ev.NewWithMarkCounter(engraving.StandardLogger, env, &counter)
 	result, err := evaluator.Evaluate(expanded)
 	if err != nil {
 		t.Fatalf("evaluation failed: %v", err)

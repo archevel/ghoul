@@ -3,11 +3,11 @@ package mummy
 import (
 	"fmt"
 
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 // Mummy wraps a Go value with type metadata, used by wraith-generated
-// sarcophagi. For ad-hoc wrapping without type names, see expressions.Foreign.
+// sarcophagi. For ad-hoc wrapping without type names, see bones.Foreign.
 type Mummy struct {
 	wrapped  any
 	typeName string

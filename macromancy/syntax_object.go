@@ -1,7 +1,7 @@
 package macromancy
 
 import (
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 type Mark = uint64

@@ -3,7 +3,7 @@ package macromancy
 import (
 	"fmt"
 
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 type MacroGroup struct {
@@ -113,7 +113,7 @@ func extractMacros(rules e.List, literals map[e.Identifier]bool) ([]Macro, error
 		r, rOk := first.(e.List)
 		rules, rulesOk = rules.Tail()
 		if !rOk {
-			return nil, fmt.Errorf("invalid rule definition: expected list for rule, got %T at position %d", first, len(macros))
+			return nil, fmt.Errorf("invalid rule definition: expected list for rule, got %s at position %d", e.TypeName(first), len(macros))
 		}
 		if !rulesOk {
 			return nil, fmt.Errorf("invalid rule definition: malformed rules list at position %d", len(macros))

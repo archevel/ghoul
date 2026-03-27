@@ -6,12 +6,12 @@ import (
 	"io"
 	"os"
 
-	ev "github.com/archevel/ghoul/evaluator"
+	ev "github.com/archevel/ghoul/consume"
 	"github.com/archevel/ghoul/reanimator"
-	e "github.com/archevel/ghoul/expressions"
-	"github.com/archevel/ghoul/logging"
-	"github.com/archevel/ghoul/parser"
-	"github.com/archevel/ghoul/stdlib"
+	e "github.com/archevel/ghoul/bones"
+	"github.com/archevel/ghoul/engraving"
+	"github.com/archevel/ghoul/exhumer"
+	"github.com/archevel/ghoul/tome"
 )
 
 type Ghoul interface {
@@ -21,10 +21,10 @@ type Ghoul interface {
 }
 
 func New() Ghoul {
-	return NewLoggingGhoul(logging.StandardLogger)
+	return NewLoggingGhoul(engraving.StandardLogger)
 }
 
-func NewLoggingGhoul(logger logging.Logger) Ghoul {
+func NewLoggingGhoul(logger engraving.Logger) Ghoul {
 	var markCounter uint64
 	exp := reanimator.New(logger, &markCounter)
 	evaluator := prepareEvaluator(logger, &markCounter)
@@ -50,7 +50,7 @@ func (g ghoul) ProcessFile(filename string) (e.Expr, error) {
 }
 
 func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader, filename *string) (e.Expr, error) {
-	parseRes, parsed := parser.ParseWithFilename(exprReader, filename)
+	parseRes, parsed := exhumer.ParseWithFilename(exprReader, filename)
 	if parseRes != 0 {
 		return nil, fmt.Errorf("failed to parse Lisp code: parse result %d", parseRes)
 	}
@@ -73,8 +73,8 @@ func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader, fil
 	return result, nil
 }
 
-func prepareEvaluator(logger logging.Logger, markCounter *uint64) *ev.Evaluator {
+func prepareEvaluator(logger engraving.Logger, markCounter *uint64) *ev.Evaluator {
 	env := ev.NewEnvironment()
-	stdlib.RegisterAll(env)
+	tome.RegisterAll(env)
 	return ev.NewWithMarkCounter(logger, env, markCounter)
 }

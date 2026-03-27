@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	e "github.com/archevel/ghoul/expressions"
+	e "github.com/archevel/ghoul/bones"
 )
 
 func TestProcessWithContextHappyPath(t *testing.T) {

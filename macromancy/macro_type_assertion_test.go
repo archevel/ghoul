@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	e "github.com/archevel/ghoul/expressions"
-	"github.com/archevel/ghoul/parser"
+	e "github.com/archevel/ghoul/bones"
+	"github.com/archevel/ghoul/exhumer"
 )
 
 func TestMacroTypeAssertionSafety(t *testing.T) {
@@ -48,7 +48,7 @@ func TestMacroTypeAssertionSafety(t *testing.T) {
 			}()
 
 			// Parse macro definition
-			parseRes, parsed := parser.Parse(strings.NewReader(c.macroCode))
+			parseRes, parsed := exhumer.Parse(strings.NewReader(c.macroCode))
 			if parseRes != 0 {
 				t.Fatalf("Failed to parse macro definition: %s", c.macroCode)
 			}
