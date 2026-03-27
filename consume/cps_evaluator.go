@@ -17,7 +17,7 @@ func (ev *Evaluator) ConsumeNodesWithContext(ctx context.Context, nodes []*bones
 	if len(nodes) == 0 {
 		return bones.Nil, nil
 	}
-	ev.conts = &contStack{seqContinuation(nodes, false)}
+	ev.conts = &contStack{contItem{fn: seqContinuation(nodes, false)}}
 	return ev.stepThroughContinuationsWithContext(ctx)
 }
 
@@ -43,14 +43,8 @@ func seqContinuation(nodes []*bones.Node, maybeTailCall bool) continuation {
 			ev.pushContinuation(seqContinuation(nodes[1:], maybeTailCall))
 		}
 		isTail := maybeTailCall && len(nodes) == 1
-		ev.pushContinuation(evalContinuation(nodes[0], isTail))
+		ev.pushEvalNode(nodes[0], isTail)
 		return bones.Nil, nil
-	}
-}
-
-func evalContinuation(node *bones.Node, maybeTailCall bool) continuation {
-	return func(arg *bones.Node, ev *Evaluator) (*bones.Node, error) {
-		return ev.evaluateNode(node, maybeTailCall)
 	}
 }
 
@@ -115,7 +109,7 @@ func (ev *Evaluator) evaluateDefine(node *bones.Node, maybeTailCall bool) (*bone
 		}
 		return value, nil
 	})
-	ev.pushContinuation(evalContinuation(valueNode, maybeTailCall))
+	ev.pushEvalNode(valueNode, maybeTailCall)
 	return bones.Nil, nil
 }
 
@@ -130,7 +124,7 @@ func (ev *Evaluator) evaluateSet(node *bones.Node, maybeTailCall bool) (*bones.N
 		}
 		return value, nil
 	})
-	ev.pushContinuation(evalContinuation(valueNode, maybeTailCall))
+	ev.pushEvalNode(valueNode, maybeTailCall)
 	return bones.Nil, nil
 }
 
@@ -204,7 +198,7 @@ func condClauseContinuation(clauses []*bones.CondClause, index int, maybeTailCal
 			}
 			return bones.Nil, nil
 		})
-		ev.pushContinuation(evalContinuation(clause.Test, false))
+		ev.pushEvalNode(clause.Test, false)
 		return bones.Nil, nil
 	}
 }
@@ -260,11 +254,11 @@ func (ev *Evaluator) evaluateCall(node *bones.Node, maybeTailCall bool) (*bones.
 	}
 
 	ev.pushContinuation(applyFunc)
-	ev.pushContinuation(evalContinuation(calleeNode, false))
+	ev.pushEvalNode(calleeNode, false)
 
 	for i := 0; i < len(argNodes); i++ {
 		ev.pushContinuation(collectArg)
-		ev.pushContinuation(evalContinuation(argNodes[i], false))
+		ev.pushEvalNode(argNodes[i], false)
 	}
 
 	return bones.Nil, nil

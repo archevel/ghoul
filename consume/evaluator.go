@@ -16,7 +16,16 @@ import (
 )
 
 type continuation func(arg *e.Node, ev *Evaluator) (*e.Node, error)
-type contStack []continuation
+
+// contItem is a tagged union: either a closure or a direct node-eval request.
+// Using a struct avoids allocating a closure for the very common evalContinuation case.
+type contItem struct {
+	fn            continuation // non-nil for closure continuations
+	node          *e.Node      // non-nil for direct node evaluation
+	maybeTailCall bool
+}
+
+type contStack []contItem
 
 // Evaluate parses a *Node tree (top-level ListNode), translates to semantic
 // nodes, and evaluates. This is the convenience entry point for tests.
@@ -259,12 +268,18 @@ func (err EvaluationError) Unwrap() error {
 }
 
 func (ev *Evaluator) pushContinuation(cont continuation) {
-	*ev.conts = append(*ev.conts, cont)
+	*ev.conts = append(*ev.conts, contItem{fn: cont})
 }
 
-func (ev *Evaluator) popContinuation() continuation {
-	next := (*ev.conts)[len(*ev.conts)-1]
-	*ev.conts = (*ev.conts)[:len(*ev.conts)-1]
+func (ev *Evaluator) pushEvalNode(node *e.Node, maybeTailCall bool) {
+	*ev.conts = append(*ev.conts, contItem{node: node, maybeTailCall: maybeTailCall})
+}
+
+func (ev *Evaluator) popContinuation() contItem {
+	idx := len(*ev.conts) - 1
+	next := (*ev.conts)[idx]
+	(*ev.conts)[idx] = contItem{} // clear to help GC
+	*ev.conts = (*ev.conts)[:idx]
 	return next
 }
 
@@ -280,7 +295,12 @@ func (ev *Evaluator) stepThroughContinuationsWithContext(ctx context.Context) (*
 		}
 
 		next := ev.popContinuation()
-		ret, err = next(ret, ev)
+		if next.node != nil {
+			// Direct node evaluation — avoids closure allocation
+			ret, err = ev.evaluateNode(next.node, next.maybeTailCall)
+		} else {
+			ret, err = next.fn(ret, ev)
+		}
 
 		if err != nil {
 			return nil, err
