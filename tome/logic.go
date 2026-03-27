@@ -3,29 +3,28 @@ package tome
 import (
 	"fmt"
 
-	ev "github.com/archevel/ghoul/consume"
 	e "github.com/archevel/ghoul/bones"
+	ev "github.com/archevel/ghoul/consume"
 )
 
 func registerLogic(env *ev.Environment) {
-	env.Register("and", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		fst, ok := args.First().(e.Boolean)
-		if !ok {
-			return nil, fmt.Errorf("and: expected boolean as first argument, got %s", e.TypeName(args.First()))
+	env.Register("and", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		fst := args[0]
+		if fst.Kind != e.BooleanNode {
+			return nil, fmt.Errorf("and: expected boolean as first argument, got %s", e.NodeTypeName(fst))
 		}
-		t, _ := args.Tail()
-		snd, ok := t.First().(e.Boolean)
-		if !ok {
-			return nil, fmt.Errorf("and: expected boolean as second argument, got %s", e.TypeName(t.First()))
+		snd := args[1]
+		if snd.Kind != e.BooleanNode {
+			return nil, fmt.Errorf("and: expected boolean as second argument, got %s", e.NodeTypeName(snd))
 		}
-		return e.Boolean(fst && snd), nil
+		return e.BoolNode(fst.BoolVal && snd.BoolVal), nil
 	})
 
-	env.Register("not", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		val, ok := args.First().(e.Boolean)
-		if !ok {
-			return nil, fmt.Errorf("not: expected boolean, got %s", e.TypeName(args.First()))
+	env.Register("not", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		val := args[0]
+		if val.Kind != e.BooleanNode {
+			return nil, fmt.Errorf("not: expected boolean, got %s", e.NodeTypeName(val))
 		}
-		return e.Boolean(!val), nil
+		return e.BoolNode(!val.BoolVal), nil
 	})
 }

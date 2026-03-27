@@ -1,219 +1,103 @@
 package macromancy
 
 import (
-	e "github.com/archevel/ghoul/bones"
+	"github.com/archevel/ghoul/bones"
 )
 
-type Mark = uint64
-
-type MarkSet map[Mark]bool
-
-func NewMarkSet() MarkSet {
-	return MarkSet{}
-}
-
-// Toggle returns a new MarkSet with the given mark flipped.
-// This implements Racket's anti-mark behavior: applying the same
-// mark twice cancels it out, which is how input expressions shed
-// the macro-introduction mark while template expressions keep it.
-func (ms MarkSet) Toggle(m Mark) MarkSet {
-	result := MarkSet{}
-	for k, v := range ms {
-		result[k] = v
+// WrapSyntax wraps leaf nodes as SyntaxObjectNodes while preserving list
+// structure, so Children-based traversal continues to work.
+func WrapSyntax(node *bones.Node, marks MarkSet) *bones.Node {
+	if node == nil || node.IsNil() {
+		return bones.Nil
 	}
-	if result[m] {
-		delete(result, m)
-	} else {
-		result[m] = true
-	}
-	return result
-}
-
-func (ms MarkSet) IsEmpty() bool {
-	return len(ms) == 0
-}
-
-// WrapExpr wraps leaf expressions as SyntaxObjects while preserving the
-// Pair tree structure, so the List interface continues to work for traversal.
-func WrapExpr(expr e.Expr, marks MarkSet) e.Expr {
-	if expr == e.NIL {
-		return e.NIL
-	}
-	if pair, ok := expr.(*e.Pair); ok {
-		return e.Cons(WrapExpr(pair.H, marks), WrapExpr(pair.T, marks))
-	}
-	return SyntaxObject{Datum: expr, Marks: copyMarks(marks)}
-}
-
-func copyMarks(ms MarkSet) MarkSet {
-	result := MarkSet{}
-	for k, v := range ms {
-		result[k] = v
-	}
-	return result
-}
-
-func ApplyMark(expr e.Expr, mark Mark) e.Expr {
-	if so, ok := expr.(SyntaxObject); ok {
-		if _, isIdent := so.Datum.(e.Identifier); isIdent {
-			return SyntaxObject{Datum: so.Datum, Marks: so.Marks.Toggle(mark)}
+	switch node.Kind {
+	case bones.ListNode:
+		children := make([]*bones.Node, len(node.Children))
+		for i, child := range node.Children {
+			children[i] = WrapSyntax(child, marks)
 		}
-		return so
-	}
-	// Plain identifiers in the output came from the transformer itself
-	// (not from the input, which would be wrapped in SyntaxObject).
-	if id, ok := expr.(e.Identifier); ok {
-		return e.ScopedIdentifier{Name: id, Marks: map[uint64]bool{mark: true}}
-	}
-	if si, ok := expr.(e.ScopedIdentifier); ok {
-		return e.ScopedIdentifier{Name: si.Name, Marks: MarkSet(si.Marks).Toggle(mark)}
-	}
-	if expr == e.NIL {
-		return e.NIL
-	}
-	if pair, ok := expr.(*e.Pair); ok {
-		return e.Cons(ApplyMark(pair.H, mark), ApplyMark(pair.T, mark))
-	}
-	return expr
-}
-
-func ExtractPatternVars(pattern e.Expr, literals map[e.Identifier]bool) map[e.Identifier]bool {
-	vars := map[e.Identifier]bool{}
-	list, ok := pattern.(e.List)
-	if !ok || list == e.NIL {
-		return vars
-	}
-	rest := list.Second()
-	collectIdentifiers(rest, vars, literals)
-	return vars
-}
-
-// ExtractEllipsisVars identifies which pattern variables are captured under
-// an ellipsis. It walks the pattern looking for `<subpattern> ...` sequences
-// and collects all identifiers within the subpattern.
-func ExtractEllipsisVars(pattern e.Expr, literals map[e.Identifier]bool) map[e.Identifier]bool {
-	vars := map[e.Identifier]bool{}
-	list, ok := pattern.(e.List)
-	if !ok || list == e.NIL {
-		return vars
-	}
-	// Skip the macro name (first element)
-	rest := list.Second()
-	collectEllipsisVars(rest, vars, literals)
-	return vars
-}
-
-func collectEllipsisVars(expr e.Expr, vars map[e.Identifier]bool, literals map[e.Identifier]bool) {
-	list, ok := expr.(e.List)
-	if !ok || list == e.NIL {
-		return
-	}
-
-	for list != e.NIL {
-		head := list.First()
-		tail, ok := list.Tail()
-		if !ok {
-			break
+		result := bones.NewListNode(children)
+		result.Loc = node.Loc
+		if node.DottedTail != nil {
+			result.DottedTail = WrapSyntax(node.DottedTail, marks)
 		}
+		return result
+	default:
+		return &bones.Node{
+			Kind:   bones.SyntaxObjectNode,
+			Quoted: node,
+			Marks:  copyMarks(marks),
+		}
+	}
+}
 
-		if tail != e.NIL {
-			nextId := toIdentifier(tail.First())
-			if nextId == e.Identifier("...") {
-				// Everything in head is an ellipsis variable
-				collectIdentifiers(head, vars, literals)
-				tail, ok = tail.Tail()
-				if !ok {
-					break
-				}
-				list = tail
-				continue
+// ApplyMark toggles a mark on identifier nodes in the tree.
+func ApplyMark(node *bones.Node, mark Mark) *bones.Node {
+	if node == nil || node.IsNil() {
+		return node
+	}
+	switch node.Kind {
+	case bones.SyntaxObjectNode:
+		if node.Quoted != nil && node.Quoted.Kind == bones.IdentifierNode {
+			newMarks := MarkSet(node.Marks).Toggle(mark)
+			return &bones.Node{
+				Kind:   bones.SyntaxObjectNode,
+				Quoted: node.Quoted,
+				Marks:  newMarks,
 			}
 		}
-
-		// Recurse into sub-lists that aren't themselves under ellipsis
-		if subList, ok := head.(e.List); ok {
-			collectEllipsisVars(subList, vars, literals)
+		return node
+	case bones.IdentifierNode:
+		if len(node.Marks) > 0 {
+			newMarks := MarkSet(node.Marks).Toggle(mark)
+			return bones.ScopedIdentNode(node.Name, newMarks)
 		}
-
-		list = tail
+		return bones.ScopedIdentNode(node.Name, map[uint64]bool{mark: true})
+	case bones.ListNode:
+		children := make([]*bones.Node, len(node.Children))
+		for i, child := range node.Children {
+			children[i] = ApplyMark(child, mark)
+		}
+		result := &bones.Node{Kind: bones.ListNode, Children: children, Loc: node.Loc}
+		if node.DottedTail != nil {
+			result.DottedTail = ApplyMark(node.DottedTail, mark)
+		}
+		return result
+	default:
+		return node
 	}
 }
 
-func collectIdentifiers(expr e.Expr, vars map[e.Identifier]bool, literals map[e.Identifier]bool) {
-	if id, ok := expr.(e.Identifier); ok {
-		if id != e.Identifier("...") && id != e.Identifier("_") && (literals == nil || !literals[id]) {
-			vars[id] = true
-		}
-		return
+// ResolveSyntax strips SyntaxObjectNode wrappers, converting marked identifiers
+// to scoped identifiers and unmarked ones back to plain identifiers.
+func ResolveSyntax(node *bones.Node) *bones.Node {
+	if node == nil || node.IsNil() {
+		return node
 	}
-	if si, ok := expr.(e.ScopedIdentifier); ok {
-		if si.Name != e.Identifier("...") && si.Name != e.Identifier("_") && (literals == nil || !literals[si.Name]) {
-			vars[si.Name] = true
-		}
-		return
-	}
-	if expr == e.NIL {
-		return
-	}
-	if list, ok := expr.(e.List); ok {
-		collectIdentifiers(list.First(), vars, literals)
-		collectIdentifiers(list.Second(), vars, literals)
-	}
-}
-
-// ResolveExpr strips SyntaxObject wrappers, converting marked identifiers
-// to ScopedIdentifier and unmarked ones back to plain Identifier.
-func ResolveExpr(expr e.Expr) e.Expr {
-	if so, ok := expr.(SyntaxObject); ok {
-		if id, isIdent := so.Datum.(e.Identifier); isIdent {
-			if so.Marks.IsEmpty() {
-				return id
+	switch node.Kind {
+	case bones.SyntaxObjectNode:
+		if node.Quoted != nil && node.Quoted.Kind == bones.IdentifierNode {
+			marks := MarkSet(node.Marks)
+			if marks.IsEmpty() {
+				return bones.IdentNode(node.Quoted.Name)
 			}
-			return e.ScopedIdentifier{Name: id, Marks: so.Marks}
+			return bones.ScopedIdentNode(node.Quoted.Name, node.Marks)
 		}
-		return so.Datum
-	}
-	if expr == e.NIL {
-		return e.NIL
-	}
-	if pair, ok := expr.(*e.Pair); ok {
-		return e.Cons(ResolveExpr(pair.H), ResolveExpr(pair.T))
-	}
-	return expr
-}
-
-// SyntaxObject wraps a leaf expression with hygiene marks during general
-// transformer expansion. The lifecycle is:
-//
-//  1. WrapExpr: wraps leaves as SyntaxObject (Pair structure preserved)
-//  2. ApplyMark: toggles marks on SyntaxObject-wrapped identifiers
-//  3. ResolveExpr: converts SyntaxObject{Identifier} → ScopedIdentifier
-//     (with marks) or plain Identifier (if marks are empty)
-//
-// After ResolveExpr, SyntaxObjects are gone and only ScopedIdentifiers
-// remain. ScopedIdentifier is a permanent part of the expression tree;
-// SyntaxObject is transient and only exists during transformer expansion.
-type SyntaxObject struct {
-	Datum e.Expr
-	Marks MarkSet
-}
-
-func (so SyntaxObject) Repr() string {
-	return so.Datum.Repr()
-}
-
-func (so SyntaxObject) Equiv(other e.Expr) bool {
-	_, isIdent := so.Datum.(e.Identifier)
-
-	if otherSo, ok := other.(SyntaxObject); ok {
-		if isIdent {
-			return so.Datum.Equiv(otherSo.Datum) && e.MarksEq(so.Marks, otherSo.Marks)
+		if node.Quoted != nil {
+			return node.Quoted
 		}
-		return so.Datum.Equiv(otherSo.Datum)
+		return bones.Nil
+	case bones.ListNode:
+		children := make([]*bones.Node, len(node.Children))
+		for i, child := range node.Children {
+			children[i] = ResolveSyntax(child)
+		}
+		result := &bones.Node{Kind: bones.ListNode, Children: children, Loc: node.Loc}
+		if node.DottedTail != nil {
+			result.DottedTail = ResolveSyntax(node.DottedTail)
+		}
+		return result
+	default:
+		return node
 	}
-
-	if isIdent {
-		return so.Marks.IsEmpty() && so.Datum.Equiv(other)
-	}
-	return so.Datum.Equiv(other)
 }

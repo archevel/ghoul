@@ -9,7 +9,7 @@ import (
 	p "github.com/archevel/ghoul/exhumer"
 )
 
-func evalWithStdlib(code string) (e.Expr, error) {
+func evalWithStdlib(code string) (*e.Node, error) {
 	env := ev.NewEnvironment()
 	RegisterAll(env)
 	r := strings.NewReader(code)
@@ -20,61 +20,61 @@ func evalWithStdlib(code string) (e.Expr, error) {
 func TestAddIntegers(t *testing.T) {
 	result, err := evalWithStdlib("(+ 3 4)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Integer(7)) { t.Errorf("expected 7, got %s", result.Repr()) }
+	if !result.Equiv(e.IntNode(7)) { t.Errorf("expected 7, got %s", result.Repr()) }
 }
 
 func TestAddFloats(t *testing.T) {
 	result, err := evalWithStdlib("(+ 1.5 2.5)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Float(4.0)) { t.Errorf("expected 4, got %s", result.Repr()) }
+	if !result.Equiv(e.FloatNode(4.0)) { t.Errorf("expected 4, got %s", result.Repr()) }
 }
 
 func TestAddMixed(t *testing.T) {
 	result, err := evalWithStdlib("(+ 1 2.5)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Float(3.5)) { t.Errorf("expected 3.5, got %s", result.Repr()) }
+	if !result.Equiv(e.FloatNode(3.5)) { t.Errorf("expected 3.5, got %s", result.Repr()) }
 }
 
 func TestAddMixedReverse(t *testing.T) {
 	result, err := evalWithStdlib("(+ 2.5 1)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Float(3.5)) { t.Errorf("expected 3.5, got %s", result.Repr()) }
+	if !result.Equiv(e.FloatNode(3.5)) { t.Errorf("expected 3.5, got %s", result.Repr()) }
 }
 
 func TestSubtract(t *testing.T) {
 	result, err := evalWithStdlib("(- 10 3)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Integer(7)) { t.Errorf("expected 7, got %s", result.Repr()) }
+	if !result.Equiv(e.IntNode(7)) { t.Errorf("expected 7, got %s", result.Repr()) }
 }
 
 func TestSubtractFloat(t *testing.T) {
 	result, err := evalWithStdlib("(- 10.5 3.0)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Float(7.5)) { t.Errorf("expected 7.5, got %s", result.Repr()) }
+	if !result.Equiv(e.FloatNode(7.5)) { t.Errorf("expected 7.5, got %s", result.Repr()) }
 }
 
 func TestMultiply(t *testing.T) {
 	result, err := evalWithStdlib("(* 3 4)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Integer(12)) { t.Errorf("expected 12, got %s", result.Repr()) }
+	if !result.Equiv(e.IntNode(12)) { t.Errorf("expected 12, got %s", result.Repr()) }
 }
 
 func TestMultiplyFloat(t *testing.T) {
 	result, err := evalWithStdlib("(* 2.5 4.0)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Float(10.0)) { t.Errorf("expected 10, got %s", result.Repr()) }
+	if !result.Equiv(e.FloatNode(10.0)) { t.Errorf("expected 10, got %s", result.Repr()) }
 }
 
 func TestDivideIntegers(t *testing.T) {
 	result, err := evalWithStdlib("(/ 10 3)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Integer(3)) { t.Errorf("expected 3 (integer division), got %s", result.Repr()) }
+	if !result.Equiv(e.IntNode(3)) { t.Errorf("expected 3 (integer division), got %s", result.Repr()) }
 }
 
 func TestDivideFloats(t *testing.T) {
 	result, err := evalWithStdlib("(/ 10.0 4.0)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Float(2.5)) { t.Errorf("expected 2.5, got %s", result.Repr()) }
+	if !result.Equiv(e.FloatNode(2.5)) { t.Errorf("expected 2.5, got %s", result.Repr()) }
 }
 
 func TestDivideByZero(t *testing.T) {
@@ -91,7 +91,7 @@ func TestDivideByZeroFloat(t *testing.T) {
 func TestModIntegers(t *testing.T) {
 	result, err := evalWithStdlib("(mod 10 3)")
 	if err != nil { t.Fatal(err) }
-	if !result.Equiv(e.Integer(1)) { t.Errorf("expected 1, got %s", result.Repr()) }
+	if !result.Equiv(e.IntNode(1)) { t.Errorf("expected 1, got %s", result.Repr()) }
 }
 
 func TestModByZero(t *testing.T) {

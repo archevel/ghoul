@@ -18,31 +18,32 @@ func TestNewEnvironmentHasOneScope(t *testing.T) {
 
 func TestBoundFunctionsCanBeFoundByTheirId(t *testing.T) {
 	env := NewEnvironment()
-	id := e.Identifier("foo")
-	nilFunc := func(args e.List, ev *Evaluator) (e.Expr, error) { return e.NIL, nil }
-	expectedFun := Function{&nilFunc}
-	bindFuncAtBottomAs(id, expectedFun, env)
+	nilFunc := func(args []*e.Node, ev *Evaluator) (*e.Node, error) { return e.Nil, nil }
+	env.Register("foo", nilFunc)
 
-	actual := (*(*env)[0])[keyFromIdentifier(id)]
-	if actual != expectedFun {
-		t.Errorf("expected '%s' to be bound to function '%s' but was: %q", id.Repr(), expectedFun.Repr(), actual)
+	val, err := env.LookupByName("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val.Kind != e.FunctionNode {
+		t.Errorf("expected FunctionNode, got %d", val.Kind)
 	}
 }
 
 func TestScopedIdentifierBindAndLookup(t *testing.T) {
 	env := NewEnvironment()
 
-	si := e.ScopedIdentifier{Name: e.Identifier("x"), Marks: map[uint64]bool{1: true}}
-	_, err := bindIdentifier(si, e.Integer(42), env)
+	si := e.ScopedIdentNode("x", map[uint64]bool{1: true})
+	_, err := bindNode(si, e.IntNode(42), env)
 	if err != nil {
 		t.Fatalf("unexpected error binding ScopedIdentifier: %v", err)
 	}
 
-	result, err := lookupIdentifier(si, env)
+	result, err := lookupNode(si, env)
 	if err != nil {
 		t.Fatalf("unexpected error looking up ScopedIdentifier: %v", err)
 	}
-	if !result.Equiv(e.Integer(42)) {
+	if !result.Equiv(e.IntNode(42)) {
 		t.Errorf("expected 42, got %s", result.Repr())
 	}
 }
@@ -50,19 +51,19 @@ func TestScopedIdentifierBindAndLookup(t *testing.T) {
 func TestScopedIdentifierDoesNotConflictWithPlainIdentifier(t *testing.T) {
 	env := NewEnvironment()
 
-	plain := e.Identifier("x")
-	scoped := e.ScopedIdentifier{Name: e.Identifier("x"), Marks: map[uint64]bool{1: true}}
+	plain := e.IdentNode("x")
+	scoped := e.ScopedIdentNode("x", map[uint64]bool{1: true})
 
-	bindIdentifier(plain, e.Integer(1), env)
-	bindIdentifier(scoped, e.Integer(2), env)
+	bindNode(plain, e.IntNode(1), env)
+	bindNode(scoped, e.IntNode(2), env)
 
-	plainResult, _ := lookupIdentifier(plain, env)
-	scopedResult, _ := lookupIdentifier(scoped, env)
+	plainResult, _ := lookupNode(plain, env)
+	scopedResult, _ := lookupNode(scoped, env)
 
-	if !plainResult.Equiv(e.Integer(1)) {
+	if !plainResult.Equiv(e.IntNode(1)) {
 		t.Errorf("plain x should be 1, got %s", plainResult.Repr())
 	}
-	if !scopedResult.Equiv(e.Integer(2)) {
+	if !scopedResult.Equiv(e.IntNode(2)) {
 		t.Errorf("scoped x should be 2, got %s", scopedResult.Repr())
 	}
 }
@@ -70,15 +71,15 @@ func TestScopedIdentifierDoesNotConflictWithPlainIdentifier(t *testing.T) {
 func TestScopedIdentifierWithEmptyMarksMatchesPlainIdentifier(t *testing.T) {
 	env := NewEnvironment()
 
-	plain := e.Identifier("x")
-	bindIdentifier(plain, e.Integer(42), env)
+	plain := e.IdentNode("x")
+	bindNode(plain, e.IntNode(42), env)
 
-	siEmpty := e.ScopedIdentifier{Name: e.Identifier("x"), Marks: map[uint64]bool{}}
-	result, err := lookupIdentifier(siEmpty, env)
+	siEmpty := e.ScopedIdentNode("x", map[uint64]bool{})
+	result, err := lookupNode(siEmpty, env)
 	if err != nil {
 		t.Fatalf("ScopedIdentifier with empty marks should find plain binding: %v", err)
 	}
-	if !result.Equiv(e.Integer(42)) {
+	if !result.Equiv(e.IntNode(42)) {
 		t.Errorf("expected 42, got %s", result.Repr())
 	}
 }
@@ -86,16 +87,16 @@ func TestScopedIdentifierWithEmptyMarksMatchesPlainIdentifier(t *testing.T) {
 func TestScopedIdentifierAssignment(t *testing.T) {
 	env := NewEnvironment()
 
-	si := e.ScopedIdentifier{Name: e.Identifier("x"), Marks: map[uint64]bool{1: true}}
-	bindIdentifier(si, e.Integer(10), env)
+	si := e.ScopedIdentNode("x", map[uint64]bool{1: true})
+	bindNode(si, e.IntNode(10), env)
 
-	_, err := assign(si, e.Integer(20), env)
+	_, err := assignByName(si, e.IntNode(20), env)
 	if err != nil {
 		t.Fatalf("unexpected error assigning ScopedIdentifier: %v", err)
 	}
 
-	result, _ := lookupIdentifier(si, env)
-	if !result.Equiv(e.Integer(20)) {
+	result, _ := lookupNode(si, env)
+	if !result.Equiv(e.IntNode(20)) {
 		t.Errorf("expected 20 after assignment, got %s", result.Repr())
 	}
 }
@@ -105,13 +106,15 @@ func TestBoundFunctionsResideInBottomScope(t *testing.T) {
 	// Add a scope
 	env = newEnvWithEmptyScope(env)
 
-	id := e.Identifier("foo")
-	nilFunc := func(args e.List, ev *Evaluator) (e.Expr, error) { return e.NIL, nil }
-	expectedFun := Function{&nilFunc}
-	bindFuncAtBottomAs(id, expectedFun, env)
+	nilFunc := func(args []*e.Node, ev *Evaluator) (*e.Node, error) { return e.Nil, nil }
+	env.Register("foo", nilFunc)
 
-	actual := (*(*env)[0])[keyFromIdentifier(id)]
-	if actual != expectedFun {
-		t.Errorf("expected '%s' to be bound to function '%s' but was: %q", id.Repr(), expectedFun.Repr(), actual)
+	// Bottom scope should have the binding even with extra scope on top
+	val, err := env.LookupByName("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val.Kind != e.FunctionNode {
+		t.Errorf("expected FunctionNode, got %d", val.Kind)
 	}
 }

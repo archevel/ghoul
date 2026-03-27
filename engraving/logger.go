@@ -2,11 +2,10 @@ package engraving
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
-
-	e "github.com/archevel/ghoul/bones"
 )
 
 // Custom log levels
@@ -42,9 +41,13 @@ var (
 )
 
 type Logger interface {
-	Trace(string, ...e.Expr)
-	Debug(string, ...e.Expr)
-	Warn(string, ...e.Expr)
+	Trace(string, ...any)
+	Debug(string, ...any)
+	Warn(string, ...any)
+}
+
+type reprAble interface {
+	Repr() string
 }
 
 type logger struct {
@@ -59,7 +62,6 @@ func NewWithLevel(level slog.Level) Logger {
 // NewWithWriter creates a logger with custom writer and level
 func NewWithWriter(writer io.Writer, level slog.Level) Logger {
 	if writer == nil {
-		// Return disabled logger for nil writer
 		return &logger{nil}
 	}
 	opts := &slog.HandlerOptions{
@@ -72,28 +74,29 @@ func NewWithWriter(writer io.Writer, level slog.Level) Logger {
 }
 
 // New creates a logger for backward compatibility
-// debug != nil enables debug level, warn != nil enables warn level
 func New(debug io.Writer, warn io.Writer) Logger {
 	if debug != nil {
 		return NewWithWriter(debug, slog.LevelDebug)
 	} else if warn != nil {
 		return NewWithWriter(warn, slog.LevelWarn)
 	} else {
-		return &logger{nil} // Disabled
+		return &logger{nil}
 	}
 }
 
-func (l logger) log(level slog.Level, msg string, args []e.Expr) {
+func (l logger) log(level slog.Level, msg string, args []any) {
 	if l.slog == nil {
 		return
 	}
 	if len(args) > 0 {
 		strArgs := make([]any, len(args))
-		for i, expr := range args {
-			if expr == nil {
+		for i, arg := range args {
+			if arg == nil {
 				strArgs[i] = "<nil>"
+			} else if r, ok := arg.(reprAble); ok {
+				strArgs[i] = r.Repr()
 			} else {
-				strArgs[i] = expr.Repr()
+				strArgs[i] = fmt.Sprint(arg)
 			}
 		}
 		l.slog.Log(nil, level, msg, "args", strArgs)
@@ -102,7 +105,6 @@ func (l logger) log(level slog.Level, msg string, args []e.Expr) {
 	}
 }
 
-func (l logger) Trace(msg string, args ...e.Expr) { l.log(LevelTrace, msg, args) }
-func (l logger) Debug(msg string, args ...e.Expr) { l.log(slog.LevelDebug, msg, args) }
-func (l logger) Warn(msg string, args ...e.Expr)  { l.log(slog.LevelWarn, msg, args) }
-
+func (l logger) Trace(msg string, args ...any) { l.log(LevelTrace, msg, args) }
+func (l logger) Debug(msg string, args ...any) { l.log(slog.LevelDebug, msg, args) }
+func (l logger) Warn(msg string, args ...any)  { l.log(slog.LevelWarn, msg, args) }

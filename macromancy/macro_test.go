@@ -1,840 +1,726 @@
 package macromancy
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 
-	e "github.com/archevel/ghoul/bones"
-	"github.com/archevel/ghoul/exhumer"
+	"github.com/archevel/ghoul/bones"
 )
 
-func TestMacrosCanMatchAnExpression(t *testing.T) {
-	cases := []struct {
-		in      string
-		pattern string
-	}{
-		{"foo", "foo"},
-		{"(bar)", "(bar)"},
-		{"(baz 1)", "(baz x)"},
-		{"(numbers 1 2 3)", "(numbers x y z)"},
-		{"(numbers 1 2 3)", "(numbers . x)"},
-		{"(numbers 1 2 3)", "(numbers x . y)"},
-		{"(numbers 1 2 3)", "(numbers x y . z)"},
-		{"(numbers 1 2 3)", "(numbers x y z . å)"},
-		{"(numbers 1 2 3)", "(numbers ...)"},
-		{"(zoom 1 (love 'foo))", "(zoom x (zoomer z))"},
+func n(name string) *bones.Node { return bones.IdentNode(name) }
+func i(v int64) *bones.Node     { return bones.IntNode(v) }
+func list(children ...*bones.Node) *bones.Node {
+	return bones.NewListNode(children)
+}
+
+func TestNodeMatchSimple(t *testing.T) {
+	// Pattern: (mac x)  Code: (mac 42)
+	m := Macro{
+		Pattern: list(n("mac"), n("x")),
+		Body:    n("x"),
 	}
-	for _, c := range cases {
-		patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
-		if patternOk != 0 {
-			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
-		}
-
-		macro := Macro{Pattern: pattern.Expressions.First()}
-
-		codeOk, code := exhumer.Parse(strings.NewReader(c.in))
-
-		if codeOk != 0 {
-			t.Fatal("Parsing code failed")
-		}
-
-		if ok, _ := macro.Matches(code.Expressions.First()); !ok {
-			t.Errorf(`Macro %s did not match %s`, c.pattern, c.in)
-		}
-
+	ok, bound := m.matches(list(n("mac"), i(42)))
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if bound.vars["x"].IntVal != 42 {
+		t.Errorf("expected x=42, got %s", bound.vars["x"].Repr())
 	}
 }
 
-func TestMacrosCanPatternMatch(t *testing.T) {
-	cases := []struct {
-		in      string
-		pattern string
-	}{
-		{"(numbers 1 1)", "(numbers x x)"},
-		{"(numbers 1 (a b 1))", "(numbers x (... x))"},
-		{"(numbers 1.5 1.5 1.5)", "(numbers x 1.5 x)"},
-		{"(numbers 1.5 'a 1.5)", "(numbers x 'a x)"},
-		{"(numbers 1.5 '(a 1.5) 1.5)", "(numbers x '(a 1.5) x)"},
+func TestNodeMatchTwoVars(t *testing.T) {
+	// Pattern: (mac x y)  Code: (mac 1 2)
+	m := Macro{
+		Pattern: list(n("mac"), n("x"), n("y")),
+		Body:    list(n("+"), n("x"), n("y")),
 	}
-	for _, c := range cases {
-		patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
-		if patternOk != 0 {
-			t.Fatalf("Parsing pattern '%s' failed", c.pattern)
-		}
-
-		macro := Macro{Pattern: pattern.Expressions.First()}
-
-		codeOk, code := exhumer.Parse(strings.NewReader(c.in))
-
-		if codeOk != 0 {
-			t.Fatal("Parsing code failed")
-		}
-
-		if ok, _ := macro.Matches(code.Expressions.First()); !ok {
-			t.Errorf(`Macro %s did not match %s`, c.pattern, c.in)
-		}
-
+	ok, bound := m.matches(list(n("mac"), i(1), i(2)))
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if bound.vars["x"].IntVal != 1 || bound.vars["y"].IntVal != 2 {
+		t.Error("wrong bindings")
 	}
 }
 
-func TestMacrosBindCorrectlyCommonPatterns(t *testing.T) {
-	cases := []struct {
-		in               string
-		pattern          string
-		expectedBindings bindings
-	}{
-		{"foo", "foo", newBindings()},
-		{"(bar)", "(bar)", newBindings()},
-		{"(baz 1)", "(baz x)", b(e.Identifier("x"), e.Integer(1))},
-		{"(baz 1 `foo`)", "(baz x y)", b(e.Identifier("x"), e.Integer(1), e.Identifier("y"), e.String("foo"))},
-		{"(zoom 1 (love 'foo))", "(zoom x (zoomer z))", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("zoomer"), e.Identifier("love"),
-			e.Identifier("z"), e.Quote{e.Identifier("foo")},
-		)},
-		{"(numbers 1 2 3)", "(numbers x y z)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("y"), e.Integer(2),
-			e.Identifier("z"), e.Integer(3),
-		)},
-		{"(numbers 1 2 . 3)", "(numbers x y z)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("y"), e.Integer(2),
-			e.Identifier("z"), e.Integer(3),
-		)},
-		{"(numbers 1 2 3)", "(numbers . x)", b(
-			e.Identifier("x"), e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL))),
-		)},
-		{"(numbers 1 2 . 3)", "(numbers . x)", b(
-			e.Identifier("x"), e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3))),
-		)},
-		{"(numbers 1 2 3)", "(numbers x . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("y"), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL)),
-		)},
-		{"(numbers 1 2 . 3)", "(numbers x . y)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("y"), e.Cons(e.Integer(2), e.Integer(3)),
-		)},
-		{"(numbers 1 2 3)", "(numbers x y . z)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("y"), e.Integer(2),
-			e.Identifier("z"), e.Cons(e.Integer(3), e.NIL),
-		)},
-		{"(numbers 1 2 . 3)", "(numbers x y . z)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("y"), e.Integer(2),
-			e.Identifier("z"), e.Integer(3),
-		)},
-		{"(numbers 1 2 3)", "(numbers x y z . å)", b(
-			e.Identifier("x"), e.Integer(1),
-			e.Identifier("y"), e.Integer(2),
-			e.Identifier("z"), e.Integer(3),
-			e.Identifier("å"), e.NIL,
-		)},
-		{"(define (love foo za ba) foo bar 1)", "(define (f . a_1) . a_2)", b(
-			e.Identifier("f"), e.Identifier("love"),
-			e.Identifier("a_1"), e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("za"), e.Cons(e.Identifier("ba"), e.NIL))),
-			e.Identifier("a_2"), e.Cons(e.Identifier("foo"), e.Cons(e.Identifier("bar"), e.Cons(e.Integer(1), e.NIL))),
-		)},
+func TestNodeMatchFails(t *testing.T) {
+	// Pattern: (mac x y)  Code: (mac 1) — too few args
+	m := Macro{
+		Pattern: list(n("mac"), n("x"), n("y")),
 	}
-
-	for _, c := range cases {
-		runBindingTest(t, c.in, c.pattern, c.expectedBindings)
+	ok, _ := m.matches(list(n("mac"), i(1)))
+	if ok {
+		t.Error("expected no match — too few args")
 	}
 }
 
-func TestMacrosBindCorrectlyWithEllipsisPattern(t *testing.T) {
-	// These tests use the old `...` key semantics for patterns where `...`
-	// appears as the head (not preceded by a subpattern). These patterns
-	// still use the old matchEllipsis path.
-	cases := []struct {
-		in               string
-		pattern          string
-		expectedBindings bindings
-	}{
-		{"(numbers 1 2 3)", "(numbers ...)", b(
-			e.Identifier("..."), e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL))),
-		)},
-		{"(numbers 1 2 . 3)", "(numbers ...)", b(
-			e.Identifier("..."), e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3))),
-		)},
+func TestNodeMatchWildcard(t *testing.T) {
+	// Pattern: (mac _ x)  Code: (mac 1 2)
+	m := Macro{
+		Pattern: list(n("mac"), n("_"), n("x")),
 	}
-
-	for _, c := range cases {
-		runBindingTest(t, c.in, c.pattern, c.expectedBindings)
+	ok, bound := m.matches(list(n("mac"), i(1), i(2)))
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if _, has := bound.vars["_"]; has {
+		t.Error("wildcard should not create binding")
+	}
+	if bound.vars["x"].IntVal != 2 {
+		t.Errorf("expected x=2, got %s", bound.vars["x"].Repr())
 	}
 }
 
-func TestNestedEllipsisPatternMatching(t *testing.T) {
-	cases := []struct {
+func TestNodeMatchLiteral(t *testing.T) {
+	// Pattern: (mac => x) with => as literal
+	m := Macro{
+		Pattern:  list(n("mac"), n("=>"), n("x")),
+		Literals: map[string]bool{"=>": true},
+	}
+	ok, _ := m.matches(list(n("mac"), n("=>"), i(42)))
+	if !ok {
+		t.Fatal("expected match with literal")
+	}
+
+	// Should fail if literal doesn't match
+	ok2, _ := m.matches(list(n("mac"), n("foo"), i(42)))
+	if ok2 {
+		t.Error("expected no match — literal mismatch")
+	}
+}
+
+func TestNodeMatchNestedList(t *testing.T) {
+	// Pattern: (mac (x y))  Code: (mac (1 2))
+	m := Macro{
+		Pattern: list(n("mac"), list(n("x"), n("y"))),
+	}
+	ok, bound := m.matches(list(n("mac"), list(i(1), i(2))))
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if bound.vars["x"].IntVal != 1 || bound.vars["y"].IntVal != 2 {
+		t.Error("wrong bindings for nested match")
+	}
+}
+
+func TestNodeMatchEllipsis(t *testing.T) {
+	// Pattern: (mac x ...)  Code: (mac 1 2 3)
+	m := Macro{
+		Pattern: list(n("mac"), n("x"), n("...")),
+	}
+	ok, bound := m.matches(list(n("mac"), i(1), i(2), i(3)))
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if len(bound.repeated["x"]) != 3 {
+		t.Fatalf("expected 3 repeated bindings, got %d", len(bound.repeated["x"]))
+	}
+	if bound.repeated["x"][0].IntVal != 1 || bound.repeated["x"][2].IntVal != 3 {
+		t.Error("wrong repeated bindings")
+	}
+}
+
+func TestNodeMatchEllipsisZeroRepetitions(t *testing.T) {
+	// Pattern: (mac x ...)  Code: (mac)
+	m := Macro{
+		Pattern: list(n("mac"), n("x"), n("...")),
+	}
+	ok, bound := m.matches(list(n("mac")))
+	if !ok {
+		t.Fatal("expected match with zero repetitions")
+	}
+	if len(bound.repeated["x"]) != 0 {
+		t.Errorf("expected 0 repeated bindings, got %d", len(bound.repeated["x"]))
+	}
+}
+
+func TestNodeMatchEllipsisWithTailPattern(t *testing.T) {
+	// Pattern: (mac x ... y)  Code: (mac 1 2 3 99)
+	// x should match [1 2 3], y should match 99
+	m := Macro{
+		Pattern: list(n("mac"), n("x"), n("..."), n("y")),
+	}
+	ok, bound := m.matches(list(n("mac"), i(1), i(2), i(3), i(99)))
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if len(bound.repeated["x"]) != 3 {
+		t.Fatalf("expected 3 repeated x, got %d", len(bound.repeated["x"]))
+	}
+	if bound.vars["y"].IntVal != 99 {
+		t.Errorf("expected y=99, got %s", bound.vars["y"].Repr())
+	}
+}
+
+func TestNodeMatchNestedEllipsis(t *testing.T) {
+	// Pattern: (mac (var val) ...)  Code: (mac (x 1) (y 2))
+	m := Macro{
+		Pattern: list(n("mac"), list(n("var"), n("val")), n("...")),
+	}
+	ok, bound := m.matches(list(n("mac"), list(n("x"), i(1)), list(n("y"), i(2))))
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if len(bound.repeated["var"]) != 2 || len(bound.repeated["val"]) != 2 {
+		t.Fatalf("expected 2 repeated each, got var=%d val=%d",
+			len(bound.repeated["var"]), len(bound.repeated["val"]))
+	}
+}
+
+// --- Expansion tests ---
+
+func TestNodeExpandSimple(t *testing.T) {
+	bound := newBindings()
+	bound.vars["x"] = i(42)
+	body := n("x")
+	result := expandHygienic(body, bound, 1, map[string]bool{"x": true}, nil)
+	if result.IntVal != 42 {
+		t.Errorf("expected 42, got %s", result.Repr())
+	}
+}
+
+func TestNodeExpandHygienicMarking(t *testing.T) {
+	bound := newBindings()
+	body := n("y") // not a pattern var
+	result := expandHygienic(body, bound, 1, map[string]bool{}, nil)
+	if result.Kind != bones.IdentifierNode {
+		t.Fatalf("expected IdentifierNode, got %d", result.Kind)
+	}
+	if !result.Marks[1] {
+		t.Error("expected mark 1 on non-pattern-var identifier")
+	}
+}
+
+func TestNodeExpandDefinitionBinding(t *testing.T) {
+	bound := newBindings()
+	body := n("+") // bound at definition site
+	defBindings := map[string]bool{"+": true}
+	result := expandHygienic(body, bound, 1, map[string]bool{}, defBindings)
+	if result.Kind != bones.IdentifierNode || result.Name != "+" {
+		t.Errorf("expected plain +, got %s", result.Repr())
+	}
+	if len(result.Marks) > 0 {
+		t.Error("definition-bound identifier should not be marked")
+	}
+}
+
+func TestNodeExpandEllipsis(t *testing.T) {
+	// Body: (begin x ...)
+	// Bound: x → [1, 2, 3] (repeated)
+	bound := newBindings()
+	bound.repeated["x"] = []*bones.Node{i(1), i(2), i(3)}
+	body := list(n("begin"), n("x"), n("..."))
+	defBindings := map[string]bool{"begin": true}
+	result := expandHygienic(body, bound, 1, map[string]bool{"x": true}, defBindings)
+	if result.Kind != bones.ListNode {
+		t.Fatalf("expected ListNode, got %d", result.Kind)
+	}
+	// Should be (begin 1 2 3)
+	if len(result.Children) != 4 {
+		t.Fatalf("expected 4 children (begin + 3 values), got %d: %s", len(result.Children), result.Repr())
+	}
+	if result.Children[1].IntVal != 1 || result.Children[2].IntVal != 2 || result.Children[3].IntVal != 3 {
+		t.Errorf("expected (begin 1 2 3), got %s", result.Repr())
+	}
+}
+
+func TestNodeExpandNestedEllipsis(t *testing.T) {
+	// let macro: body is ((lambda (var ...) body ...) val ...)
+	// Bound: var → [x, y], val → [1, 2], body → [expr]
+	bound := newBindings()
+	bound.repeated["var"] = []*bones.Node{n("x"), n("y")}
+	bound.repeated["val"] = []*bones.Node{i(1), i(2)}
+	bound.vars["body"] = list(n("+"), n("x"), n("y"))
+
+	// Template: ((lambda (var ...) body) val ...)
+	body := list(
+		list(n("lambda"), list(n("var"), n("...")), n("body")),
+		n("val"),
+		n("..."),
+	)
+	defBindings := map[string]bool{"lambda": true}
+	result := expandHygienic(body, bound, 1, map[string]bool{"var": true, "val": true, "body": true}, defBindings)
+
+	// Should be ((lambda (x y) (+ x y)) 1 2)
+	if result.Kind != bones.ListNode {
+		t.Fatalf("expected ListNode, got %d", result.Kind)
+	}
+	if len(result.Children) != 3 {
+		t.Fatalf("expected 3 children, got %d: %s", len(result.Children), result.Repr())
+	}
+}
+
+// --- Full transformer test ---
+
+func TestBuildSyntaxRulesTransformer(t *testing.T) {
+	// (syntax-rules () ((my-add x y) (+ x y)))
+	syntaxRules := list(
+		n("syntax-rules"),
+		list(), // empty literals
+		list(
+			list(n("my-add"), n("x"), n("y")),
+			list(n("+"), n("x"), n("y")),
+		),
+	)
+
+	defBindings := map[string]bool{"+": true}
+	st, err := BuildSyntaxRulesTransformer("my-add", syntaxRules, defBindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Transform (my-add 1 2)
+	code := list(n("my-add"), i(1), i(2))
+	result, err := st.Transform(code, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should be (+ 1 2)
+	if result.Kind != bones.ListNode || len(result.Children) != 3 {
+		t.Fatalf("expected (+ 1 2), got %s", result.Repr())
+	}
+	if result.Children[0].Name != "+" {
+		t.Errorf("expected +, got %s", result.Children[0].Repr())
+	}
+	if result.Children[1].IntVal != 1 || result.Children[2].IntVal != 2 {
+		t.Errorf("expected 1 2, got %s", result.Repr())
+	}
+}
+
+func TestBuildNodeSyntaxRulesWithEllipsis(t *testing.T) {
+	// (syntax-rules () ((my-list x ...) (list x ...)))
+	syntaxRules := list(
+		n("syntax-rules"),
+		list(),
+		list(
+			list(n("my-list"), n("x"), n("...")),
+			list(n("list"), n("x"), n("...")),
+		),
+	)
+
+	defBindings := map[string]bool{"list": true}
+	st, err := BuildSyntaxRulesTransformer("my-list", syntaxRules, defBindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Transform (my-list 1 2 3)
+	code := list(n("my-list"), i(1), i(2), i(3))
+	result, err := st.Transform(code, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should be (list 1 2 3)
+	if result.Kind != bones.ListNode || len(result.Children) != 4 {
+		t.Fatalf("expected (list 1 2 3), got %s", result.Repr())
+	}
+}
+
+func TestExtractNodePatternVars(t *testing.T) {
+	// (mac x y)
+	pat := list(n("mac"), n("x"), n("y"))
+	vars := extractPatternVars(pat, nil)
+	if !vars["x"] || !vars["y"] {
+		t.Errorf("expected x and y in pattern vars, got %v", vars)
+	}
+	if vars["mac"] {
+		t.Error("macro name should not be a pattern var")
+	}
+}
+
+func TestExtractNodeEllipsisVars(t *testing.T) {
+	// (mac x y ...)
+	pat := list(n("mac"), n("x"), n("y"), n("..."))
+	vars := extractEllipsisVars(pat, nil)
+	if !vars["y"] {
+		t.Error("expected y in ellipsis vars")
+	}
+	if vars["x"] {
+		t.Error("x should not be in ellipsis vars")
+	}
+}
+
+// --- Additional coverage tests ---
+
+func TestNodeMatchPatternNameMismatch(t *testing.T) {
+	// Pattern head is "mac" but code head is "other" — should still match
+	// because matches() skips the first child (macro name) on both sides.
+	m := Macro{
+		Pattern: list(n("mac"), n("x")),
+		Body:    n("x"),
+	}
+	ok, bound := m.matches(list(n("other"), i(7)))
+	if !ok {
+		t.Fatal("expected match — first child is skipped by matches()")
+	}
+	if bound.vars["x"].IntVal != 7 {
+		t.Errorf("expected x=7, got %s", bound.vars["x"].Repr())
+	}
+}
+
+func TestNodeMatchNonMatchingPatterns(t *testing.T) {
+	tests := []struct {
 		name    string
-		in      string
-		pattern string
-		check   func(t *testing.T, result bindings)
+		pattern *bones.Node
+		code    *bones.Node
 	}{
 		{
-			name:    "let-style: ((var val) ...) body ...",
-			in:      "(let ((x 1) (y 2)) (+ x y))",
-			pattern: "(let ((var val) ...) body ...)",
-			check: func(t *testing.T, result bindings) {
-				varVals := result.repeated[e.Identifier("var")]
-				if len(varVals) != 2 {
-					t.Fatalf("expected 2 var bindings, got %d", len(varVals))
-				}
-				if !varVals[0].Equiv(e.Identifier("x")) || !varVals[1].Equiv(e.Identifier("y")) {
-					t.Errorf("expected var=[x, y], got [%s, %s]", varVals[0].Repr(), varVals[1].Repr())
-				}
-				valVals := result.repeated[e.Identifier("val")]
-				if len(valVals) != 2 {
-					t.Fatalf("expected 2 val bindings, got %d", len(valVals))
-				}
-				if !valVals[0].Equiv(e.Integer(1)) || !valVals[1].Equiv(e.Integer(2)) {
-					t.Errorf("expected val=[1, 2], got [%s, %s]", valVals[0].Repr(), valVals[1].Repr())
-				}
-				bodyVals := result.repeated[e.Identifier("body")]
-				if len(bodyVals) != 1 {
-					t.Fatalf("expected 1 body binding, got %d", len(bodyVals))
-				}
-			},
+			name:    "too many args",
+			pattern: list(n("mac"), n("x")),
+			code:    list(n("mac"), i(1), i(2)),
 		},
 		{
-			name:    "empty repetition: ((var val) ...)",
-			in:      "(let () (+ 1 2))",
-			pattern: "(let ((var val) ...) body ...)",
-			check: func(t *testing.T, result bindings) {
-				if len(result.repeated[e.Identifier("var")]) != 0 {
-					t.Error("expected 0 var bindings for empty binding list")
-				}
-				if len(result.repeated[e.Identifier("val")]) != 0 {
-					t.Error("expected 0 val bindings for empty binding list")
-				}
-				bodyVals := result.repeated[e.Identifier("body")]
-				if len(bodyVals) != 1 {
-					t.Fatalf("expected 1 body binding, got %d", len(bodyVals))
-				}
-			},
+			name:    "nested list vs atom",
+			pattern: list(n("mac"), list(n("x"), n("y"))),
+			code:    list(n("mac"), i(1)),
 		},
 		{
-			name:    "flat ellipsis: x ...",
-			in:      "(my-begin 1 2 3)",
-			pattern: "(my-begin x ...)",
-			check: func(t *testing.T, result bindings) {
-				xVals := result.repeated[e.Identifier("x")]
-				if len(xVals) != 3 {
-					t.Fatalf("expected 3 x bindings, got %d", len(xVals))
-				}
-				if !xVals[0].Equiv(e.Integer(1)) || !xVals[1].Equiv(e.Integer(2)) || !xVals[2].Equiv(e.Integer(3)) {
-					t.Errorf("expected x=[1,2,3], got [%s,%s,%s]", xVals[0].Repr(), xVals[1].Repr(), xVals[2].Repr())
-				}
-			},
+			name:    "atom vs nested list",
+			pattern: list(n("mac"), n("x"), n("y")),
+			code:    list(n("mac"), list(i(1), i(2))),
 		},
 		{
-			name:    "flat ellipsis zero repetitions",
-			in:      "(my-begin)",
-			pattern: "(my-begin x ...)",
-			check: func(t *testing.T, result bindings) {
-				xVals := result.repeated[e.Identifier("x")]
-				if len(xVals) != 0 {
-					t.Fatalf("expected 0 x bindings, got %d", len(xVals))
-				}
-			},
+			name:    "empty code",
+			pattern: list(n("mac"), n("x")),
+			code:    list(n("mac")),
+		},
+		{
+			name:    "empty pattern non-empty code",
+			pattern: list(n("mac")),
+			code:    list(n("mac"), i(1)),
 		},
 	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
-			if patternOk != 0 {
-				t.Fatalf("Failed to parse pattern: %s", c.pattern)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := Macro{Pattern: tc.pattern}
+			ok, _ := m.matches(tc.code)
+			if ok {
+				t.Errorf("expected no match for %s", tc.name)
 			}
-			codeOk, code := exhumer.Parse(strings.NewReader(c.in))
-			if codeOk != 0 {
-				t.Fatalf("Failed to parse code: %s", c.in)
-			}
-
-			pat := pattern.Expressions.First()
-			macro := Macro{
-				Pattern:      pat,
-				PatternVars:  ExtractPatternVars(pat, nil),
-				EllipsisVars: ExtractEllipsisVars(pat, nil),
-			}
-
-			ok, result := macro.Matches(code.Expressions.First())
-			if !ok {
-				t.Fatalf("Macro %s did not match %s", c.pattern, c.in)
-			}
-			c.check(t, result)
 		})
 	}
 }
 
-func TestNestedEllipsisFourBindings(t *testing.T) {
-	// Test with 4+ bindings to exercise the let pattern beyond the old 3-clause limit
-	patternOk, pattern := exhumer.Parse(strings.NewReader("(let ((var val) ...) body ...)"))
-	if patternOk != 0 {
-		t.Fatal("parse failed")
+func TestNodeMatchNestedEllipsisFourBindings(t *testing.T) {
+	// Pattern: (mac (a b) ...)  Code: (mac (w 1) (x 2) (y 3) (z 4))
+	m := Macro{
+		Pattern: list(n("mac"), list(n("a"), n("b")), n("...")),
 	}
-	codeOk, code := exhumer.Parse(strings.NewReader("(let ((a 1) (b 2) (c 3) (d 4)) (+ a b c d))"))
-	if codeOk != 0 {
-		t.Fatal("parse failed")
-	}
-
-	pat := pattern.Expressions.First()
-	macro := Macro{
-		Pattern:      pat,
-		PatternVars:  ExtractPatternVars(pat, nil),
-		EllipsisVars: ExtractEllipsisVars(pat, nil),
-	}
-
-	ok, result := macro.Matches(code.Expressions.First())
+	code := list(n("mac"),
+		list(n("w"), i(1)),
+		list(n("x"), i(2)),
+		list(n("y"), i(3)),
+		list(n("z"), i(4)),
+	)
+	ok, bound := m.matches(code)
 	if !ok {
-		t.Fatal("should match")
+		t.Fatal("expected match")
 	}
-
-	varVals := result.repeated[e.Identifier("var")]
-	valVals := result.repeated[e.Identifier("val")]
-	if len(varVals) != 4 || len(valVals) != 4 {
-		t.Fatalf("expected 4 bindings each, got var=%d val=%d", len(varVals), len(valVals))
+	if len(bound.repeated["a"]) != 4 {
+		t.Fatalf("expected 4 repeated a, got %d", len(bound.repeated["a"]))
 	}
+	if len(bound.repeated["b"]) != 4 {
+		t.Fatalf("expected 4 repeated b, got %d", len(bound.repeated["b"]))
+	}
+	if bound.repeated["a"][0].Name != "w" || bound.repeated["a"][3].Name != "z" {
+		t.Errorf("wrong a bindings: %s, %s", bound.repeated["a"][0].Repr(), bound.repeated["a"][3].Repr())
+	}
+	if bound.repeated["b"][0].IntVal != 1 || bound.repeated["b"][3].IntVal != 4 {
+		t.Errorf("wrong b bindings: %s, %s", bound.repeated["b"][0].Repr(), bound.repeated["b"][3].Repr())
+	}
+}
 
-	// Just verify the binding counts are correct — expansion is tested in hygiene_test.go
-	for i, expected := range []e.Identifier{"a", "b", "c", "d"} {
-		if !varVals[i].Equiv(e.Identifier(expected)) {
-			t.Errorf("expected var[%d]=%s, got %s", i, expected, varVals[i].Repr())
+func TestNodeMatchNestedEllipsisWithTrailingPattern(t *testing.T) {
+	// Pattern: (mac (a b) ... c)  Code: (mac (x 1) (y 2) 99)
+	m := Macro{
+		Pattern: list(n("mac"), list(n("a"), n("b")), n("..."), n("c")),
+	}
+	code := list(n("mac"), list(n("x"), i(1)), list(n("y"), i(2)), i(99))
+	ok, bound := m.matches(code)
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if len(bound.repeated["a"]) != 2 {
+		t.Fatalf("expected 2 repeated a, got %d", len(bound.repeated["a"]))
+	}
+	if len(bound.repeated["b"]) != 2 {
+		t.Fatalf("expected 2 repeated b, got %d", len(bound.repeated["b"]))
+	}
+	if bound.vars["c"].IntVal != 99 {
+		t.Errorf("expected c=99, got %s", bound.vars["c"].Repr())
+	}
+}
+
+func TestNodeMatchWildcardVariousPositions(t *testing.T) {
+	t.Run("wildcard at head position", func(t *testing.T) {
+		// Pattern: (mac _ x)  Code: (mac (complex stuff) 42)
+		m := Macro{
+			Pattern: list(n("mac"), n("_"), n("x")),
 		}
-	}
-	for i, expected := range []e.Integer{1, 2, 3, 4} {
-		if !valVals[i].Equiv(expected) {
-			t.Errorf("expected val[%d]=%d, got %s", i, expected, valVals[i].Repr())
+		ok, bound := m.matches(list(n("mac"), list(i(1), i(2)), i(42)))
+		if !ok {
+			t.Fatal("expected match")
 		}
+		if _, has := bound.vars["_"]; has {
+			t.Error("wildcard should not create binding")
+		}
+		if bound.vars["x"].IntVal != 42 {
+			t.Errorf("expected x=42, got %s", bound.vars["x"].Repr())
+		}
+	})
+
+	t.Run("wildcard at tail position", func(t *testing.T) {
+		// Pattern: (mac x _)  Code: (mac 42 anything)
+		m := Macro{
+			Pattern: list(n("mac"), n("x"), n("_")),
+		}
+		ok, bound := m.matches(list(n("mac"), i(42), n("anything")))
+		if !ok {
+			t.Fatal("expected match")
+		}
+		if _, has := bound.vars["_"]; has {
+			t.Error("wildcard should not create binding")
+		}
+		if bound.vars["x"].IntVal != 42 {
+			t.Errorf("expected x=42, got %s", bound.vars["x"].Repr())
+		}
+	})
+
+	t.Run("multiple wildcards", func(t *testing.T) {
+		// Pattern: (mac _ _ x)  Code: (mac a b 42)
+		m := Macro{
+			Pattern: list(n("mac"), n("_"), n("_"), n("x")),
+		}
+		ok, bound := m.matches(list(n("mac"), n("a"), n("b"), i(42)))
+		if !ok {
+			t.Fatal("expected match")
+		}
+		if _, has := bound.vars["_"]; has {
+			t.Error("wildcard should not create binding")
+		}
+		if bound.vars["x"].IntVal != 42 {
+			t.Errorf("expected x=42, got %s", bound.vars["x"].Repr())
+		}
+	})
+
+	t.Run("wildcard matches list", func(t *testing.T) {
+		// Pattern: (mac _)  Code: (mac (1 2 3))
+		m := Macro{
+			Pattern: list(n("mac"), n("_")),
+		}
+		ok, bound := m.matches(list(n("mac"), list(i(1), i(2), i(3))))
+		if !ok {
+			t.Fatal("expected match — wildcard should match a list")
+		}
+		if _, has := bound.vars["_"]; has {
+			t.Error("wildcard should not create binding")
+		}
+	})
+}
+
+func TestBuildNodeSyntaxRulesMultipleClauses(t *testing.T) {
+	// Two clauses: first matches (my-mac x y), second matches (my-mac x)
+	syntaxRules := list(
+		n("syntax-rules"),
+		list(), // no literals
+		list(
+			list(n("my-mac"), n("x"), n("y")),
+			list(n("+"), n("x"), n("y")),
+		),
+		list(
+			list(n("my-mac"), n("x")),
+			n("x"),
+		),
+	)
+
+	defBindings := map[string]bool{"+": true}
+	st, err := BuildSyntaxRulesTransformer("my-mac", syntaxRules, defBindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// (my-mac 5) should NOT match first clause (needs 2 args), SHOULD match second
+	code := list(n("my-mac"), i(5))
+	result, err := st.Transform(code, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.IntVal != 5 {
+		t.Errorf("expected 5, got %s", result.Repr())
+	}
+
+	// (my-mac 3 4) should match the first clause
+	code2 := list(n("my-mac"), i(3), i(4))
+	result2, err := st.Transform(code2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result2.Kind != bones.ListNode || len(result2.Children) != 3 {
+		t.Fatalf("expected (+ 3 4), got %s", result2.Repr())
+	}
+	if result2.Children[1].IntVal != 3 || result2.Children[2].IntVal != 4 {
+		t.Errorf("expected (+ 3 4), got %s", result2.Repr())
 	}
 }
 
-func TestNestedEllipsisWithTrailingPattern(t *testing.T) {
-	// Pattern: (mac (x y) ... z) — structured ellipsis followed by a regular binding
-	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac (x y) ... z)"))
-	if patternOk != 0 {
-		t.Fatal("parse failed")
-	}
-	codeOk, code := exhumer.Parse(strings.NewReader("(mac (1 2) (3 4) 5)"))
-	if codeOk != 0 {
-		t.Fatal("parse failed")
+func TestNodeMatchLiteralFailure(t *testing.T) {
+	// Pattern: (mac => x) with => literal. Code uses different identifier.
+	m := Macro{
+		Pattern:  list(n("mac"), n("=>"), n("x")),
+		Literals: map[string]bool{"=>": true},
 	}
 
-	pat := pattern.Expressions.First()
-	macro := Macro{
-		Pattern:      pat,
-		PatternVars:  ExtractPatternVars(pat, nil),
-		EllipsisVars: ExtractEllipsisVars(pat, nil),
-	}
-
-	ok, result := macro.Matches(code.Expressions.First())
-	if !ok {
-		t.Fatal("should match")
-	}
-
-	xVals := result.repeated[e.Identifier("x")]
-	yVals := result.repeated[e.Identifier("y")]
-	if len(xVals) != 2 || len(yVals) != 2 {
-		t.Fatalf("expected 2 each, got x=%d y=%d", len(xVals), len(yVals))
-	}
-	if !result.vars[e.Identifier("z")].Equiv(e.Integer(5)) {
-		t.Errorf("expected z=5, got %s", result.vars[e.Identifier("z")].Repr())
-	}
-}
-
-func TestMatchesWithNonIdentifierPattern(t *testing.T) {
-	// Pattern that starts with a non-identifier should not match
-	macro := Macro{Pattern: e.Integer(42)}
-	ok, _ := macro.Matches(e.Integer(42))
+	// Non-identifier in literal position should fail
+	ok, _ := m.matches(list(n("mac"), i(42), i(7)))
 	if ok {
-		t.Error("non-identifier pattern should not match via Matches")
+		t.Error("expected no match — literal position has integer, not =>")
+	}
+
+	// Wrong identifier should fail
+	ok2, _ := m.matches(list(n("mac"), n("->"), i(7)))
+	if ok2 {
+		t.Error("expected no match — literal -> does not match =>")
 	}
 }
 
-func TestMatchesWithNonIdentifierCode(t *testing.T) {
-	// Code that is a non-identifier atom when pattern expects identifier
-	macro := Macro{Pattern: e.Identifier("foo")}
-	ok, _ := macro.Matches(e.Integer(42))
-	if ok {
-		t.Error("non-identifier code should not match identifier pattern")
-	}
-}
-
-func TestMatchesPatternNameMismatch(t *testing.T) {
-	patternOk, pattern := exhumer.Parse(strings.NewReader("(foo x)"))
-	if patternOk != 0 {
-		t.Fatal("parse failed")
-	}
-	codeOk, code := exhumer.Parse(strings.NewReader("(bar 1)"))
-	if codeOk != 0 {
-		t.Fatal("parse failed")
-	}
-	macro := Macro{Pattern: pattern.Expressions.First()}
-	ok, _ := macro.Matches(code.Expressions.First())
-	if ok {
-		t.Error("macro name mismatch should not match")
-	}
-}
-
-func TestAppendExprsWithAtom(t *testing.T) {
-	// appendExprs with a non-list, non-NIL expression (atom) as the list arg
-	result := appendExprs(e.Integer(42), e.NIL)
-	list, ok := result.(e.List)
-	if !ok {
-		t.Fatalf("expected list, got %T", result)
-	}
-	if !list.First().Equiv(e.Integer(42)) {
-		t.Errorf("expected (42), got %s", result.Repr())
-	}
-}
-
-func TestAppendExprsWithProperList(t *testing.T) {
-	list := e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.NIL))
-	tail := e.Cons(e.Integer(3), e.NIL)
-	result := appendExprs(list, tail)
-	if result.Repr() != "(1 2 3)" {
-		t.Errorf("expected (1 2 3), got %s", result.Repr())
-	}
-}
-
-func TestAppendExprsWithNIL(t *testing.T) {
-	tail := e.Cons(e.Integer(1), e.NIL)
-	result := appendExprs(e.NIL, tail)
-	if result.Repr() != "(1)" {
-		t.Errorf("expected (1), got %s", result.Repr())
-	}
-}
-
-func TestMatchDottedPairPatternWithEllipsis(t *testing.T) {
-	// Pattern (mac ... . y) — ellipsis with dotted tail captures the rest
-	// This tests the old matchEllipsis path (... as head)
-	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac ... . y)"))
-	if patternOk != 0 {
-		t.Fatal("parse failed")
-	}
-	codeOk, code := exhumer.Parse(strings.NewReader("(mac 1 . 2)"))
-	if codeOk != 0 {
-		t.Fatal("parse failed")
-	}
-	macro := Macro{Pattern: pattern.Expressions.First()}
-	ok, result := macro.Matches(code.Expressions.First())
-	if !ok {
-		t.Fatal("should match")
-	}
-	if result.vars[e.Identifier("y")] == nil {
-		t.Error("y should be bound to the dotted tail")
-	}
-}
-
-func TestFindRepeatedVarsWithScopedIdentifier(t *testing.T) {
-	// Template contains a ScopedIdentifier that references a repeated var
+func TestNodeExpandEllipsisEmptyRepeatedBindings(t *testing.T) {
+	// Body: (begin x ...) with x repeated 0 times => (begin)
 	bound := newBindings()
-	bound.repeated[e.Identifier("x")] = []e.Expr{e.Integer(1), e.Integer(2)}
-
-	tmpl := e.ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}}
-	vars := findRepeatedVarsInTemplate(tmpl, bound)
-	if len(vars) != 1 || vars[0] != e.Identifier("x") {
-		t.Errorf("expected [x], got %v", vars)
+	bound.repeated["x"] = []*bones.Node{}
+	body := list(n("begin"), n("x"), n("..."))
+	defBindings := map[string]bool{"begin": true}
+	result := expandHygienic(body, bound, 1, map[string]bool{"x": true}, defBindings)
+	if result.Kind != bones.ListNode {
+		t.Fatalf("expected ListNode, got %d", result.Kind)
+	}
+	// Should be (begin) — only the "begin" element, no repeated values
+	if len(result.Children) != 1 {
+		t.Fatalf("expected 1 child (begin only), got %d: %s", len(result.Children), result.Repr())
+	}
+	if result.Children[0].Name != "begin" {
+		t.Errorf("expected begin, got %s", result.Children[0].Repr())
 	}
 }
 
-func TestFindRepeatedVarsInNestedTemplate(t *testing.T) {
-	// Template is a list containing a repeated var: (+ x y)
+func TestNodeExpandScopedIdentAccumulatesMarks(t *testing.T) {
+	// A ScopedIdentifier in the body that already has marks should accumulate the new mark
 	bound := newBindings()
-	bound.repeated[e.Identifier("x")] = []e.Expr{e.Integer(1)}
-
-	tmpl := e.Cons(e.Identifier("+"), e.Cons(e.Identifier("x"), e.Cons(e.Identifier("y"), e.NIL)))
-	vars := findRepeatedVarsInTemplate(tmpl, bound)
-	if len(vars) != 1 || vars[0] != e.Identifier("x") {
-		t.Errorf("expected [x], got %v", vars)
+	body := bones.ScopedIdentNode("y", map[uint64]bool{5: true})
+	result := expandHygienic(body, bound, 10, map[string]bool{}, nil)
+	if result.Kind != bones.IdentifierNode {
+		t.Fatalf("expected IdentifierNode, got %d", result.Kind)
+	}
+	if !result.Marks[5] {
+		t.Error("expected existing mark 5 to be preserved")
+	}
+	if !result.Marks[10] {
+		t.Error("expected new mark 10 to be added")
+	}
+	if result.Name != "y" {
+		t.Errorf("expected name y, got %s", result.Name)
 	}
 }
 
-func TestFindRepeatedVarsNoMatch(t *testing.T) {
-	bound := newBindings()
-	bound.repeated[e.Identifier("x")] = []e.Expr{e.Integer(1)}
-
-	// Template identifier not in repeated
-	vars := findRepeatedVarsInTemplate(e.Identifier("y"), bound)
-	if len(vars) != 0 {
-		t.Errorf("expected empty, got %v", vars)
+func TestNodeMatchWithScopedIdentifierAtHead(t *testing.T) {
+	// Pattern with a ScopedIdentifier as the macro name at head position
+	scopedHead := bones.ScopedIdentNode("mac", map[uint64]bool{1: true})
+	m := Macro{
+		Pattern: list(scopedHead, n("x")),
+		Body:    n("x"),
+	}
+	// Code also uses a scoped identifier at head
+	codeHead := bones.ScopedIdentNode("mac", map[uint64]bool{1: true})
+	ok, bound := m.matches(list(codeHead, i(42)))
+	if !ok {
+		t.Fatal("expected match — head is skipped by matches()")
+	}
+	if bound.vars["x"].IntVal != 42 {
+		t.Errorf("expected x=42, got %s", bound.vars["x"].Repr())
 	}
 }
 
-func TestFindRepeatedVarsScopedIdentifierNoMatch(t *testing.T) {
-	bound := newBindings()
-	bound.repeated[e.Identifier("x")] = []e.Expr{e.Integer(1)}
+func TestMatchAndBindReturnsDottedPairs(t *testing.T) {
+	// Pattern: (mac x y)  Code: (mac 1 2)
+	m := Macro{
+		Pattern:     list(n("mac"), n("x"), n("y")),
+		Body:        list(n("+"), n("x"), n("y")),
+		PatternVars: map[string]bool{"x": true, "y": true},
+	}
+	ok, assocList := m.MatchAndBind(list(n("mac"), i(1), i(2)))
+	if !ok {
+		t.Fatal("expected match")
+	}
+	if assocList.Kind != bones.ListNode {
+		t.Fatalf("expected ListNode, got %d", assocList.Kind)
+	}
 
-	vars := findRepeatedVarsInTemplate(e.ScopedIdentifier{Name: "y", Marks: map[uint64]bool{1: true}}, bound)
-	if len(vars) != 0 {
-		t.Errorf("expected empty, got %v", vars)
+	// Verify we got dotted pairs (name . value)
+	found := map[string]int64{}
+	for _, pair := range assocList.Children {
+		if pair.Kind != bones.ListNode {
+			t.Fatalf("expected pair to be ListNode, got %d", pair.Kind)
+		}
+		if len(pair.Children) != 1 {
+			t.Fatalf("expected 1 child in dotted pair, got %d", len(pair.Children))
+		}
+		if pair.DottedTail == nil {
+			t.Fatal("expected dotted tail to be non-nil")
+		}
+		name := pair.Children[0].Name
+		found[name] = pair.DottedTail.IntVal
+	}
+
+	if found["x"] != 1 {
+		t.Errorf("expected x=1, got %d", found["x"])
+	}
+	if found["y"] != 2 {
+		t.Errorf("expected y=2, got %d", found["y"])
 	}
 }
 
-func TestMatchFinalCodeExpressionPatternTooLong(t *testing.T) {
-	// Pattern (mac x y) against code (mac . 1) — after matching mac,
-	// pattern has (x y) but code is just the atom 1.
-	// The pattern expects more structure than the code provides.
-	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac x y)"))
-	if patternOk != 0 {
-		t.Fatal("parse failed")
+func TestMatchAndBindWithRepeatedVars(t *testing.T) {
+	// Pattern: (mac x ...)  Code: (mac 1 2 3)
+	m := Macro{
+		Pattern:      list(n("mac"), n("x"), n("...")),
+		Body:         list(n("begin"), n("x"), n("...")),
+		PatternVars:  map[string]bool{"x": true},
+		EllipsisVars: map[string]bool{"x": true},
 	}
-	codeOk, code := exhumer.Parse(strings.NewReader("(mac . 1)"))
-	if codeOk != 0 {
-		t.Fatal("parse failed")
+	ok, assocList := m.MatchAndBind(list(n("mac"), i(1), i(2), i(3)))
+	if !ok {
+		t.Fatal("expected match")
 	}
-	macro := Macro{Pattern: pattern.Expressions.First()}
-	ok, _ := macro.Matches(code.Expressions.First())
+	if assocList.Kind != bones.ListNode {
+		t.Fatalf("expected ListNode, got %d", assocList.Kind)
+	}
+
+	// Should have one dotted pair for "x" with a list as the tail
+	if len(assocList.Children) != 1 {
+		t.Fatalf("expected 1 pair, got %d", len(assocList.Children))
+	}
+	pair := assocList.Children[0]
+	if pair.Children[0].Name != "x" {
+		t.Errorf("expected pair name x, got %s", pair.Children[0].Name)
+	}
+	if pair.DottedTail == nil || pair.DottedTail.Kind != bones.ListNode {
+		t.Fatal("expected dotted tail to be a list of repeated values")
+	}
+	if len(pair.DottedTail.Children) != 3 {
+		t.Fatalf("expected 3 repeated values, got %d", len(pair.DottedTail.Children))
+	}
+}
+
+func TestMatchAndBindNoMatch(t *testing.T) {
+	// Pattern: (mac x y)  Code: (mac 1) — too few args
+	m := Macro{
+		Pattern: list(n("mac"), n("x"), n("y")),
+	}
+	ok, result := m.MatchAndBind(list(n("mac"), i(1)))
 	if ok {
-		t.Error("pattern with 2 remaining elements should not match a single atom")
+		t.Error("expected no match")
 	}
-}
-
-func TestMatchWalkScopedIdentifierInPattern(t *testing.T) {
-	// A ScopedIdentifier in the pattern should still match and bind
-	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac x)"))
-	if patternOk != 0 {
-		t.Fatal("parse failed")
-	}
-	codeOk, code := exhumer.Parse(strings.NewReader("(mac 42)"))
-	if codeOk != 0 {
-		t.Fatal("parse failed")
-	}
-	macro := Macro{Pattern: pattern.Expressions.First()}
-	ok, result := macro.Matches(code.Expressions.First())
-	if !ok {
-		t.Fatal("should match")
-	}
-	if !result.vars[e.Identifier("x")].Equiv(e.Integer(42)) {
-		t.Errorf("expected x=42, got %v", result.vars[e.Identifier("x")])
-	}
-}
-
-func TestRepeatedEllipsisFewerCodeThanTailPatterns(t *testing.T) {
-	// Pattern (mac x ... y z) with code (mac 1) — only 1 code element
-	// but 2 tail patterns (y z), so x repeats 0 times
-	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac x ... y z)"))
-	if patternOk != 0 {
-		t.Fatal("parse failed")
-	}
-	codeOk, code := exhumer.Parse(strings.NewReader("(mac 1 2)"))
-	if codeOk != 0 {
-		t.Fatal("parse failed")
-	}
-
-	pat := pattern.Expressions.First()
-	macro := Macro{
-		Pattern:      pat,
-		PatternVars:  ExtractPatternVars(pat, nil),
-		EllipsisVars: ExtractEllipsisVars(pat, nil),
-	}
-
-	ok, result := macro.Matches(code.Expressions.First())
-	if !ok {
-		t.Fatal("should match with 0 repetitions of x")
-	}
-	xVals := result.repeated[e.Identifier("x")]
-	if len(xVals) != 0 {
-		t.Errorf("expected 0 x repetitions, got %d", len(xVals))
-	}
-	if !result.vars[e.Identifier("y")].Equiv(e.Integer(1)) {
-		t.Errorf("expected y=1, got %s", result.vars[e.Identifier("y")].Repr())
-	}
-	if !result.vars[e.Identifier("z")].Equiv(e.Integer(2)) {
-		t.Errorf("expected z=2, got %s", result.vars[e.Identifier("z")].Repr())
-	}
-}
-
-func TestRepeatedEllipsisSubpatternMismatch(t *testing.T) {
-	// Pattern (mac (x y) ...) with code (mac 1 2) — code elements are atoms,
-	// not lists matching the (x y) subpattern
-	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac (x y) ...)"))
-	if patternOk != 0 {
-		t.Fatal("parse failed")
-	}
-	codeOk, code := exhumer.Parse(strings.NewReader("(mac 1 2)"))
-	if codeOk != 0 {
-		t.Fatal("parse failed")
-	}
-
-	pat := pattern.Expressions.First()
-	macro := Macro{
-		Pattern:      pat,
-		PatternVars:  ExtractPatternVars(pat, nil),
-		EllipsisVars: ExtractEllipsisVars(pat, nil),
-	}
-
-	ok, _ := macro.Matches(code.Expressions.First())
-	if ok {
-		t.Error("should not match — code elements are atoms, not (x y) pairs")
-	}
-}
-
-func TestRepeatedEllipsisDottedCodeList(t *testing.T) {
-	// Pattern (mac x ...) with code (mac 1 . 2) — dotted pair in code
-	// x should capture [1] (the proper element before the dotted tail)
-	patternOk, pattern := exhumer.Parse(strings.NewReader("(mac x ...)"))
-	if patternOk != 0 {
-		t.Fatal("parse failed")
-	}
-	codeOk, code := exhumer.Parse(strings.NewReader("(mac 1 . 2)"))
-	if codeOk != 0 {
-		t.Fatal("parse failed")
-	}
-
-	pat := pattern.Expressions.First()
-	macro := Macro{
-		Pattern:      pat,
-		PatternVars:  ExtractPatternVars(pat, nil),
-		EllipsisVars: ExtractEllipsisVars(pat, nil),
-	}
-
-	ok, result := macro.Matches(code.Expressions.First())
-	if !ok {
-		t.Fatal("should match")
-	}
-	xVals := result.repeated[e.Identifier("x")]
-	if len(xVals) != 1 {
-		t.Fatalf("expected 1 x repetition, got %d", len(xVals))
-	}
-	if !xVals[0].Equiv(e.Integer(1)) {
-		t.Errorf("expected x[0]=1, got %s", xVals[0].Repr())
-	}
-}
-
-func TestWildcardPatternMatching(t *testing.T) {
-	cases := []struct {
-		name    string
-		in      string
-		pattern string
-		check   func(t *testing.T, result bindings)
-	}{
-		{
-			name:    "wildcard matches anything",
-			in:      "(mac 42)",
-			pattern: "(mac _)",
-			check: func(t *testing.T, result bindings) {
-				if result.vars[e.Identifier("_")] != nil {
-					t.Error("_ should not create a binding")
-				}
-			},
-		},
-		{
-			name:    "wildcard can appear multiple times",
-			in:      "(mac 1 2 3)",
-			pattern: "(mac _ x _)",
-			check: func(t *testing.T, result bindings) {
-				if !result.vars[e.Identifier("x")].Equiv(e.Integer(2)) {
-					t.Errorf("expected x=2, got %s", result.vars[e.Identifier("x")].Repr())
-				}
-				if result.vars[e.Identifier("_")] != nil {
-					t.Error("_ should not create a binding")
-				}
-			},
-		},
-		{
-			name:    "wildcard in nested position",
-			in:      "(mac (1 2) 3)",
-			pattern: "(mac (_ x) _)",
-			check: func(t *testing.T, result bindings) {
-				if !result.vars[e.Identifier("x")].Equiv(e.Integer(2)) {
-					t.Errorf("expected x=2, got %s", result.vars[e.Identifier("x")].Repr())
-				}
-			},
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
-			if patternOk != 0 {
-				t.Fatalf("Failed to parse pattern: %s", c.pattern)
-			}
-			codeOk, code := exhumer.Parse(strings.NewReader(c.in))
-			if codeOk != 0 {
-				t.Fatalf("Failed to parse code: %s", c.in)
-			}
-			macro := Macro{Pattern: pattern.Expressions.First()}
-			ok, result := macro.Matches(code.Expressions.First())
-			if !ok {
-				t.Fatalf("Macro %s did not match %s", c.pattern, c.in)
-			}
-			c.check(t, result)
-		})
-	}
-}
-
-func TestMacrosDoesNotMatchNonMatchingPatterns(t *testing.T) {
-	cases := []struct {
-		in      string
-		pattern string
-	}{
-		{"(foo)", "foo"},
-		{"bar", "(bar)"},
-		{"(baz 1 x)", "(baz x)"},
-		{"(baz)", "(baz x)"},
-		{"(zoom 1 (love 'foo))", "(zoom x (zoomer))"},
-		{"(numbers 1 2 . 3)", "(numbers x y z . å)"},
-		{"(define (love foo za ba) foo bar 1)", "(define (f . a_1) a_2)"},
-		{"(numbers 1 2)", "(numbers x x)"},
-	}
-
-	for _, c := range cases {
-		patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
-		if patternOk != 0 {
-			t.Fatal("Parsing pattern failed")
-		}
-
-		macro := Macro{Pattern: pattern.Expressions.First()}
-
-		parseOk, parseRes := exhumer.Parse(strings.NewReader(c.in))
-		if parseOk != 0 {
-			t.Fatal("Parsing code failed")
-		}
-
-		if ok, _ := macro.Matches(parseRes.Expressions.First()); ok {
-			t.Errorf(`Macro %s matched code "%s" which it shouldn't`, c.pattern, c.in)
-		}
-
-	}
-}
-
-func TestMacroExpansion(t *testing.T) {
-	cases := []struct {
-		expectedRepr string
-		body         string
-		bound        bindings
-	}{
-		{"foo", "foo", newBindings()},
-		{"(bar)", "(bar)", newBindings()},
-
-		{"(baz 1)", "(baz x)", b(e.Identifier("x"), e.Integer(1))},
-		{"(baz 1 \"foo\")", "(baz x y)", b(e.Identifier("x"), e.Integer(1), e.Identifier("y"), e.String("foo"))},
-	}
-
-	for _, c := range cases {
-
-		bodyOk, body := exhumer.Parse(strings.NewReader(c.body))
-		if bodyOk != 0 {
-			t.Fatal("Parsing pattern failed")
-		}
-
-		macro := Macro{Body: body.Expressions.First()}
-
-		expanded := macro.ExpandHygienic(c.bound, 0)
-
-		if expanded.Repr() != c.expectedRepr {
-			t.Errorf("Expected %s after expanding macro, but got %s", c.expectedRepr, expanded.Repr())
-		}
-	}
-}
-
-func swapMacroExample() {
-
-	_, pattern := exhumer.Parse(strings.NewReader("(swap x y)"))
-	_, body := exhumer.Parse(strings.NewReader("(let ((tmp x)) (set! x y) (set! y tmp))"))
-	_, code := exhumer.Parse(strings.NewReader("(swap foo bar)"))
-
-	macro := Macro{Pattern: pattern.Expressions.(e.List).First(), Body: body.Expressions.(e.List).First()}
-	_, bound := macro.Matches(code.Expressions.(e.List).First())
-
-	res := macro.ExpandHygienic(bound, 0)
-	fmt.Println(res.Repr())
-	// Output:
-	// (let ((tmp foo)) (set! foo bar) (set! bar tmp))
-}
-
-func TestMacroTransform(t *testing.T) {
-	cases := []struct {
-		in      string
-		pattern string
-		body    string
-		out     string
-	}{
-		{
-			`(define (foo x) x)`, `(define (f . params) . bdy)`, `(define f (lambda params . bdy))`, `(define foo (lambda (x) x))`,
-		},
-	}
-	for _, c := range cases {
-		patternOk, pattern := exhumer.Parse(strings.NewReader(c.pattern))
-		if patternOk != 0 {
-			t.Fatal("Parsing pattern failed")
-		}
-
-		bodyOk, body := exhumer.Parse(strings.NewReader(c.body))
-		if bodyOk != 0 {
-			t.Fatal("Parsing pattern failed")
-		}
-
-		macro := Macro{Pattern: pattern.Expressions.First(), Body: body.Expressions.First()}
-
-		codeOk, code := exhumer.Parse(strings.NewReader(c.in))
-
-		if codeOk != 0 {
-			t.Fatal("Parsing code failed")
-		}
-
-		bindOk, bound := macro.Matches(code.Expressions.(e.List).First())
-
-		if !bindOk {
-			t.Errorf("Could not bind %s to patterns in %s", c.in, c.pattern)
-		}
-
-		res := macro.ExpandHygienic(bound, 0)
-
-		if res.Repr() != c.out {
-			t.Errorf("Expansion of %s did not give expected result %s, instead got %+v", c.in, c.out, res.Repr())
-		}
-	}
-}
-
-// b creates a bindings struct with only single (non-repeated) vars for test convenience.
-func b(pairs ...interface{}) bindings {
-	result := newBindings()
-	for i := 0; i < len(pairs); i += 2 {
-		key := pairs[i].(e.Identifier)
-		val := pairs[i+1].(e.Expr)
-		result.vars[key] = val
-	}
-	return result
-}
-
-func runBindingTest(t *testing.T, in string, patternStr string, bound bindings) {
-
-	patternOk, pattern := exhumer.Parse(strings.NewReader(patternStr))
-	if patternOk != 0 {
-		t.Fatalf("Parsing pattern '%s' failed", pattern)
-	}
-
-	macro := Macro{Pattern: pattern.Expressions.First()}
-
-	parseOk, parseRes := exhumer.Parse(strings.NewReader(in))
-
-	if parseOk != 0 {
-		t.Fatalf("Parsing code %s failed", in)
-	}
-	_, result := macro.Matches(parseRes.Expressions.First())
-	if len(result.vars) != len(bound.vars) {
-		t.Errorf(`Macro %s did not bind correctly for %s. Expected %d bindings got %d`,
-			patternStr, in, len(bound.vars), len(result.vars))
-	}
-
-	for k, expectedValue := range bound.vars {
-		value := result.vars[k]
-		if value == nil {
-			t.Errorf("Expected value %s for key %s in %s using %s, but got nil!", expectedValue.Repr(), k.Repr(), in, patternStr)
-		} else if !expectedValue.Equiv(value) {
-			t.Errorf("Expected value %s for key %s in %s using %s in bindings, got %s",
-				expectedValue.Repr(), k.Repr(), in, patternStr, value.Repr())
-		}
-	}
-
-	for k, value := range result.vars {
-		if !value.Equiv(bound.vars[k]) {
-			t.Errorf("Found value %s for key %s in macro bindings that is not present in the expected bindings", value.Repr(), k)
-		}
+	if result != nil {
+		t.Error("expected nil result on no match")
 	}
 }

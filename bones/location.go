@@ -6,37 +6,6 @@ import (
 	"strings"
 )
 
-func TypeName(expr Expr) string {
-	switch expr.(type) {
-	case Boolean:
-		return "boolean"
-	case Integer:
-		return "integer"
-	case Float:
-		return "float"
-	case String:
-		return "string"
-	case Identifier:
-		return "identifier"
-	case ScopedIdentifier:
-		return "identifier"
-	case *Quote:
-		return "quoted expression"
-	case *Pair:
-		return "list"
-	case Pair:
-		return "list"
-	case nilList:
-		return "empty list"
-	case *Foreign:
-		return "foreign value"
-	case Foreign:
-		return "foreign value"
-	default:
-		return "unknown"
-	}
-}
-
 type CodeLocation interface {
 	Line() int
 	Column() int
@@ -69,13 +38,14 @@ func (sp *SourcePosition) SourceContext() string {
 	if strings.TrimSpace(lines[sp.Ln-1]) == "" {
 		return ""
 	}
-	return sourceContext(lines, sp.Ln, sp.Col)
+	return sourceContextImpl(lines, sp.Ln, sp.Col)
 }
 
-// sourceContext builds a source snippet showing the error line with a caret,
-// the enclosing expression (found by scanning backwards for unmatched parens),
-// and up to 2 lines after the error.
-func sourceContext(lines []string, errorLine int, errorCol int) string {
+func SourceContextFromLines(lines []string, errorLine int, errorCol int) string {
+	return sourceContextImpl(lines, errorLine, errorCol)
+}
+
+func sourceContextImpl(lines []string, errorLine int, errorCol int) string {
 	if len(lines) == 0 || errorLine < 1 || errorLine > len(lines) {
 		return ""
 	}
@@ -104,9 +74,6 @@ func sourceContext(lines []string, errorLine int, errorCol int) string {
 	return b.String()
 }
 
-// findEnclosingExprStart scans backwards from the error line, counting
-// parens to find where an enclosing expression starts. Continues up
-// to 2 nesting levels to give broader context.
 func findEnclosingExprStart(lines []string, errorLine int) int {
 	depth := 0
 	enclosingsFound := 0

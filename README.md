@@ -31,7 +31,7 @@ TODO: Use `def` instead of `define`?
 ~~TODO: Implement pathological macros (like in racket macro docs 16.1), e.g. (swap tmp other).~~
 TODO: Clean up tests into separate files with distinct areas
 ~~TODO: Implement an error printer~~
-TODO: Make `Pair` struct private and replace usages with a `Cons(Expr, Expr)` function returning a `*pair`.
+~~TODO: Make `Pair` struct private and replace usages with a `Cons(Expr, Expr)` function returning a `*pair`.~~
 ~~TODO: Make `List.Tail()` return `(List, bool)` and move usages of `tail()` to that~~
 ~~TODO: Make `Pair` interface have a `First() Expr` and `Second() Expr` method.~~
 TODO: Replace `cond` with `match` keyword and have it use pattern matching.
@@ -40,20 +40,20 @@ TODO: Implement a symbol table and use integers instead of strings to compare/fi
 
 ## Package Structure
 
-The ghoul feeds in three phases: **exhume** (parse) → **reanimate** (expand macros) → **consume** (evaluate).
+The ghoul feeds in three phases: **exhume** (parse) → **reanimate** (expand macros + translate to AST) → **consume** (evaluate).
 
 All packages follow an undead/occult naming theme:
 
 | Package | Role |
 |---------|------|
 | `ghoul` | The creature itself — public API orchestrating the three phases |
-| `bones` | The skeletal structure — expression types (`Pair`, `Identifier`, etc.) |
+| `bones` | The unified `*Node` type — AST nodes, values, and runtime data |
 | `exhumer` | Digs up structure from raw text — lexer and parser |
-| `reanimator` | Brings macros to life — expansion phase before evaluation |
+| `reanimator` | Brings macros to life — expansion + translation to semantic AST |
 | `consume` | How the ghoul feeds — CPS evaluator with tail call optimization |
 | `macromancy` | The dark arts — macro pattern matching and hygienic expansion |
 | `tome` | The book of spells — standard library functions |
 | `engraving` | Carved records — logging |
-| `mummy` | Wraps Go values for use in Ghoul |
+| `mummy` | FFI type registry for wraith-generated sarcophagi |
 | `wraith` | Possesses Go packages and generates sarcophagi (FFI wrappers) |
 | `prelude` | Standard macros: `let`, `let*`, `when`, `unless`, `syntax-case` |

@@ -3,28 +3,28 @@ package tome
 import (
 	"fmt"
 
-	ev "github.com/archevel/ghoul/consume"
 	e "github.com/archevel/ghoul/bones"
+	ev "github.com/archevel/ghoul/consume"
 )
 
 func registerIO(env *ev.Environment) {
-	env.Register("println", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		fst, ok := args.First().(e.String)
-		if ok {
-			fmt.Println(fst)
+	env.Register("println", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		fst := args[0]
+		if fst.Kind == e.StringNode {
+			fmt.Println(fst.StrVal)
 		} else {
-			fmt.Println(args.First().Repr())
+			fmt.Println(fst.Repr())
 		}
-		return e.NIL, nil
+		return e.Nil, nil
 	})
 
-	env.Register("print", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		fst, ok := args.First().(e.String)
-		if ok {
-			fmt.Print(fst)
+	env.Register("print", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		fst := args[0]
+		if fst.Kind == e.StringNode {
+			fmt.Print(fst.StrVal)
 		} else {
-			fmt.Print(args.First().Repr())
+			fmt.Print(fst.Repr())
 		}
-		return e.NIL, nil
+		return e.Nil, nil
 	})
 }

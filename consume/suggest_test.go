@@ -37,8 +37,8 @@ func TestLevenshteinDistance(t *testing.T) {
 
 func TestSuggestIdentifiersFindsClosestMatch(t *testing.T) {
 	env := NewEnvironment()
-	bindIdentifier(e.Identifier("println"), e.Integer(1), env)
-	bindIdentifier(e.Identifier("print"), e.Integer(2), env)
+	bindNode(e.IdentNode("println"), e.IntNode(1), env)
+	bindNode(e.IdentNode("print"), e.IntNode(2), env)
 
 	suggestions := suggestIdentifiers("printl", env)
 	if len(suggestions) != 2 {
@@ -48,7 +48,7 @@ func TestSuggestIdentifiersFindsClosestMatch(t *testing.T) {
 
 func TestSuggestIdentifiersReturnsNilForDistantNames(t *testing.T) {
 	env := NewEnvironment()
-	bindIdentifier(e.Identifier("callback"), e.Integer(1), env)
+	bindNode(e.IdentNode("callback"), e.IntNode(1), env)
 
 	suggestions := suggestIdentifiers("xyz", env)
 	if len(suggestions) != 0 {
@@ -58,8 +58,8 @@ func TestSuggestIdentifiersReturnsNilForDistantNames(t *testing.T) {
 
 func TestSuggestIdentifiersOnlyShowsMinimumDistance(t *testing.T) {
 	env := NewEnvironment()
-	bindIdentifier(e.Identifier("define"), e.Integer(1), env)
-	bindIdentifier(e.Identifier("begin"), e.Integer(2), env)
+	bindNode(e.IdentNode("define"), e.IntNode(1), env)
+	bindNode(e.IdentNode("begin"), e.IntNode(2), env)
 
 	// "defin" is distance 1 from "define", distance 2 from "begin"
 	suggestions := suggestIdentifiers("defin", env)
@@ -73,11 +73,11 @@ func TestSuggestIdentifiersOnlyShowsMinimumDistance(t *testing.T) {
 
 func TestSuggestIdentifiersInnerScopeFirst(t *testing.T) {
 	env := NewEnvironment()
-	bindIdentifier(e.Identifier("foo"), e.Integer(1), env)
+	bindNode(e.IdentNode("foo"), e.IntNode(1), env)
 
 	// Add inner scope with "fool"
 	inner := newEnvWithEmptyScope(env)
-	bindIdentifier(e.Identifier("fool"), e.Integer(2), inner)
+	bindNode(e.IdentNode("fool"), e.IntNode(2), inner)
 
 	// Both are distance 1 from "fooo", but "fool" is in the closer scope
 	suggestions := suggestIdentifiers("fooo", inner)
@@ -94,10 +94,10 @@ func TestSuggestIdentifiersInnerScopeFirst(t *testing.T) {
 
 func TestSuggestIdentifiersCapsAtThree(t *testing.T) {
 	env := NewEnvironment()
-	bindIdentifier(e.Identifier("aa"), e.Integer(1), env)
-	bindIdentifier(e.Identifier("ab"), e.Integer(2), env)
-	bindIdentifier(e.Identifier("ac"), e.Integer(3), env)
-	bindIdentifier(e.Identifier("ad"), e.Integer(4), env)
+	bindNode(e.IdentNode("aa"), e.IntNode(1), env)
+	bindNode(e.IdentNode("ab"), e.IntNode(2), env)
+	bindNode(e.IdentNode("ac"), e.IntNode(3), env)
+	bindNode(e.IdentNode("ad"), e.IntNode(4), env)
 
 	// All are distance 1 from "a"
 	suggestions := suggestIdentifiers("a", env)
@@ -108,8 +108,8 @@ func TestSuggestIdentifiersCapsAtThree(t *testing.T) {
 
 func TestSuggestIdentifiersIgnoresMarksOnScopedIdentifiers(t *testing.T) {
 	env := NewEnvironment()
-	si := e.ScopedIdentifier{Name: "println", Marks: map[uint64]bool{1: true}}
-	bindIdentifier(si, e.Integer(1), env)
+	si := e.ScopedIdentNode("println", map[uint64]bool{1: true})
+	bindNode(si, e.IntNode(1), env)
 
 	suggestions := suggestIdentifiers("printl", env)
 	if len(suggestions) != 1 || suggestions[0] != "println" {
@@ -119,11 +119,11 @@ func TestSuggestIdentifiersIgnoresMarksOnScopedIdentifiers(t *testing.T) {
 
 func TestUndefinedIdentifierErrorIncludesSuggestion(t *testing.T) {
 	env := NewEnvironment()
-	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
-		return e.NIL, nil
+	env.Register("+", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		return e.Nil, nil
 	})
-	env.Register("println", func(args e.List, ev *Evaluator) (e.Expr, error) {
-		return e.NIL, nil
+	env.Register("println", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		return e.Nil, nil
 	})
 
 	r := strings.NewReader("(printl 1)")
@@ -142,8 +142,8 @@ func TestUndefinedIdentifierErrorIncludesSuggestion(t *testing.T) {
 
 func TestUndefinedIdentifierNoSuggestionWhenNothingClose(t *testing.T) {
 	env := NewEnvironment()
-	env.Register("println", func(args e.List, ev *Evaluator) (e.Expr, error) {
-		return e.NIL, nil
+	env.Register("println", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		return e.Nil, nil
 	})
 
 	r := strings.NewReader("(xyzzy 1)")
@@ -159,11 +159,11 @@ func TestUndefinedIdentifierNoSuggestionWhenNothingClose(t *testing.T) {
 
 func TestUndefinedIdentifierMultipleSuggestions(t *testing.T) {
 	env := NewEnvironment()
-	env.Register("print", func(args e.List, ev *Evaluator) (e.Expr, error) {
-		return e.NIL, nil
+	env.Register("print", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		return e.Nil, nil
 	})
-	env.Register("println", func(args e.List, ev *Evaluator) (e.Expr, error) {
-		return e.NIL, nil
+	env.Register("println", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		return e.Nil, nil
 	})
 
 	r := strings.NewReader("(printl 1)")

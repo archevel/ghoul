@@ -1,13 +1,5 @@
 package mummy
 
-import (
-	e "github.com/archevel/ghoul/bones"
-)
-
-// Registrar is the function signature for registering a Ghoul function by name.
-// This avoids importing the evaluator package directly, breaking import cycles.
-type Registrar func(name string, fn func(e.List, ...interface{}) (e.Expr, error))
-
 type SarcophagusEntry struct {
 	Names    []string
 	Register func(prefix string, only map[string]bool, register func(string, interface{}))

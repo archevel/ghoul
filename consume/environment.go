@@ -16,24 +16,24 @@ type scopeKey struct {
 	MarksKey string
 }
 
-func keyFromIdentifier(id e.Identifier) scopeKey {
-	return scopeKey{Name: string(id), MarksKey: ""}
+func keyFromName(name string) scopeKey {
+	return scopeKey{Name: name, MarksKey: ""}
 }
 
-func keyFromScopedIdentifier(si e.ScopedIdentifier) scopeKey {
-	return scopeKey{Name: string(si.Name), MarksKey: canonicalMarks(si.Marks)}
+func keyFromNameAndMarks(name string, marks map[uint64]bool) scopeKey {
+	return scopeKey{Name: name, MarksKey: canonicalMarks(marks)}
 }
 
-func keyFromExpr(variable e.Expr) (scopeKey, bool) {
-	switch v := variable.(type) {
-	case e.Identifier:
-		return keyFromIdentifier(v), true
-	case e.ScopedIdentifier:
-		return keyFromScopedIdentifier(v), true
-	default:
-		return scopeKey{}, false
+func keyFromNode(node *e.Node) (scopeKey, bool) {
+	if node.Kind == e.IdentifierNode {
+		if len(node.Marks) > 0 {
+			return keyFromNameAndMarks(node.Name, node.Marks), true
+		}
+		return keyFromName(node.Name), true
 	}
+	return scopeKey{}, false
 }
+
 
 func canonicalMarks(marks map[uint64]bool) string {
 	if len(marks) == 0 {
@@ -51,7 +51,7 @@ func canonicalMarks(marks map[uint64]bool) string {
 	return strings.Join(parts, ",")
 }
 
-type scope map[scopeKey]e.Expr
+type scope map[scopeKey]*e.Node
 
 type Environment = environment
 type environment []*scope
@@ -60,99 +60,84 @@ func NewEnvironment() *environment {
 	return newEnvWithEmptyScope(&environment{})
 }
 
-// BoundIdentifierNames returns a map of all identifiers currently bound in
-// the environment, plus special form keywords. Used during macro definition
-// to determine which template identifiers should NOT receive hygiene marks.
-func (env environment) BoundIdentifierNames() map[e.Identifier]bool {
-	result := map[e.Identifier]bool{
-		e.Identifier("cond"):          true,
-		e.Identifier("else"):          true,
-		e.Identifier("begin"):         true,
-		e.Identifier("lambda"):        true,
-		e.Identifier("define"):        true,
-		e.Identifier("set!"):          true,
-		e.Identifier("define-syntax"): true,
-		e.Identifier("syntax-rules"):  true,
-		e.Identifier("quote"):         true,
-		e.Identifier("require"):       true,
+// BoundIdentifierNames returns a map of all identifier names currently bound
+// in the environment, plus special form keywords.
+func (env environment) BoundIdentifierNames() map[string]bool {
+	result := map[string]bool{
+		"cond": true, "else": true, "begin": true, "lambda": true,
+		"define": true, "set!": true, "define-syntax": true,
+		"syntax-rules": true, "quote": true, "require": true,
 	}
 	for i := range env {
 		for key := range *env[i] {
 			if key.MarksKey == "" {
-				result[e.Identifier(key.Name)] = true
+				result[key.Name] = true
 			}
 		}
 	}
 	return result
 }
 
-func (env environment) Register(name string, f func(e.List, *Evaluator) (e.Expr, error)) {
-	bindFuncAtBottomAs(e.Identifier(name), Function{&f}, &env)
+func (env environment) Register(name string, f func([]*e.Node, *Evaluator) (*e.Node, error)) {
+	scope := bottomScope(&env)
+	wrapped := func(args []*e.Node, ev e.Evaluator) (*e.Node, error) {
+		return f(args, ev.(*Evaluator))
+	}
+	(*scope)[keyFromName(name)] = e.FuncNode(wrapped)
 }
 
-func bindFuncAtBottomAs(id e.Identifier, fun Function, env *environment) {
+func RegisterFuncAs(name string, f func([]*e.Node, *Evaluator) (*e.Node, error), env *environment) {
 	scope := bottomScope(env)
-	(*scope)[keyFromIdentifier(id)] = fun
+	wrapped := func(args []*e.Node, ev e.Evaluator) (*e.Node, error) {
+		return f(args, ev.(*Evaluator))
+	}
+	(*scope)[keyFromName(name)] = e.FuncNode(wrapped)
 }
 
-func RegisterFuncAs(name string, f func(e.List, *Evaluator) (e.Expr, error), env *environment) {
-	bindFuncAtBottomAs(e.Identifier(name), Function{&f}, env)
-}
-
-
-func bindIdentifier(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
-	key, ok := keyFromExpr(variable)
+func bindNode(variable *e.Node, value *e.Node, env *environment) (*e.Node, error) {
+	key, ok := keyFromNode(variable)
 	if !ok {
 		return nil, fmt.Errorf("define: bad syntax, no valid identifier given in %s", variable.Repr())
 	}
-
 	scope := currentScope(env)
 	(*scope)[key] = value
-
 	return value, nil
 }
 
-func assign(variable e.Expr, value e.Expr, env *environment) (e.Expr, error) {
-	key, ok := keyFromExpr(variable)
+func assignByName(variable *e.Node, value *e.Node, env *environment) (*e.Node, error) {
+	key, ok := keyFromNode(variable)
 	if !ok {
-		return nil, fmt.Errorf("set!: expected an identifier, got %s", e.TypeName(variable))
+		return nil, fmt.Errorf("set!: expected an identifier, got %s", e.NodeTypeName(variable))
 	}
-
 	for i := len(*env) - 1; i >= 0; i-- {
 		scope := (*env)[i]
-		_, ok := (*scope)[key]
-		if ok {
+		if _, ok := (*scope)[key]; ok {
 			(*scope)[key] = value
 			return value, nil
 		}
 	}
-
 	return nil, fmt.Errorf("set!: assignment disallowed for identifier %s", key.Name)
 }
 
-func lookupIdentifier(ident e.Expr, env *environment) (e.Expr, error) {
-	key, ok := keyFromExpr(ident)
+func lookupNode(ident *e.Node, env *environment) (*e.Node, error) {
+	key, ok := keyFromNode(ident)
 	if !ok {
 		return nil, fmt.Errorf("undefined identifier: %s", ident.Repr())
 	}
 
 	for i := len(*env) - 1; i >= 0; i-- {
 		scope := (*env)[i]
-		res, ok := (*scope)[key]
-		if ok {
+		if res, ok := (*scope)[key]; ok {
 			return res, nil
 		}
 	}
 
-	// A macro-introduced reference to an existing binding (e.g. a built-in)
-	// carries marks from expansion but the binding was created without marks.
-	// Fall back to name-only lookup so these references resolve correctly.
+	// Fall back to name-only lookup for macro-introduced references
 	if key.MarksKey != "" {
 		plainKey := scopeKey{Name: key.Name, MarksKey: ""}
 		for i := len(*env) - 1; i >= 0; i-- {
 			scope := (*env)[i]
-			res, ok := (*scope)[plainKey]
-			if ok {
+			if res, ok := (*scope)[plainKey]; ok {
 				return res, nil
 			}
 		}
@@ -162,8 +147,8 @@ func lookupIdentifier(ident e.Expr, env *environment) (e.Expr, error) {
 	return nil, fmt.Errorf("undefined identifier: %s%s", key.Name, suggestion)
 }
 
-func (env environment) LookupByName(name string) (e.Expr, error) {
-	return lookupIdentifier(e.Identifier(name), &env)
+func (env environment) LookupByName(name string) (*e.Node, error) {
+	return lookupNode(e.IdentNode(name), &env)
 }
 
 // newModuleEnvironment creates a fresh environment that shares the builtins
@@ -174,12 +159,12 @@ func newModuleEnvironment(parent *environment) *environment {
 	return &newEnv
 }
 
-// extractExports returns all bindings from the top scope (not builtins).
-func extractExports(env *environment) *ModuleExports {
+// ExtractExports returns all bindings from the top scope (not builtins).
+func ExtractExports(env *environment) *ModuleExports {
 	topScope := currentScope(env)
 	exports := &ModuleExports{
 		Names:    make([]string, 0, len(*topScope)),
-		Bindings: make(map[string]e.Expr, len(*topScope)),
+		Bindings: make(map[string]*e.Node, len(*topScope)),
 	}
 	for key, val := range *topScope {
 		exports.Names = append(exports.Names, key.Name)
@@ -189,10 +174,6 @@ func extractExports(env *environment) *ModuleExports {
 }
 
 func newEnvWithEmptyScope(env *environment) *environment {
-	// Copy the slice to avoid aliasing the underlying array.
-	// Without this, multiple calls to newEnvWithEmptyScope with the same
-	// parent env can overwrite each other's scopes when the parent slice
-	// has spare capacity.
 	copied := make(environment, len(*env), len(*env)+1)
 	copy(copied, *env)
 	newEnv := append(copied, &scope{})

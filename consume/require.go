@@ -2,44 +2,41 @@ package consume
 
 import (
 	"fmt"
-	"os"
 
-	e "github.com/archevel/ghoul/bones"
+	"github.com/archevel/ghoul/bones"
 	"github.com/archevel/ghoul/mummy"
-	"github.com/archevel/ghoul/exhumer"
 )
 
-// requireContinuationFor handles (require module), (require module as alias),
-// (require module only (name ...)), and (require module as alias only (name ...)).
-func requireContinuationFor(args e.List) continuation {
-	return func(arg e.Expr, ev *Evaluator) (e.Expr, error) {
-		if args == e.NIL {
-			return e.NIL, NewEvaluationError("require: module name required", args)
+// requireContinuation handles (require module ...) with Node-based args.
+func requireContinuation(args []*bones.Node) continuation {
+	return func(arg *bones.Node, ev *Evaluator) (*bones.Node, error) {
+		if len(args) == 0 {
+			return bones.Nil, EvaluationError{msg: "require: module name required"}
 		}
 
-		moduleName, ok := args.First().(e.Identifier)
-		if !ok {
-			return e.NIL, NewEvaluationError("require: module name must be an identifier", args)
+		moduleName := args[0].IdentName()
+		if moduleName == "" {
+			return bones.Nil, EvaluationError{msg: "require: module name must be an identifier"}
 		}
 
 		alias, only, err := parseRequireOptions(args)
 		if err != nil {
-			return e.NIL, err
+			return bones.Nil, err
 		}
 
-		prefix := string(moduleName)
+		prefix := moduleName
 		if alias != "" {
 			prefix = alias
 		}
 
 		// Try Go sarcophagus first
-		entry := mummy.LookupSarcophagus(string(moduleName))
+		entry := mummy.LookupSarcophagus(moduleName)
 		if entry != nil {
-			requireKey := string(moduleName) + ":" + prefix
+			requireKey := moduleName + ":" + prefix
 			if ev.requiredModules[requireKey] {
-				return e.NIL, nil
+				return bones.Nil, nil
 			}
-			result, err := requireSarcophagus(entry, prefix, only, ev, args)
+			result, err := requireSarcophagus(entry, prefix, only, ev)
 			if err == nil {
 				ev.requiredModules[requireKey] = true
 			}
@@ -48,74 +45,61 @@ func requireContinuationFor(args e.List) continuation {
 
 		// Try Ghoul file module
 		if ev.moduleState != nil {
-			return requireGhoulModule(string(moduleName), prefix, only, ev, args)
+			return requireGhoulModule(moduleName, prefix, only, ev)
 		}
 
-		return e.NIL, NewEvaluationError(fmt.Sprintf("require: module '%s' not found", moduleName), args)
+		return bones.Nil, EvaluationError{msg: fmt.Sprintf("require: module '%s' not found", moduleName)}
 	}
 }
 
-func parseRequireOptions(args e.List) (alias string, only map[string]bool, err error) {
-	rest := args.Second()
-
-	for rest != e.NIL {
-		restList, ok := rest.(e.List)
-		if !ok {
-			break
-		}
-		keyword, ok := restList.First().(e.Identifier)
-		if !ok {
-			break
-		}
-
+func parseRequireOptions(args []*bones.Node) (alias string, only map[string]bool, err error) {
+	i := 1 // skip module name
+	for i < len(args) {
+		keyword := args[i].IdentName()
 		switch keyword {
-		case e.Identifier("as"):
-			tail, ok := restList.Tail()
-			if !ok || tail == e.NIL {
-				return "", nil, NewEvaluationError("require: expected alias after 'as'", args)
+		case "as":
+			i++
+			if i >= len(args) {
+				return "", nil, EvaluationError{msg: "require: expected alias after 'as'"}
 			}
-			aliasId, ok := tail.First().(e.Identifier)
-			if !ok {
-				return "", nil, NewEvaluationError("require: alias must be an identifier", args)
+			alias = args[i].IdentName()
+			if alias == "" {
+				return "", nil, EvaluationError{msg: "require: alias must be an identifier"}
 			}
-			alias = string(aliasId)
-			rest = tail.Second()
-		case e.Identifier("only"):
-			tail, ok := restList.Tail()
-			if !ok || tail == e.NIL {
-				return "", nil, NewEvaluationError("require: expected name list after 'only'", args)
+			i++
+		case "only":
+			i++
+			if i >= len(args) {
+				return "", nil, EvaluationError{msg: "require: expected name list after 'only'"}
 			}
-			nameList, ok := tail.First().(e.List)
-			if !ok {
-				return "", nil, NewEvaluationError("require: 'only' must be followed by a list of names", args)
+			nameList := args[i]
+			if nameList.Kind != bones.ListNode {
+				return "", nil, EvaluationError{msg: "require: 'only' must be followed by a list of names"}
 			}
 			only = map[string]bool{}
-			for nameList != e.NIL {
-				nameId, ok := nameList.First().(e.Identifier)
-				if !ok {
-					return "", nil, NewEvaluationError("require: 'only' list must contain identifiers", args)
+			for _, child := range nameList.Children {
+				name := child.IdentName()
+				if name == "" {
+					return "", nil, EvaluationError{msg: "require: 'only' list must contain identifiers"}
 				}
-				only[string(nameId)] = true
-				nameList, _ = nameList.Tail()
+				only[name] = true
 			}
-			rest = tail.Second()
+			i++
 		default:
-			return "", nil, NewEvaluationError(fmt.Sprintf("require: unexpected keyword '%s'", keyword), args)
+			return "", nil, EvaluationError{msg: fmt.Sprintf("require: unexpected keyword '%s'", keyword)}
 		}
 	}
-
 	return alias, only, nil
 }
 
-func checkNameConflict(qualifiedName string, ev *Evaluator, args e.List) error {
-	if _, err := lookupIdentifier(e.Identifier(qualifiedName), ev.env); err == nil {
-		return NewEvaluationError(
-			fmt.Sprintf("require: name '%s' already defined", qualifiedName), args)
+func checkNameConflict(qualifiedName string, ev *Evaluator) error {
+	if _, err := lookupNode(bones.IdentNode(qualifiedName), ev.env); err == nil {
+		return EvaluationError{msg: fmt.Sprintf("require: name '%s' already defined", qualifiedName)}
 	}
 	return nil
 }
 
-func requireSarcophagus(entry *mummy.SarcophagusEntry, prefix string, only map[string]bool, ev *Evaluator, args e.List) (e.Expr, error) {
+func requireSarcophagus(entry *mummy.SarcophagusEntry, prefix string, only map[string]bool, ev *Evaluator) (*bones.Node, error) {
 	namesToRegister := entry.Names
 	if only != nil {
 		namesToRegister = make([]string, 0)
@@ -126,89 +110,66 @@ func requireSarcophagus(entry *mummy.SarcophagusEntry, prefix string, only map[s
 		}
 	}
 	for _, name := range namesToRegister {
-		if err := checkNameConflict(prefix+":"+name, ev, args); err != nil {
-			return e.NIL, err
+		if err := checkNameConflict(prefix+":"+name, ev); err != nil {
+			return bones.Nil, err
 		}
 	}
 
 	register := func(name string, fn interface{}) {
-		if ghoulFn, ok := fn.(func(e.List, *Evaluator) (e.Expr, error)); ok {
-			bindIdentifier(e.Identifier(name), Function{&ghoulFn}, ev.env)
+		if newFn, ok := fn.(func([]*bones.Node, *Evaluator) (*bones.Node, error)); ok {
+			wrapped := func(args []*bones.Node, ev bones.Evaluator) (*bones.Node, error) {
+				return newFn(args, ev.(*Evaluator))
+			}
+			bindNode(bones.IdentNode(name), bones.FuncNode(wrapped), ev.env)
 		}
 	}
 	entry.Register(prefix, only, register)
-	return e.NIL, nil
+	return bones.Nil, nil
 }
 
-func requireGhoulModule(moduleName string, prefix string, only map[string]bool, ev *Evaluator, args e.List) (e.Expr, error) {
+func requireGhoulModule(moduleName string, prefix string, only map[string]bool, ev *Evaluator) (*bones.Node, error) {
 	filePath, err := ev.moduleState.ResolveFile(moduleName)
 	if err != nil {
-		return e.NIL, WrapError(fmt.Sprintf("require: %s", err), args, err)
+		return bones.Nil, EvaluationError{msg: fmt.Sprintf("require: %s", err)}
 	}
 
-	// Check cache
 	if cached := ev.moduleState.GetCached(filePath); cached != nil {
-		return registerModuleExports(cached, prefix, only, ev, args)
+		return registerModuleExports(cached, prefix, only, ev)
 	}
 
-	// Check cycles
 	if err := ev.moduleState.CheckCycle(filePath); err != nil {
-		return e.NIL, WrapError(fmt.Sprintf("require: %s", err), args, err)
+		return bones.Nil, EvaluationError{msg: fmt.Sprintf("require: %s", err)}
 	}
 
-	// Load and parse the file.
-	// The Open error path is not covered by tests because ResolveFile already
-	// verifies the file exists via os.Stat, so Open only fails in unusual
-	// conditions (permission changes, filesystem errors) that are hard to
-	// reproduce reliably in tests.
-	f, err := os.Open(filePath)
-	if err != nil {
-		return e.NIL, WrapError(fmt.Sprintf("require: failed to open %s: %s", filePath, err), args, err)
-	}
-	defer f.Close()
-
-	parseRes, parsed := exhumer.ParseWithFilename(f, &filePath)
-	if parseRes != 0 {
-		return e.NIL, NewEvaluationError(fmt.Sprintf("require: failed to parse %s", filePath), args)
+	if ev.moduleLoader == nil {
+		return bones.Nil, EvaluationError{msg: "require: no module loader configured"}
 	}
 
-	// Evaluate in a fresh module environment sharing builtins
-	moduleEnv := newModuleEnvironment(ev.env)
 	childState := ev.moduleState.ForChild(filePath)
 	childState.BeginLoading(filePath)
 
-	moduleEval := &Evaluator{
-		log:             ev.log,
-		env:             moduleEnv,
-		requiredModules: map[string]bool{},
-		moduleState:     childState,
-		markCounter:     ev.markCounter,
-	}
-
-	_, err = moduleEval.Evaluate(parsed.Expressions)
+	moduleEnv := newModuleEnvironment(ev.env)
+	exports, err := ev.moduleLoader(filePath, moduleEnv, childState)
 	childState.FinishLoading(filePath)
 	if err != nil {
-		return e.NIL, WrapError(fmt.Sprintf("require: error in module %s: %s", moduleName, err), args, err)
+		return bones.Nil, EvaluationError{msg: fmt.Sprintf("require: error in module %s: %s", moduleName, err)}
 	}
 
-	// Extract top-level bindings as exports
-	exports := extractExports(moduleEnv)
 	ev.moduleState.CacheModule(filePath, exports)
-
-	return registerModuleExports(exports, prefix, only, ev, args)
+	return registerModuleExports(exports, prefix, only, ev)
 }
 
-func registerModuleExports(exports *ModuleExports, prefix string, only map[string]bool, ev *Evaluator, args e.List) (e.Expr, error) {
+func registerModuleExports(exports *ModuleExports, prefix string, only map[string]bool, ev *Evaluator) (*bones.Node, error) {
 	for _, name := range exports.Names {
 		if only != nil && !only[name] {
 			continue
 		}
 		qualifiedName := prefix + ":" + name
-		if err := checkNameConflict(qualifiedName, ev, args); err != nil {
-			return e.NIL, err
+		if err := checkNameConflict(qualifiedName, ev); err != nil {
+			return bones.Nil, err
 		}
-		bindIdentifier(e.Identifier(qualifiedName), exports.Bindings[name], ev.env)
+		bindNode(bones.IdentNode(qualifiedName), exports.Bindings[name], ev.env)
 	}
 	ev.requiredModules[prefix+":ghoul"] = true
-	return e.NIL, nil
+	return bones.Nil, nil
 }

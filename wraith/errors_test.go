@@ -141,9 +141,9 @@ func TestResultHandlingVoidFunction(t *testing.T) {
 	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
 	code := string(content)
 
-	// SetAge is void — should return e.NIL
-	if !strings.Contains(code, "e.NIL, nil") {
-		t.Error("expected e.NIL return for void function")
+	// SetAge is void — should return e.Nil
+	if !strings.Contains(code, "e.Nil, nil") {
+		t.Error("expected e.Nil return for void function")
 	}
 }
 
@@ -277,7 +277,7 @@ func TestVariadicFunctionGeneratesArgCollection(t *testing.T) {
 	code := string(content)
 
 	// The variadic wrapper should collect remaining args into a slice
-	if !strings.Contains(code, "for args != e.NIL") {
+	if !strings.Contains(code, "for argIdx < len(args)") {
 		t.Errorf("expected arg collection loop for variadic function, got:\n%s", code)
 	}
 }
@@ -361,10 +361,10 @@ func TestTypeAliasParametersWrappedAsPrimitives(t *testing.T) {
 	}
 	funcBody := code[idx : idx+300]
 	if strings.Contains(funcBody, "*mummy.Mummy") {
-		t.Errorf("type alias for int should use Integer assertion, not mummy:\n%s", funcBody)
+		t.Errorf("type alias for int should use IntegerNode check, not mummy:\n%s", funcBody)
 	}
-	if !strings.Contains(funcBody, "e.Integer") {
-		t.Errorf("type alias for int should use e.Integer assertion:\n%s", funcBody)
+	if !strings.Contains(funcBody, "e.IntegerNode") {
+		t.Errorf("type alias for int should use e.IntegerNode check:\n%s", funcBody)
 	}
 }
 
@@ -388,8 +388,8 @@ func TestNamedFunctionTypeParameterWrappedAsCallback(t *testing.T) {
 	if !strings.Contains(code, "applytransform") {
 		t.Error("expected applytransform function to be generated")
 	}
-	if !strings.Contains(code, "ghoulEval.Function") {
-		t.Error("expected Function assertion for named function type")
+	if !strings.Contains(code, "FuncVal") {
+		t.Error("expected FuncVal check for named function type")
 	}
 }
 
@@ -413,8 +413,8 @@ func TestUnexportedReturnTypeWrappedAsMummy(t *testing.T) {
 	if !strings.Contains(code, "makeresult") {
 		t.Error("expected makeresult function to be generated")
 	}
-	if !strings.Contains(code, "mummy.Entomb") {
-		t.Error("expected mummy.Entomb for unexported return type")
+	if !strings.Contains(code, "MummyNodeVal") {
+		t.Error("expected MummyNodeVal for unexported return type")
 	}
 
 	// GetResultValue takes *result (unexported) — should be skipped

@@ -10,8 +10,8 @@ import (
 )
 
 func registerTestModule() {
-	dummyFunc := func(args e.List, ev *Evaluator) (e.Expr, error) {
-		return e.Integer(42), nil
+	dummyFunc := func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		return e.IntNode(42), nil
 	}
 	mummy.RegisterSarcophagus("testmod", "github.com/example/testmod", &mummy.SarcophagusEntry{
 		Names: []string{"foo", "bar"},
@@ -34,7 +34,7 @@ func TestRequireBasic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.Integer(42)) {
+	if !result.Equiv(e.IntNode(42)) {
 		t.Errorf("expected 42, got %s", result.Repr())
 	}
 }
@@ -51,7 +51,7 @@ func TestRequireWithAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.Integer(42)) {
+	if !result.Equiv(e.IntNode(42)) {
 		t.Errorf("expected 42, got %s", result.Repr())
 	}
 }
@@ -68,7 +68,7 @@ func TestRequireWithOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.Integer(42)) {
+	if !result.Equiv(e.IntNode(42)) {
 		t.Errorf("expected 42, got %s", result.Repr())
 	}
 }
@@ -102,7 +102,7 @@ func TestRequireWithAliasAndOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.Integer(42)) {
+	if !result.Equiv(e.IntNode(42)) {
 		t.Errorf("expected 42, got %s", result.Repr())
 	}
 }
@@ -127,8 +127,8 @@ func TestRequireNameClash(t *testing.T) {
 	defer mummy.ClearRegistry()
 	registerTestModule()
 
-	dummyFunc2 := func(args e.List, ev *Evaluator) (e.Expr, error) {
-		return e.Integer(99), nil
+	dummyFunc2 := func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		return e.IntNode(99), nil
 	}
 	mummy.RegisterSarcophagus("othermod", "github.com/example/othermod", &mummy.SarcophagusEntry{
 		Names: []string{"foo"},
@@ -162,7 +162,7 @@ func TestRequireSameModuleTwice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("requiring same module twice should work, got: %v", err)
 	}
-	if !result.Equiv(e.Integer(42)) {
+	if !result.Equiv(e.IntNode(42)) {
 		t.Errorf("expected 42, got %s", result.Repr())
 	}
 }
@@ -179,7 +179,7 @@ func TestRequireSameModuleDifferentAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("same module under different aliases should work, got: %v", err)
 	}
-	if !result.Equiv(e.Integer(42)) {
+	if !result.Equiv(e.IntNode(42)) {
 		t.Errorf("expected 42, got %s", result.Repr())
 	}
 }

@@ -32,11 +32,11 @@ func TestGenerateSliceConstructorOutput(t *testing.T) {
 	if !strings.Contains(wrapper.GeneratedCode, "[]*pkg.Person") {
 		t.Errorf("expected []*pkg.Person in generated code, got:\n%s", wrapper.GeneratedCode)
 	}
-	if !strings.Contains(wrapper.GeneratedCode, "mummy.Entomb") {
-		t.Errorf("expected mummy.Entomb in result, got:\n%s", wrapper.GeneratedCode)
+	if !strings.Contains(wrapper.GeneratedCode, "MummyNodeVal") {
+		t.Errorf("expected MummyNodeVal in result, got:\n%s", wrapper.GeneratedCode)
 	}
-	if !strings.Contains(wrapper.GeneratedCode, "e.TypeName") {
-		t.Errorf("expected e.TypeName in error message, got:\n%s", wrapper.GeneratedCode)
+	if !strings.Contains(wrapper.GeneratedCode, "e.NodeTypeName") {
+		t.Errorf("expected e.NodeTypeName in error message, got:\n%s", wrapper.GeneratedCode)
 	}
 }
 
@@ -155,8 +155,8 @@ func TestGenerateResultHandlingVoid(t *testing.T) {
 	g, _ := NewGenerator(config)
 	var buf bytes.Buffer
 	g.generateResultHandling(nil, &buf)
-	if !strings.Contains(buf.String(), "e.NIL") {
-		t.Errorf("expected e.NIL for void result, got:\n%s", buf.String())
+	if !strings.Contains(buf.String(), "e.Nil") {
+		t.Errorf("expected e.Nil for void result, got:\n%s", buf.String())
 	}
 }
 
@@ -167,8 +167,8 @@ func TestGenerateResultHandlingSingleReturn(t *testing.T) {
 	g.generateResultHandling([]ResultConversionInfo{
 		{Index: 0, Type: "int", Name: "result0"},
 	}, &buf)
-	if !strings.Contains(buf.String(), "e.Integer(result0)") {
-		t.Errorf("expected Integer conversion, got:\n%s", buf.String())
+	if !strings.Contains(buf.String(), "e.IntNode(int64(result0))") {
+		t.Errorf("expected IntNode conversion, got:\n%s", buf.String())
 	}
 }
 
@@ -184,8 +184,8 @@ func TestGenerateResultHandlingWithError(t *testing.T) {
 	if !strings.Contains(code, "err != nil") {
 		t.Errorf("expected error check, got:\n%s", code)
 	}
-	if !strings.Contains(code, "e.Integer(result0)") {
-		t.Errorf("expected Integer conversion, got:\n%s", code)
+	if !strings.Contains(code, "e.IntNode(int64(result0))") {
+		t.Errorf("expected IntNode conversion, got:\n%s", code)
 	}
 }
 
@@ -198,8 +198,8 @@ func TestGenerateResultHandlingMultipleReturns(t *testing.T) {
 		{Index: 1, Type: "string", Name: "b"},
 	}, &buf)
 	code := buf.String()
-	if !strings.Contains(code, "e.Cons") {
-		t.Errorf("expected Cons for multi-return, got:\n%s", code)
+	if !strings.Contains(code, "e.NewListNode") {
+		t.Errorf("expected NewListNode for multi-return, got:\n%s", code)
 	}
 }
 
@@ -236,7 +236,7 @@ func TestGeneratedCodeContainsMultipleReturnTypes(t *testing.T) {
 	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
 	code := string(content)
 
-	// Divide returns (int, error) — should have both error handling and Integer conversion
+	// Divide returns (int, error) — should have both error handling and IntNode conversion
 	if !strings.Contains(code, "function failed") {
 		t.Error("expected error handling for Divide")
 	}
@@ -289,12 +289,14 @@ func TestPossessPackageCreatesSarcophagus(t *testing.T) {
 		{"slice constructor", "person-slice"},
 		{"interface method", "greeter-greet"},
 		{"method naming", "person-getage"},
-		{"callback adapter", "ghoulEval.Function"},
-		{"nil handling", "Unwrap() != nil"},
+		{"callback adapter", "FuncVal"},
+		{"nil handling", "ForeignVal != nil"},
 		{"RegisterFunctions", "func RegisterFunctions"},
 		{"init registration", "mummy.RegisterSarcophagus"},
 		{"registerWithPrefix", "func registerWithPrefix"},
 		{"RegisterIfAllowed", "mummy.RegisterIfAllowed"},
+		{"node signature", "[]*e.Node"},
+		{"node return", "*e.Node"},
 	}
 
 	for _, c := range checks {

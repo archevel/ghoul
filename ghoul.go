@@ -15,9 +15,9 @@ import (
 )
 
 type Ghoul interface {
-	Process(exprReader io.Reader) (e.Expr, error)
-	ProcessFile(filename string) (e.Expr, error)
-	ProcessWithContext(ctx context.Context, exprReader io.Reader, filename *string) (e.Expr, error)
+	Process(exprReader io.Reader) (*e.Node, error)
+	ProcessFile(filename string) (*e.Node, error)
+	ProcessWithContext(ctx context.Context, exprReader io.Reader, filename *string) (*e.Node, error)
 }
 
 func New() Ghoul {
@@ -33,14 +33,14 @@ func NewLoggingGhoul(logger engraving.Logger) Ghoul {
 
 type ghoul struct {
 	reanimator *reanimator.Reanimator
-	evaluator *ev.Evaluator
+	evaluator  *ev.Evaluator
 }
 
-func (g ghoul) Process(exprReader io.Reader) (e.Expr, error) {
+func (g ghoul) Process(exprReader io.Reader) (*e.Node, error) {
 	return g.ProcessWithContext(context.Background(), exprReader, nil)
 }
 
-func (g ghoul) ProcessFile(filename string) (e.Expr, error) {
+func (g ghoul) ProcessFile(filename string) (*e.Node, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -49,28 +49,58 @@ func (g ghoul) ProcessFile(filename string) (e.Expr, error) {
 	return g.ProcessWithContext(context.Background(), f, &filename)
 }
 
-func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader, filename *string) (e.Expr, error) {
+func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader, filename *string) (*e.Node, error) {
 	parseRes, parsed := exhumer.ParseWithFilename(exprReader, filename)
 	if parseRes != 0 {
 		return nil, fmt.Errorf("failed to parse Lisp code: parse result %d", parseRes)
 	}
 
-	// Phase 1: Macro expansion
-	expanded, err := g.reanimator.ExpandAll(parsed.Expressions)
+	boneNodes, err := g.reanimator.ReanimateNodes(parsed.Expressions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to expand macros: %w", err)
 	}
 
-	// Phase 2: Evaluation
 	if filename != nil {
 		g.evaluator.SetModuleState(ev.NewModuleState(*filename))
+		g.evaluator.SetModuleLoader(g.makeBoneModuleLoader())
 	}
 
-	result, err := g.evaluator.EvaluateWithContext(ctx, expanded)
+	result, err := g.evaluator.ConsumeNodesWithContext(ctx, boneNodes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process Lisp code: %w", err)
 	}
 	return result, nil
+}
+
+func (g ghoul) makeBoneModuleLoader() ev.ModuleLoader {
+	return func(filePath string, moduleEnv *ev.Environment, state *ev.ModuleState) (*ev.ModuleExports, error) {
+		f, err := os.Open(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open %s: %w", filePath, err)
+		}
+		defer f.Close()
+
+		parseRes, parsed := exhumer.ParseWithFilename(f, &filePath)
+		if parseRes != 0 {
+			return nil, fmt.Errorf("failed to parse %s", filePath)
+		}
+
+		boneNodes, err := g.reanimator.ReanimateNodes(parsed.Expressions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to expand macros in %s: %w", filePath, err)
+		}
+
+		moduleEval := ev.NewWithMarkCounter(g.evaluator.Log(), moduleEnv, g.evaluator.MarkCounter())
+		moduleEval.SetModuleState(state)
+		moduleEval.SetModuleLoader(g.makeBoneModuleLoader())
+
+		_, err = moduleEval.ConsumeNodes(boneNodes)
+		if err != nil {
+			return nil, err
+		}
+
+		return ev.ExtractExports(moduleEnv), nil
+	}
 }
 
 func prepareEvaluator(logger engraving.Logger, markCounter *uint64) *ev.Evaluator {

@@ -16,56 +16,44 @@ func setupTestEnvironment() *environment {
 	env := NewEnvironment()
 
 	// Register basic arithmetic functions
-	env.Register("+", func(args e.List, ev *Evaluator) (e.Expr, error) {
-		fst, ok := args.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("+: first argument must be integer, got %T", args.First())
+	env.Register("+", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		if len(args) < 1 || args[0].Kind != e.IntegerNode {
+			return nil, fmt.Errorf("+: first argument must be integer")
 		}
-		t, _ := args.Tail()
-		snd, ok := t.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("+: second argument must be integer, got %T", t.First())
+		if len(args) < 2 || args[1].Kind != e.IntegerNode {
+			return nil, fmt.Errorf("+: second argument must be integer")
 		}
-		return e.Integer(fst + snd), nil
+		return e.IntNode(args[0].IntVal + args[1].IntVal), nil
 	})
 
-	env.Register("-", func(args e.List, ev *Evaluator) (e.Expr, error) {
-		fst, ok := args.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("-: first argument must be integer, got %T", args.First())
+	env.Register("-", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		if len(args) < 1 || args[0].Kind != e.IntegerNode {
+			return nil, fmt.Errorf("-: first argument must be integer")
 		}
-		t, _ := args.Tail()
-		snd, ok := t.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("-: second argument must be integer, got %T", t.First())
+		if len(args) < 2 || args[1].Kind != e.IntegerNode {
+			return nil, fmt.Errorf("-: second argument must be integer")
 		}
-		return e.Integer(fst - snd), nil
+		return e.IntNode(args[0].IntVal - args[1].IntVal), nil
 	})
 
-	env.Register("*", func(args e.List, ev *Evaluator) (e.Expr, error) {
-		fst, ok := args.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("*: first argument must be integer, got %T", args.First())
+	env.Register("*", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		if len(args) < 1 || args[0].Kind != e.IntegerNode {
+			return nil, fmt.Errorf("*: first argument must be integer")
 		}
-		t, _ := args.Tail()
-		snd, ok := t.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("*: second argument must be integer, got %T", t.First())
+		if len(args) < 2 || args[1].Kind != e.IntegerNode {
+			return nil, fmt.Errorf("*: second argument must be integer")
 		}
-		return e.Integer(fst * snd), nil
+		return e.IntNode(args[0].IntVal * args[1].IntVal), nil
 	})
 
-	env.Register("<", func(args e.List, ev *Evaluator) (e.Expr, error) {
-		fst, ok := args.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("<: first argument must be integer, got %T", args.First())
+	env.Register("<", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		if len(args) < 1 || args[0].Kind != e.IntegerNode {
+			return nil, fmt.Errorf("<: first argument must be integer")
 		}
-		t, _ := args.Tail()
-		snd, ok := t.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("<: second argument must be integer, got %T", t.First())
+		if len(args) < 2 || args[1].Kind != e.IntegerNode {
+			return nil, fmt.Errorf("<: second argument must be integer")
 		}
-		return e.Boolean(fst < snd), nil
+		return e.BoolNode(args[0].IntVal < args[1].IntVal), nil
 	})
 
 	return env
@@ -86,7 +74,7 @@ func TestEvaluateWithContextHappyPath(t *testing.T) {
 		t.Fatalf("Expected no error, but got: %v", err)
 	}
 
-	if expected := e.Integer(5); !result.Equiv(expected) {
+	if expected := e.IntNode(5); !result.Equiv(expected) {
 		t.Errorf("Expected %s, but got %s", expected.Repr(), result.Repr())
 	}
 }
@@ -162,7 +150,7 @@ func TestEvaluateWithContextMultipleExpressions(t *testing.T) {
 		t.Fatalf("Expected no error, but got: %v", err)
 	}
 
-	if expected := e.Integer(30); !result.Equiv(expected) {
+	if expected := e.IntNode(30); !result.Equiv(expected) {
 		t.Errorf("Expected %s, but got %s", expected.Repr(), result.Repr())
 	}
 }
@@ -187,7 +175,7 @@ func TestEvaluateWithContextRecursiveFunction(t *testing.T) {
 		t.Fatalf("Expected no error, but got: %v", err)
 	}
 
-	if expected := e.Integer(3); !result.Equiv(expected) {
+	if expected := e.IntNode(3); !result.Equiv(expected) {
 		t.Errorf("Expected %s, but got %s", expected.Repr(), result.Repr())
 	}
 }
@@ -197,7 +185,7 @@ func TestEvaluateWithContextCancelledDuringExecution(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Add a built-in function that takes some time and checks cancellation
-	env.Register("slow-add", func(args e.List, ev *Evaluator) (e.Expr, error) {
+	env.Register("slow-add", func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
 		// Simulate some work by checking context multiple times
 		for i := 0; i < 100; i++ {
 			select {
@@ -208,20 +196,17 @@ func TestEvaluateWithContextCancelledDuringExecution(t *testing.T) {
 			}
 		}
 
-		fst, ok := args.First().(e.Integer)
-		if !ok {
+		if len(args) < 1 || args[0].Kind != e.IntegerNode {
 			return nil, fmt.Errorf("slow-add: first argument must be integer")
 		}
-		t, _ := args.Tail()
-		snd, ok := t.First().(e.Integer)
-		if !ok {
+		if len(args) < 2 || args[1].Kind != e.IntegerNode {
 			return nil, fmt.Errorf("slow-add: second argument must be integer")
 		}
-		return e.Integer(fst + snd), nil
+		return e.IntNode(args[0].IntVal + args[1].IntVal), nil
 	})
 
 	// Start evaluation in a goroutine
-	resultChan := make(chan e.Expr, 1)
+	resultChan := make(chan *e.Node, 1)
 	errorChan := make(chan error, 1)
 
 	go func() {
@@ -261,12 +246,12 @@ func TestEvaluateWithContextNilExpression(t *testing.T) {
 	ctx := context.Background()
 
 	// Test NIL expression with context
-	result, err := EvaluateWithContext(ctx, e.NIL, env)
+	result, err := EvaluateWithContext(ctx, e.Nil, env)
 	if err != nil {
 		t.Fatalf("Expected no error, but got: %v", err)
 	}
 
-	if !result.Equiv(e.NIL) {
+	if !result.Equiv(e.Nil) {
 		t.Errorf("Expected NIL, but got %s", result.Repr())
 	}
 }
@@ -285,7 +270,7 @@ func TestBackwardCompatibilityEvaluate(t *testing.T) {
 		t.Fatalf("Expected no error, but got: %v", err)
 	}
 
-	if expected := e.Integer(12); !result.Equiv(expected) {
+	if expected := e.IntNode(12); !result.Equiv(expected) {
 		t.Errorf("Expected %s, but got %s", expected.Repr(), result.Repr())
 	}
 }

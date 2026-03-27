@@ -11,7 +11,7 @@ import (
 
 type ModuleExports struct {
 	Names    []string
-	Bindings map[string]e.Expr
+	Bindings map[string]*e.Node
 }
 
 type ModuleState struct {

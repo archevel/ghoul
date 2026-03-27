@@ -1,90 +1,84 @@
 package tome
 
 import (
-	ev "github.com/archevel/ghoul/consume"
 	e "github.com/archevel/ghoul/bones"
+	ev "github.com/archevel/ghoul/consume"
 	"github.com/archevel/ghoul/macromancy"
 	"github.com/archevel/ghoul/mummy"
 )
 
-// stripMarks recursively removes hygiene marks from expressions,
-// converting ScopedIdentifiers to plain Identifiers and unwrapping
-// SyntaxObjects. Used by syntax-match? to compare by name.
-func stripMarks(expr e.Expr) e.Expr {
-	if si, ok := expr.(e.ScopedIdentifier); ok {
-		return si.Name
+// stripMarks recursively removes hygiene marks from Node trees.
+func stripMarks(node *e.Node) *e.Node {
+	if node == nil || node.IsNil() {
+		return node
 	}
-	if so, ok := expr.(macromancy.SyntaxObject); ok {
-		return stripMarks(so.Datum)
+	switch node.Kind {
+	case e.SyntaxObjectNode:
+		if node.Quoted != nil {
+			return stripMarks(node.Quoted)
+		}
+		return e.Nil
+	case e.IdentifierNode:
+		if len(node.Marks) > 0 {
+			return e.IdentNode(node.Name)
+		}
+		return node
+	case e.ListNode:
+		children := make([]*e.Node, len(node.Children))
+		for i, child := range node.Children {
+			children[i] = stripMarks(child)
+		}
+		return &e.Node{Kind: e.ListNode, Children: children, Loc: node.Loc, DottedTail: node.DottedTail}
+	default:
+		return node
 	}
-	if expr == e.NIL {
-		return e.NIL
-	}
-	if pair, ok := expr.(*e.Pair); ok {
-		return e.Cons(stripMarks(pair.H), stripMarks(pair.T))
-	}
-	return expr
 }
 
 func registerSyntax(env *ev.Environment) {
-	env.Register("syntax->datum", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		arg := args.First()
-		if so, ok := arg.(macromancy.SyntaxObject); ok {
-			return so.Datum, nil
+	env.Register("syntax->datum", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		node := args[0]
+		if node.Kind == e.SyntaxObjectNode && node.Quoted != nil {
+			return node.Quoted, nil
 		}
-		if si, ok := arg.(e.ScopedIdentifier); ok {
-			return si.Name, nil
+		if node.Kind == e.IdentifierNode && len(node.Marks) > 0 {
+			return e.IdentNode(node.Name), nil
 		}
-		return arg, nil
+		return node, nil
 	})
 
-	env.Register("datum->syntax", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		ctxArg := args.First()
-		t, _ := args.Tail()
-		datum := t.First()
+	env.Register("datum->syntax", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		ctx := args[0]
+		datum := args[1]
 		marks := macromancy.NewMarkSet()
-		if so, ok := ctxArg.(macromancy.SyntaxObject); ok {
-			marks = so.Marks
+		if ctx.Kind == e.SyntaxObjectNode {
+			marks = macromancy.MarkSet(ctx.Marks)
 		}
-		return macromancy.WrapExpr(datum, marks), nil
+		return macromancy.WrapSyntax(datum, marks), nil
 	})
 
-	env.Register("identifier?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		arg := args.First()
-		if so, ok := arg.(macromancy.SyntaxObject); ok {
-			_, isId := so.Datum.(e.Identifier)
-			return e.Boolean(isId), nil
+	env.Register("identifier?", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		node := args[0]
+		if node.Kind == e.SyntaxObjectNode && node.Quoted != nil {
+			return e.BoolNode(node.Quoted.Kind == e.IdentifierNode), nil
 		}
-		if _, ok := arg.(e.ScopedIdentifier); ok {
-			return e.Boolean(true), nil
-		}
-		_, isId := arg.(e.Identifier)
-		return e.Boolean(isId), nil
+		return e.BoolNode(node.Kind == e.IdentifierNode), nil
 	})
 
-	env.Register("syntax-match?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+	env.Register("syntax-match?", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
 		// (syntax-match? expr pattern literals)
 		// Returns an association list of bindings or #f.
-		// Both expr and pattern are stripped of hygiene marks before matching
-		// so that identifier comparison works by name.
-		expr := stripMarks(args.First())
-		t1, _ := args.Tail()
-		pattern := stripMarks(t1.First())
-		t2, _ := t1.Tail()
-		litList := t2.First()
+		// Both expr and pattern are stripped of hygiene marks before matching.
+		expr := stripMarks(args[0])
+		pattern := stripMarks(args[1])
 
 		// Build literals map from the literals list
-		literals := map[e.Identifier]bool{}
-		if ll, ok := litList.(e.List); ok {
-			for ll != e.NIL {
-				if id, ok := ll.First().(e.Identifier); ok {
-					literals[id] = true
+		literals := map[string]bool{}
+		litNode := args[2]
+		if litNode.Kind == e.ListNode {
+			for _, child := range litNode.Children {
+				if name := child.IdentName(); name != "" {
+					literals[name] = true
 				}
-				next, ok := ll.Tail()
-				if !ok {
-					break
-				}
-				ll = next
 			}
 		}
 
@@ -99,20 +93,20 @@ func registerSyntax(env *ev.Environment) {
 
 		ok, alist := macro.MatchAndBind(expr)
 		if !ok {
-			return e.Boolean(false), nil
+			return e.BoolNode(false), nil
 		}
 		return alist, nil
 	})
 
 	// Mummy conversion functions
-	wrapConv := func(fn func(e.List, interface{}) (e.Expr, error)) func(e.List, *ev.Evaluator) (e.Expr, error) {
-		return func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
+	wrapMummyConv := func(fn mummy.NodeConversionFunc) func([]*e.Node, *ev.Evaluator) (*e.Node, error) {
+		return func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
 			return fn(args, evaluator)
 		}
 	}
-	env.Register("bytes", wrapConv(mummy.BytesConv))
-	env.Register("string-from-bytes", wrapConv(mummy.StringFromBytes))
-	env.Register("int-slice", wrapConv(mummy.IntSlice))
-	env.Register("float-slice", wrapConv(mummy.FloatSlice))
-	env.Register("go-nil", wrapConv(mummy.GoNil))
+	env.Register("bytes", wrapMummyConv(mummy.BytesConvNode))
+	env.Register("string-from-bytes", wrapMummyConv(mummy.StringFromBytesNode))
+	env.Register("int-slice", wrapMummyConv(mummy.IntSliceNode))
+	env.Register("float-slice", wrapMummyConv(mummy.FloatSliceNode))
+	env.Register("go-nil", wrapMummyConv(mummy.GoNilNode))
 }

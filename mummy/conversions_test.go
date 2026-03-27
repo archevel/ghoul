@@ -7,18 +7,17 @@ import (
 )
 
 func TestBytesConvertsStringToByteSlice(t *testing.T) {
-	args := e.Cons(e.String("hello"), e.NIL)
-	result, err := BytesConv(args, nil)
+	args := []*e.Node{e.StrNode("hello")}
+	result, err := BytesConvNode(args, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	m, ok := result.(*Mummy)
-	if !ok {
-		t.Fatalf("expected *Mummy, got %T", result)
+	if result.Kind != e.MummyNode {
+		t.Fatalf("expected MummyNode, got %d", result.Kind)
 	}
-	bs, ok := m.Unwrap().([]byte)
+	bs, ok := result.ForeignVal.([]byte)
 	if !ok {
-		t.Fatalf("expected []byte, got %T", m.Unwrap())
+		t.Fatalf("expected []byte, got %T", result.ForeignVal)
 	}
 	if string(bs) != "hello" {
 		t.Errorf("expected 'hello', got '%s'", string(bs))
@@ -26,118 +25,133 @@ func TestBytesConvertsStringToByteSlice(t *testing.T) {
 }
 
 func TestBytesRejectsNonString(t *testing.T) {
-	args := e.Cons(e.Integer(42), e.NIL)
-	_, err := BytesConv(args, nil)
+	args := []*e.Node{e.IntNode(42)}
+	_, err := BytesConvNode(args, nil)
 	if err == nil {
 		t.Error("expected error for non-string argument")
 	}
 }
 
+func TestBytesRejectsEmpty(t *testing.T) {
+	_, err := BytesConvNode(nil, nil)
+	if err == nil {
+		t.Error("expected error for empty args")
+	}
+}
+
 func TestStringFromBytesConvertsBack(t *testing.T) {
-	m := Entomb([]byte("world"), "[]byte")
-	args := e.Cons(m, e.NIL)
-	result, err := StringFromBytes(args, nil)
+	args := []*e.Node{e.MummyNodeVal([]byte("world"), "[]byte")}
+	result, err := StringFromBytesNode(args, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	s, ok := result.(e.String)
-	if !ok {
-		t.Fatalf("expected String, got %T", result)
-	}
-	if string(s) != "world" {
-		t.Errorf("expected 'world', got '%s'", string(s))
+	if result.Kind != e.StringNode || result.StrVal != "world" {
+		t.Errorf("expected \"world\", got %s", result.Repr())
 	}
 }
 
 func TestStringFromBytesRejectsNonMummy(t *testing.T) {
-	args := e.Cons(e.String("nope"), e.NIL)
-	_, err := StringFromBytes(args, nil)
+	args := []*e.Node{e.StrNode("nope")}
+	_, err := StringFromBytesNode(args, nil)
 	if err == nil {
 		t.Error("expected error for non-mummy argument")
 	}
 }
 
 func TestStringFromBytesRejectsWrongMummyType(t *testing.T) {
-	m := Entomb(42, "int")
-	args := e.Cons(m, e.NIL)
-	_, err := StringFromBytes(args, nil)
+	args := []*e.Node{e.MummyNodeVal(42, "int")}
+	_, err := StringFromBytesNode(args, nil)
 	if err == nil {
 		t.Error("expected error for mummy not wrapping []byte")
 	}
 }
 
+func TestStringFromBytesRejectsEmpty(t *testing.T) {
+	_, err := StringFromBytesNode(nil, nil)
+	if err == nil {
+		t.Error("expected error for empty args")
+	}
+}
+
 func TestIntSliceCreatesSlice(t *testing.T) {
-	args := e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Cons(e.Integer(3), e.NIL)))
-	result, err := IntSlice(args, nil)
+	args := []*e.Node{e.IntNode(1), e.IntNode(2), e.IntNode(3)}
+	result, err := IntSliceNode(args, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	m := result.(*Mummy)
-	s := m.Unwrap().([]int)
+	if result.Kind != e.MummyNode {
+		t.Fatalf("expected MummyNode, got %d", result.Kind)
+	}
+	s, ok := result.ForeignVal.([]int)
+	if !ok {
+		t.Fatalf("expected []int, got %T", result.ForeignVal)
+	}
 	if len(s) != 3 || s[0] != 1 || s[1] != 2 || s[2] != 3 {
 		t.Errorf("expected [1 2 3], got %v", s)
 	}
 }
 
 func TestIntSliceEmpty(t *testing.T) {
-	result, err := IntSlice(e.NIL, nil)
+	result, err := IntSliceNode(nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	m := result.(*Mummy)
-	s := m.Unwrap().([]int)
+	s, ok := result.ForeignVal.([]int)
+	if !ok {
+		t.Fatalf("expected []int, got %T", result.ForeignVal)
+	}
 	if len(s) != 0 {
 		t.Errorf("expected empty slice, got %v", s)
 	}
 }
 
 func TestIntSliceRejectsNonInteger(t *testing.T) {
-	args := e.Cons(e.Integer(1), e.Cons(e.String("bad"), e.NIL))
-	_, err := IntSlice(args, nil)
+	args := []*e.Node{e.IntNode(1), e.StrNode("bad")}
+	_, err := IntSliceNode(args, nil)
 	if err == nil {
 		t.Error("expected error for non-integer element")
 	}
 }
 
 func TestFloatSliceCreatesSlice(t *testing.T) {
-	args := e.Cons(e.Float(1.5), e.Cons(e.Float(2.5), e.NIL))
-	result, err := FloatSlice(args, nil)
+	args := []*e.Node{e.FloatNode(1.5), e.FloatNode(2.5)}
+	result, err := FloatSliceNode(args, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	m := result.(*Mummy)
-	s := m.Unwrap().([]float64)
+	s, ok := result.ForeignVal.([]float64)
+	if !ok {
+		t.Fatalf("expected []float64, got %T", result.ForeignVal)
+	}
 	if len(s) != 2 || s[0] != 1.5 || s[1] != 2.5 {
 		t.Errorf("expected [1.5 2.5], got %v", s)
 	}
 }
 
 func TestFloatSliceRejectsNonFloat(t *testing.T) {
-	args := e.Cons(e.Integer(1), e.NIL)
-	_, err := FloatSlice(args, nil)
+	args := []*e.Node{e.IntNode(1)}
+	_, err := FloatSliceNode(args, nil)
 	if err == nil {
 		t.Error("expected error for non-float element")
 	}
 }
 
 func TestGoNilCreatesNilMummy(t *testing.T) {
-	result, err := GoNil(e.NIL, nil)
+	result, err := GoNilNode(nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	m, ok := result.(*Mummy)
-	if !ok {
-		t.Fatalf("expected *Mummy, got %T", result)
+	if result.Kind != e.MummyNode {
+		t.Fatalf("expected MummyNode, got %d", result.Kind)
 	}
-	if m.Unwrap() != nil {
+	if result.ForeignVal != nil {
 		t.Error("expected nil inside mummy")
 	}
 }
 
 func TestGoNilRepr(t *testing.T) {
-	result, _ := GoNil(e.NIL, nil)
-	m := result.(*Mummy)
-	if m.Repr() != "#<mummy:nil>" {
-		t.Errorf("expected '#<mummy:nil>', got '%s'", m.Repr())
+	result, _ := GoNilNode(nil, nil)
+	if result.Repr() != "#<mummy:nil>" {
+		t.Errorf("expected '#<mummy:nil>', got '%s'", result.Repr())
 	}
 }

@@ -9,12 +9,12 @@ import (
 
 func TestStringAppend(t *testing.T) {
 	result, _ := evalWithStdlib(`(string-append "hello" " " "world")`)
-	if !result.Equiv(e.String("hello world")) { t.Errorf("got %s", result.Repr()) }
+	if !result.Equiv(e.StrNode("hello world")) { t.Errorf("got %s", result.Repr()) }
 }
 
 func TestStringAppendEmpty(t *testing.T) {
 	result, _ := evalWithStdlib(`(string-append)`)
-	if !result.Equiv(e.String("")) { t.Errorf("got %s", result.Repr()) }
+	if !result.Equiv(e.StrNode("")) { t.Errorf("got %s", result.Repr()) }
 }
 
 func TestStringAppendTypeError(t *testing.T) {
@@ -24,22 +24,22 @@ func TestStringAppendTypeError(t *testing.T) {
 
 func TestStringLength(t *testing.T) {
 	result, _ := evalWithStdlib(`(string-length "hello")`)
-	if !result.Equiv(e.Integer(5)) { t.Errorf("got %s", result.Repr()) }
+	if !result.Equiv(e.IntNode(5)) { t.Errorf("got %s", result.Repr()) }
 }
 
 func TestStringLengthEmpty(t *testing.T) {
 	result, _ := evalWithStdlib(`(string-length "")`)
-	if !result.Equiv(e.Integer(0)) { t.Errorf("got %s", result.Repr()) }
+	if !result.Equiv(e.IntNode(0)) { t.Errorf("got %s", result.Repr()) }
 }
 
 func TestStringLengthUnicode(t *testing.T) {
 	result, _ := evalWithStdlib(`(string-length "héllo")`)
-	if !result.Equiv(e.Integer(5)) { t.Errorf("expected 5 runes, got %s", result.Repr()) }
+	if !result.Equiv(e.IntNode(5)) { t.Errorf("expected 5 runes, got %s", result.Repr()) }
 }
 
 func TestSubstring(t *testing.T) {
 	result, _ := evalWithStdlib(`(substring "hello world" 6 11)`)
-	if !result.Equiv(e.String("world")) { t.Errorf("got %s", result.Repr()) }
+	if !result.Equiv(e.StrNode("world")) { t.Errorf("got %s", result.Repr()) }
 }
 
 func TestSubstringOutOfBounds(t *testing.T) {
@@ -54,7 +54,7 @@ func TestSubstringInvertedBounds(t *testing.T) {
 
 func TestStringRef(t *testing.T) {
 	result, _ := evalWithStdlib(`(string-ref "hello" 1)`)
-	if !result.Equiv(e.String("e")) { t.Errorf("got %s", result.Repr()) }
+	if !result.Equiv(e.StrNode("e")) { t.Errorf("got %s", result.Repr()) }
 }
 
 func TestStringRefOutOfBounds(t *testing.T) {
@@ -64,32 +64,32 @@ func TestStringRefOutOfBounds(t *testing.T) {
 
 func TestStringContains(t *testing.T) {
 	r1, _ := evalWithStdlib(`(string-contains? "hello world" "world")`)
-	if !r1.Equiv(e.Boolean(true)) { t.Error("expected #t") }
+	if !r1.Equiv(e.BoolNode(true)) { t.Error("expected #t") }
 	r2, _ := evalWithStdlib(`(string-contains? "hello" "xyz")`)
-	if !r2.Equiv(e.Boolean(false)) { t.Error("expected #f") }
+	if !r2.Equiv(e.BoolNode(false)) { t.Error("expected #f") }
 }
 
 func TestStringSplit(t *testing.T) {
 	result, _ := evalWithStdlib(`(string-split "a,b,c" ",")`)
-	list := result.(e.List)
-	if !list.First().Equiv(e.String("a")) { t.Errorf("first should be 'a', got %s", list.First().Repr()) }
+	list := result
+	if !list.First().Equiv(e.StrNode("a")) { t.Errorf("first should be 'a', got %s", list.First().Repr()) }
 }
 
 func TestStringUpcase(t *testing.T) {
 	result, _ := evalWithStdlib(`(string-upcase "hello")`)
-	if !result.Equiv(e.String("HELLO")) { t.Errorf("got %s", result.Repr()) }
+	if !result.Equiv(e.StrNode("HELLO")) { t.Errorf("got %s", result.Repr()) }
 }
 
 func TestStringDowncase(t *testing.T) {
 	result, _ := evalWithStdlib(`(string-downcase "HELLO")`)
-	if !result.Equiv(e.String("hello")) { t.Errorf("got %s", result.Repr()) }
+	if !result.Equiv(e.StrNode("hello")) { t.Errorf("got %s", result.Repr()) }
 }
 
 func TestStringToNumber(t *testing.T) {
 	r1, _ := evalWithStdlib(`(string->number "42")`)
-	if !r1.Equiv(e.Integer(42)) { t.Errorf("got %s", r1.Repr()) }
+	if !r1.Equiv(e.IntNode(42)) { t.Errorf("got %s", r1.Repr()) }
 	r2, _ := evalWithStdlib(`(string->number "3.14")`)
-	if !r2.Equiv(e.Float(3.14)) { t.Errorf("got %s", r2.Repr()) }
+	if !r2.Equiv(e.FloatNode(3.14)) { t.Errorf("got %s", r2.Repr()) }
 }
 
 func TestStringToNumberInvalid(t *testing.T) {
@@ -165,7 +165,7 @@ func TestSubstringNegativeStart(t *testing.T) {
 
 func TestNumberToString(t *testing.T) {
 	r1, _ := evalWithStdlib(`(number->string 42)`)
-	if !r1.Equiv(e.String("42")) { t.Errorf("got %s", r1.Repr()) }
+	if !r1.Equiv(e.StrNode("42")) { t.Errorf("got %s", r1.Repr()) }
 	r2, _ := evalWithStdlib(`(number->string 3.14)`)
-	if !r2.Equiv(e.String("3.14")) { t.Errorf("got %s", r2.Repr()) }
+	if !r2.Equiv(e.StrNode("3.14")) { t.Errorf("got %s", r2.Repr()) }
 }

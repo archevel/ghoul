@@ -1,6 +1,7 @@
 package tome
 
 import (
+	"fmt"
 	"testing"
 
 	ev "github.com/archevel/ghoul/consume"
@@ -9,13 +10,9 @@ import (
 )
 
 // These tests exercise edge cases with improper lists and malformed inputs
-// that can't be constructed through normal Ghoul code. They exist to
-// document defensive behavior and ensure no panics on bad state.
+// that can't be constructed through normal Ghoul code.
 
-// callStdlibDirect calls a registered stdlib function directly with
-// pre-constructed arguments, bypassing the evaluator. This lets us
-// pass improper lists that can't be constructed in Ghoul syntax.
-func callStdlibDirect(name string, args e.List) (e.Expr, error) {
+func callStdlibDirect(name string, args []*e.Node) (*e.Node, error) {
 	env := ev.NewEnvironment()
 	RegisterAll(env)
 
@@ -23,112 +20,94 @@ func callStdlibDirect(name string, args e.List) (e.Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	fn := val.(ev.Function)
+	if val.Kind != e.FunctionNode || val.FuncVal == nil {
+		return nil, fmt.Errorf("expected function for %s", name)
+	}
 	evaluator := ev.New(engraving.StandardLogger, env)
-	return (*fn.Fun)(args, evaluator)
+	return (*val.FuncVal)(args, evaluator)
 }
 
 // --- Improper lists passed to list operations ---
 
 func TestLengthImproperList(t *testing.T) {
-	// (1 2 . 3) — Tail() fails on the last pair
-	improper := e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3)))
-	_, err := callStdlibDirect("length", e.Cons(improper, e.NIL))
+	// (1 2 . 3)
+	improper := &e.Node{Kind: e.ListNode, Children: []*e.Node{e.IntNode(1), e.IntNode(2)}, DottedTail: e.IntNode(3)}
+	_, err := callStdlibDirect("length", []*e.Node{improper})
 	if err == nil {
 		t.Error("expected error for improper list")
 	}
 }
 
 func TestAppendImproperFirstList(t *testing.T) {
-	// append with improper first list — should collect elements
-	// up to the improper tail without panicking
-	improper := e.Cons(e.Integer(1), e.Integer(2))
-	second := e.Cons(e.Integer(3), e.NIL)
-	result, err := callStdlibDirect("append", e.Cons(improper, e.Cons(second, e.NIL)))
+	improper := &e.Node{Kind: e.ListNode, Children: []*e.Node{e.IntNode(1)}, DottedTail: e.IntNode(2)}
+	second := e.NewListNode([]*e.Node{e.IntNode(3)})
+	result, err := callStdlibDirect("append", []*e.Node{improper, second})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	list, ok := result.(e.List)
-	if !ok || list == e.NIL {
-		t.Errorf("expected non-empty list, got %v", result)
+	if result.Kind != e.ListNode || len(result.Children) == 0 {
+		t.Errorf("expected non-empty list, got %s", result.Repr())
 	}
 }
 
 func TestReverseImproperList(t *testing.T) {
-	// Construct improper list directly and pass as a quoted arg
-	// to avoid evaluation issues
-	improper := e.Cons(e.Integer(1), e.Cons(e.Integer(2), e.Integer(3)))
-	result, err := callStdlibDirect("reverse", e.Cons(improper, e.NIL))
-	// Should not panic — collects elements until Tail() fails
+	improper := &e.Node{Kind: e.ListNode, Children: []*e.Node{e.IntNode(1), e.IntNode(2)}, DottedTail: e.IntNode(3)}
+	result, err := callStdlibDirect("reverse", []*e.Node{improper})
 	if err != nil {
 		t.Logf("reverse on improper list gave error (acceptable): %v", err)
-	} else {
-		list, ok := result.(e.List)
-		if !ok || list == e.NIL {
-			t.Errorf("expected non-empty list, got %v", result)
-		}
+	} else if result.Kind != e.ListNode || len(result.Children) == 0 {
+		t.Errorf("expected non-empty list, got %s", result.Repr())
 	}
 }
 
 func TestMapImproperList(t *testing.T) {
-	// map with an improper list should process elements up to the
-	// improper tail without panicking
-	improper := e.Cons(e.Integer(1), e.Integer(2))
-	// Use evalWithStdlib with a define + quoted improper list isn't possible,
-	// so we just verify no panic via callStdlibDirect with a dummy function.
-	// The function arg won't be callable this way, but the list iteration
-	// should hit the break before trying to call it on the bad tail.
-	idFn := func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		return args.First(), nil
+	improper := &e.Node{Kind: e.ListNode, Children: []*e.Node{e.IntNode(1)}, DottedTail: e.IntNode(2)}
+	idFn := func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		return args[0], nil
 	}
-	fn := ev.Function{Fun: &idFn}
-	result, _ := callStdlibDirect("map", e.Cons(fn, e.Cons(improper, e.NIL)))
-	// map uses EvalSubExpression which won't work with raw Function values,
-	// so this tests the list iteration path, not the callback
+	fn := e.FuncNode(func(args []*e.Node, evaluator e.Evaluator) (*e.Node, error) {
+		return idFn(args, evaluator.(*ev.Evaluator))
+	})
+	result, _ := callStdlibDirect("map", []*e.Node{fn, improper})
 	_ = result
 }
 
 func TestFilterImproperList(t *testing.T) {
-	improper := e.Cons(e.Integer(1), e.Integer(2))
-	trueFn := func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		return e.Boolean(true), nil
-	}
-	fn := ev.Function{Fun: &trueFn}
-	result, _ := callStdlibDirect("filter", e.Cons(fn, e.Cons(improper, e.NIL)))
+	improper := &e.Node{Kind: e.ListNode, Children: []*e.Node{e.IntNode(1)}, DottedTail: e.IntNode(2)}
+	fn := e.FuncNode(func(args []*e.Node, evaluator e.Evaluator) (*e.Node, error) {
+		return e.BoolNode(true), nil
+	})
+	result, _ := callStdlibDirect("filter", []*e.Node{fn, improper})
 	_ = result
 }
 
 func TestFoldlImproperList(t *testing.T) {
-	improper := e.Cons(e.Integer(1), e.Integer(2))
-	addFn := func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		a := args.First().(e.Integer)
-		t, _ := args.Tail()
-		b := t.First().(e.Integer)
-		return e.Integer(a + b), nil
-	}
-	fn := ev.Function{Fun: &addFn}
-	result, _ := callStdlibDirect("foldl", e.Cons(fn, e.Cons(e.Integer(0), e.Cons(improper, e.NIL))))
+	improper := &e.Node{Kind: e.ListNode, Children: []*e.Node{e.IntNode(1)}, DottedTail: e.IntNode(2)}
+	fn := e.FuncNode(func(args []*e.Node, evaluator e.Evaluator) (*e.Node, error) {
+		return e.IntNode(args[0].IntVal + args[1].IntVal), nil
+	})
+	result, _ := callStdlibDirect("foldl", []*e.Node{fn, e.IntNode(0), improper})
 	_ = result
 }
 
 // --- Comparison with non-numeric types ---
 
 func TestNumericEqualityBothNonNumeric(t *testing.T) {
-	_, err := callStdlibDirect("=", e.Cons(e.String("a"), e.Cons(e.String("b"), e.NIL)))
+	_, err := callStdlibDirect("=", []*e.Node{e.StrNode("a"), e.StrNode("b")})
 	if err == nil {
 		t.Error("expected error for = with strings")
 	}
 }
 
 func TestLessThanBothNonNumeric(t *testing.T) {
-	_, err := callStdlibDirect("<", e.Cons(e.Boolean(true), e.Cons(e.Boolean(false), e.NIL)))
+	_, err := callStdlibDirect("<", []*e.Node{e.BoolNode(true), e.BoolNode(false)})
 	if err == nil {
 		t.Error("expected error for < with booleans")
 	}
 }
 
 func TestGreaterThanSecondArgNonNumeric(t *testing.T) {
-	_, err := callStdlibDirect(">", e.Cons(e.Integer(1), e.Cons(e.String("b"), e.NIL)))
+	_, err := callStdlibDirect(">", []*e.Node{e.IntNode(1), e.StrNode("b")})
 	if err == nil {
 		t.Error("expected error for > with string second arg")
 	}

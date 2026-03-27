@@ -51,11 +51,11 @@ func repl(verbose bool) {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("> ")
 	for text, readErr := reader.ReadString('\n'); readErr == nil; text, readErr = reader.ReadString('\n') {
-		res, err := g.Process(strings.NewReader(text))
+		result, err := g.Process(strings.NewReader(text))
 		if err != nil {
 			fmt.Printf("Error: %s\n\n> ", err)
 		} else {
-			fmt.Printf("%s\n> ", res.Repr())
+			fmt.Printf("%s\n> ", result.Repr())
 		}
 	}
 

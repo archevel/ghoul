@@ -3,71 +3,64 @@ package tome
 import (
 	"fmt"
 
-	ev "github.com/archevel/ghoul/consume"
 	e "github.com/archevel/ghoul/bones"
+	ev "github.com/archevel/ghoul/consume"
 )
 
 func registerTypes(env *ev.Environment) {
-	env.Register("number?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		switch args.First().(type) {
-		case e.Integer, e.Float:
-			return e.Boolean(true), nil
+	env.Register("number?", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		switch args[0].Kind {
+		case e.IntegerNode, e.FloatNodeKind:
+			return e.BoolNode(true), nil
 		default:
-			return e.Boolean(false), nil
+			return e.BoolNode(false), nil
 		}
 	})
 
-	env.Register("integer?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		_, ok := args.First().(e.Integer)
-		return e.Boolean(ok), nil
+	env.Register("integer?", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		return e.BoolNode(args[0].Kind == e.IntegerNode), nil
 	})
 
-	env.Register("float?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		_, ok := args.First().(e.Float)
-		return e.Boolean(ok), nil
+	env.Register("float?", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		return e.BoolNode(args[0].Kind == e.FloatNodeKind), nil
 	})
 
-	env.Register("string?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		_, ok := args.First().(e.String)
-		return e.Boolean(ok), nil
+	env.Register("string?", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		return e.BoolNode(args[0].Kind == e.StringNode), nil
 	})
 
-	env.Register("boolean?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		_, ok := args.First().(e.Boolean)
-		return e.Boolean(ok), nil
+	env.Register("boolean?", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		return e.BoolNode(args[0].Kind == e.BooleanNode), nil
 	})
 
-	env.Register("list?", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		lst, ok := args.First().(e.List)
-		if !ok {
-			return e.Boolean(false), nil
+	env.Register("list?", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		n := args[0]
+		if n.Kind != e.ListNode && !n.IsNil() {
+			return e.BoolNode(false), nil
 		}
-		// Check it's a proper list (ends in NIL)
-		for lst != e.NIL {
-			_, ok := lst.Tail()
-			if !ok {
-				return e.Boolean(false), nil
-			}
-			lst, _ = lst.Tail()
+		if n.IsNil() {
+			return e.BoolNode(true), nil
 		}
-		return e.Boolean(true), nil
+		// Check it's a proper list (no dotted tail)
+		if n.DottedTail != nil {
+			return e.BoolNode(false), nil
+		}
+		return e.BoolNode(true), nil
 	})
 }
 
 func registerConversions(env *ev.Environment) {
-	env.Register("integer->float", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		val, ok := args.First().(e.Integer)
-		if !ok {
-			return nil, fmt.Errorf("integer->float: expected integer, got %s", e.TypeName(args.First()))
+	env.Register("integer->float", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		if args[0].Kind != e.IntegerNode {
+			return nil, fmt.Errorf("integer->float: expected integer, got %s", e.NodeTypeName(args[0]))
 		}
-		return e.Float(val), nil
+		return e.FloatNode(float64(args[0].IntVal)), nil
 	})
 
-	env.Register("float->integer", func(args e.List, evaluator *ev.Evaluator) (e.Expr, error) {
-		val, ok := args.First().(e.Float)
-		if !ok {
-			return nil, fmt.Errorf("float->integer: expected float, got %s", e.TypeName(args.First()))
+	env.Register("float->integer", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		if args[0].Kind != e.FloatNodeKind {
+			return nil, fmt.Errorf("float->integer: expected float, got %s", e.NodeTypeName(args[0]))
 		}
-		return e.Integer(int64(val)), nil
+		return e.IntNode(int64(args[0].FloatVal)), nil
 	})
 }

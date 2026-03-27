@@ -23,23 +23,23 @@ func TestSourcePositionString(t *testing.T) {
 	}
 }
 
-func TestPairCarriesLocation(t *testing.T) {
+func TestNodeCarriesLocation(t *testing.T) {
 	loc := &SourcePosition{Ln: 3, Col: 5}
-	pair := Cons(Integer(1), NIL)
-	pair.Loc = loc
+	node := IntNode(1)
+	node.Loc = loc
 
-	if pair.Loc == nil {
+	if node.Loc == nil {
 		t.Fatal("expected Loc to be set")
 	}
-	if pair.Loc.Line() != 3 || pair.Loc.Column() != 5 {
-		t.Errorf("expected 3:5, got %s", pair.Loc.String())
+	if node.Loc.Line() != 3 || node.Loc.Column() != 5 {
+		t.Errorf("expected 3:5, got %s", node.Loc.String())
 	}
 }
 
-func TestConsCreatesNilLocation(t *testing.T) {
-	pair := Cons(Integer(1), NIL)
-	if pair.Loc != nil {
-		t.Error("Cons should create pair with nil Loc by default")
+func TestNodeCreatesNilLocation(t *testing.T) {
+	node := IntNode(1)
+	if node.Loc != nil {
+		t.Error("node constructor should create node with nil Loc by default")
 	}
 }
 
@@ -91,7 +91,7 @@ func TestSourceContextSimple(t *testing.T) {
 		"(+ x z)",
 		"(+ x y)",
 	}
-	ctx := sourceContext(lines, 3, 2)
+	ctx := SourceContextFromLines(lines, 3, 2)
 	if !strings.Contains(ctx, "(+ x z)") {
 		t.Errorf("expected error line in context, got:\n%s", ctx)
 	}
@@ -110,7 +110,7 @@ func TestSourceContextShowsEnclosingExpression(t *testing.T) {
 		"    (else n)))",
 	}
 	// Error on line 4 col 28 — inside (fizz) which is inside the cond, inside the define
-	ctx := sourceContext(lines, 4, 28)
+	ctx := SourceContextFromLines(lines, 4, 28)
 	// Should include lines from the enclosing define
 	if !strings.Contains(ctx, "(define (fizzbuzz n)") {
 		t.Errorf("expected enclosing define in context, got:\n%s", ctx)
@@ -128,7 +128,7 @@ func TestSourceContextShowsTwoLinesAfter(t *testing.T) {
 		"(define z 30)",
 		"(define w 40)",
 	}
-	ctx := sourceContext(lines, 2, 2)
+	ctx := SourceContextFromLines(lines, 2, 2)
 	if !strings.Contains(ctx, "(define y 20)") {
 		t.Errorf("expected 1 line after in context, got:\n%s", ctx)
 	}
@@ -142,7 +142,7 @@ func TestSourceContextNearEndOfFile(t *testing.T) {
 		"(define x 10)",
 		"(foo x)",
 	}
-	ctx := sourceContext(lines, 2, 2)
+	ctx := SourceContextFromLines(lines, 2, 2)
 	if !strings.Contains(ctx, "(foo x)") {
 		t.Errorf("expected error line in context, got:\n%s", ctx)
 	}
@@ -158,7 +158,7 @@ func TestSourceContextNestedLambda(t *testing.T) {
 		"    (inner 5)))",
 	}
 	// Error on line 5, inside the inner lambda
-	ctx := sourceContext(lines, 5, 12)
+	ctx := SourceContextFromLines(lines, 5, 12)
 	// Should walk back to at least the inner lambda definition
 	if !strings.Contains(ctx, "(define inner") {
 		t.Errorf("expected enclosing define in context, got:\n%s", ctx)
@@ -169,34 +169,33 @@ func TestSourceContextTopLevelError(t *testing.T) {
 	lines := []string{
 		"(foo 1)",
 	}
-	ctx := sourceContext(lines, 1, 2)
+	ctx := SourceContextFromLines(lines, 1, 2)
 	if !strings.Contains(ctx, "(foo 1)") {
 		t.Errorf("expected error line, got:\n%s", ctx)
 	}
 }
 
-func TestTypeNameAllTypes(t *testing.T) {
+func TestNodeTypeNameAllTypes(t *testing.T) {
 	cases := []struct {
-		expr     Expr
+		node     *Node
 		expected string
 	}{
-		{Boolean(true), "boolean"},
-		{Integer(42), "integer"},
-		{Float(3.14), "float"},
-		{String("hi"), "string"},
-		{Identifier("foo"), "identifier"},
-		{ScopedIdentifier{Name: "x", Marks: map[uint64]bool{1: true}}, "identifier"},
-		{&Quote{Integer(1)}, "quoted expression"},
-		{Cons(Integer(1), NIL), "list"},
-		{*Cons(Integer(1), NIL), "list"},
-		{NIL, "empty list"},
-		{Wrap(42), "foreign value"},
-		{*Wrap(42), "foreign value"},
+		{BoolNode(true), "boolean"},
+		{IntNode(42), "integer"},
+		{FloatNode(3.14), "float"},
+		{StrNode("hi"), "string"},
+		{IdentNode("foo"), "identifier"},
+		{ScopedIdentNode("x", map[uint64]bool{1: true}), "identifier"},
+		{QuoteNodeVal(IntNode(1)), "quoted expression"},
+		{NewListNode([]*Node{IntNode(1)}), "list"},
+		{Nil, "empty list"},
+		{ForeignNodeVal(42), "foreign value"},
+		{MummyNodeVal(42, "int"), "mummy value"},
 	}
 	for _, c := range cases {
-		result := TypeName(c.expr)
+		result := NodeTypeName(c.node)
 		if result != c.expected {
-			t.Errorf("TypeName(%T) = %q, expected %q", c.expr, result, c.expected)
+			t.Errorf("NodeTypeName(%s) = %q, expected %q", c.node.Repr(), result, c.expected)
 		}
 	}
 }
@@ -231,7 +230,7 @@ func TestMacroExpansionLocationSourceContextNoFile(t *testing.T) {
 
 func TestSourceContextEmptyLines(t *testing.T) {
 	lines := []string{}
-	ctx := sourceContext(lines, 1, 1)
+	ctx := SourceContextFromLines(lines, 1, 1)
 	if ctx != "" {
 		t.Error("expected empty context for empty lines")
 	}
@@ -239,7 +238,7 @@ func TestSourceContextEmptyLines(t *testing.T) {
 
 func TestSourceContextOutOfBoundsLine(t *testing.T) {
 	lines := []string{"(foo)"}
-	ctx := sourceContext(lines, 5, 1)
+	ctx := SourceContextFromLines(lines, 5, 1)
 	if ctx != "" {
 		t.Error("expected empty context for out-of-bounds line")
 	}

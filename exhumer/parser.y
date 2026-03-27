@@ -12,7 +12,7 @@ import (
 %}
 
 %union {
-  expr e.Expr
+  node *e.Node
   tok string
   row int
   col int
@@ -35,62 +35,61 @@ import (
 %%
 progr: sexpr
      { l := yylex.(*schemeLexer)
-       l.lpair = $1.expr.(e.List) }
+       l.result = $1.node }
     | HASHBANG sexpr
      { l := yylex.(*schemeLexer)
-       l.lpair = $2.expr.(e.List) }
+       l.result = $2.node }
 ;
 sexpr:
-     { $$.expr = e.NIL}
+     { $$.node = e.Nil }
      | value sexpr
      {
-       pair := e.Cons($1.expr, $2.expr)
+       list := $2.node
+       children := make([]*e.Node, 0, len(list.Children)+1)
+       children = append(children, $1.node)
+       children = append(children, list.Children...)
+       result := e.NewListNode(children)
        pos := Position{$1.row, $1.col}
-	   l := yylex.(*schemeLexer)
-       pair.Loc = &e.SourcePosition{Ln: pos.Row, Col: pos.Col, Filename: l.Filename}
-       $$.expr = pair
-	   l.SetPairSrcPosition(pair, pos)
+       l := yylex.(*schemeLexer)
+       result.Loc = &e.SourcePosition{Ln: pos.Row, Col: pos.Col, Filename: l.Filename}
+       $$.node = result
      }
 ;
 value:
      INTEGER
      { i, _ := strconv.ParseInt($1.tok, 0, 64)
-     $$.expr = e.Integer(i) }
+     $$.node = e.IntNode(i) }
      | FLOAT
      { f, _ := strconv.ParseFloat($1.tok, 64)
-     $$.expr = e.Float(f) }
+     $$.node = e.FloatNode(f) }
      | TRUE
-     { $$.expr = e.Boolean(true) }
+     { $$.node = e.BoolNode(true) }
      | FALSE
-     { $$.expr = e.Boolean(false) }
+     { $$.node = e.BoolNode(false) }
      | IDENTIFIER
-     { $$.expr = e.Identifier($1.tok) }
+     { $$.node = e.IdentNode($1.tok) }
      | QUOTE value
-     { $$.expr = &e.Quote{$2.expr} }
+     { $$.node = e.QuoteNodeVal($2.node) }
      | STRING
-     { $$.expr = e.String(strings.Trim($1.tok, "\"`")) }
+     { $$.node = e.StrNode(strings.Trim($1.tok, "\"`")) }
      | BEG_LIST value sexpr DOT value END_LIST
-     { 
-       p := e.Cons($2.expr, $3.expr)
+     {
+       children := make([]*e.Node, 0, len($3.node.Children)+1)
+       children = append(children, $2.node)
+       children = append(children, $3.node.Children...)
+       result := &e.Node{Kind: e.ListNode, Children: children, DottedTail: $5.node}
        pos := Position{$2.row, $2.col}
-	   l := yylex.(*schemeLexer)
-       p.Loc = &e.SourcePosition{Ln: pos.Row, Col: pos.Col, Filename: l.Filename}
-       $$.expr = setLastTail(p, $5.expr)
-	   l.SetPairSrcPosition(p, pos)
+       l := yylex.(*schemeLexer)
+       result.Loc = &e.SourcePosition{Ln: pos.Row, Col: pos.Col, Filename: l.Filename}
+       $$.node = result
      }
      | BEG_LIST sexpr END_LIST
-     { $$.expr = $2.expr }
+     { $$.node = $2.node }
 ;
 %%
 
 type ParsedExpressions struct {
-	Expressions      e.List
-	pairSrcPositions map[e.Pair]Position
-}
-
-func (pe ParsedExpressions) PositionOf(p e.Pair) (pos Position, found bool) {
-	pos, found = pe.pairSrcPositions[p]
-	return
+	Expressions *e.Node
 }
 
 func Parse(r io.Reader) (int, *ParsedExpressions) {
@@ -101,19 +100,5 @@ func ParseWithFilename(r io.Reader, filename *string) (int, *ParsedExpressions) 
 	lex := NewLexer(r)
 	lex.Filename = filename
 	res := yyParse(lex)
-	return res, &ParsedExpressions{lex.lpair, lex.PairSrcPositions}
-}
-
-// setLastTail mutates the last Pair's tail in place. Safe here because
-// the parser creates fresh Pairs for each parse — no shared references.
-func setLastTail(p *e.Pair, newEnd e.Expr) *e.Pair {
-	lastPair := p
-	tail, _ := lastPair.Tail()
-	for tail != e.NIL {
-		lastPair = tail.(*e.Pair)
-		tail, _ = lastPair.Tail()
-	}
-
-	lastPair.T = newEnd
-	return p
+	return res, &ParsedExpressions{Expressions: lex.result}
 }

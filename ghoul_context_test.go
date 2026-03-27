@@ -22,7 +22,7 @@ func TestProcessWithContextHappyPath(t *testing.T) {
 		t.Fatalf("Expected no error, but got: %v", err)
 	}
 
-	if expected := e.Integer(7); !result.Equiv(expected) {
+	if expected := e.IntNode(7); !result.Equiv(expected) {
 		t.Errorf("Expected %s, but got %s", expected.Repr(), result.Repr())
 	}
 }
@@ -92,7 +92,7 @@ func TestProcessWithContextComplexProgram(t *testing.T) {
 	}
 
 	// double(3) + double(4) = 6 + 8 = 14
-	if expected := e.Integer(14); !result.Equiv(expected) {
+	if expected := e.IntNode(14); !result.Equiv(expected) {
 		t.Errorf("Expected %s, but got %s", expected.Repr(), result.Repr())
 	}
 }
@@ -108,7 +108,7 @@ func TestProcessBackwardCompatibility(t *testing.T) {
 		t.Fatalf("Expected no error, but got: %v", err)
 	}
 
-	if expected := e.Integer(17); !result.Equiv(expected) {
+	if expected := e.IntNode(17); !result.Equiv(expected) {
 		t.Errorf("Expected %s, but got %s", expected.Repr(), result.Repr())
 	}
 }

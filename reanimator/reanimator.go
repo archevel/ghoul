@@ -13,61 +13,22 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"github.com/archevel/ghoul/bones"
 	ev "github.com/archevel/ghoul/consume"
-	e "github.com/archevel/ghoul/bones"
 	"github.com/archevel/ghoul/engraving"
 	"github.com/archevel/ghoul/macromancy"
 	"github.com/archevel/ghoul/tome"
 )
 
 type Reanimator struct {
-	scopes      *macroScope
+	nodeScopes  *macroScope
 	evalEnv     *ev.Environment
 	evaluator   *ev.Evaluator
 	markCounter *uint64
 	log         engraving.Logger
 }
 
-// generalSyntaxTransformer holds a user-defined lambda that acts as a
-// macro transformer. The lambda is invoked through the evaluator during
-// expansion so the transformer body can use the full language.
-type generalSyntaxTransformer struct {
-	fun ev.Function
-}
-
-// macroScope holds macro bindings with parent-chain scoping for inner
-// define-syntax forms (e.g., inside lambda or begin blocks).
-type macroScope struct {
-	bindings map[e.Identifier]macroBinding
-	parent   *macroScope
-}
-
-type macroBinding struct {
-	syntaxTransformer  *macromancy.SyntaxTransformer
-	generalTransformer *generalSyntaxTransformer
-}
-
-func newMacroScope(parent *macroScope) *macroScope {
-	return &macroScope{
-		bindings: make(map[e.Identifier]macroBinding),
-		parent:   parent,
-	}
-}
-
-func (s *macroScope) lookup(name e.Identifier) (macroBinding, bool) {
-	for scope := s; scope != nil; scope = scope.parent {
-		if b, ok := scope.bindings[name]; ok {
-			return b, true
-		}
-	}
-	return macroBinding{}, false
-}
-
-func (s *macroScope) define(name e.Identifier, b macroBinding) {
-	s.bindings[name] = b
-}
-
-// New creates an Reanimator with its own evaluation environment for running
+// New creates a Reanimator with its own evaluation environment for running
 // general transformer bodies. The mark counter is shared with the evaluator
 // that will process the expanded code.
 func New(logger engraving.Logger, markCounter *uint64) *Reanimator {
@@ -75,7 +36,6 @@ func New(logger engraving.Logger, markCounter *uint64) *Reanimator {
 	tome.RegisterAll(env)
 	evaluator := ev.NewWithMarkCounter(logger, env, markCounter)
 	return &Reanimator{
-		scopes:      newMacroScope(nil),
 		evalEnv:     env,
 		evaluator:   evaluator,
 		markCounter: markCounter,
@@ -87,423 +47,539 @@ func (exp *Reanimator) freshMark() macromancy.Mark {
 	return atomic.AddUint64(exp.markCounter, 1)
 }
 
-// ExpandAll walks a top-level expression list and expands all macros.
-// Returns a new expression list with no define-syntax forms or macro calls.
-// Preserves source positions from the original parsed pairs.
-func (exp *Reanimator) ExpandAll(exprs e.List) (e.List, error) {
-	var results []e.Expr
-	var resultPairs []*e.Pair // original pairs for source position preservation
-	current := exprs
-	for current != e.NIL {
-		originalPair, _ := current.(*e.Pair)
-		expr := current.First()
-		expanded, err := exp.expandExpr(expr)
+// macroScope holds macro bindings keyed by string name.
+type macroScope struct {
+	bindings map[string]macroBinding
+	parent   *macroScope
+}
+
+// generalTransformer holds a FuncNode that acts as a macro transformer.
+type generalTransformer struct {
+	funcNode *bones.Node
+}
+
+type macroBinding struct {
+	syntaxTransformer  *macromancy.SyntaxTransformer
+	generalTransformer *generalTransformer
+}
+
+func newMacroScope(parent *macroScope) *macroScope {
+	return &macroScope{bindings: map[string]macroBinding{}, parent: parent}
+}
+
+func (s *macroScope) lookup(name string) (macroBinding, bool) {
+	for scope := s; scope != nil; scope = scope.parent {
+		if b, ok := scope.bindings[name]; ok {
+			return b, true
+		}
+	}
+	return macroBinding{}, false
+}
+
+func (s *macroScope) define(name string, b macroBinding) {
+	s.bindings[name] = b
+}
+
+// ReanimateNodes expands all macros in a Node tree and translates the
+// result into semantic nodes. This is the pipeline entry point.
+func (exp *Reanimator) ReanimateNodes(topLevel *bones.Node) ([]*bones.Node, error) {
+	if topLevel == nil || topLevel.IsNil() {
+		return nil, nil
+	}
+
+	// Initialize the persistent node scope on first use
+	if exp.nodeScopes == nil {
+		exp.nodeScopes = newMacroScope(nil)
+	}
+
+	var results []*bones.Node
+	for _, child := range topLevel.Children {
+		expanded, err := exp.expandNode(child, exp.nodeScopes)
 		if err != nil {
-			return e.NIL, err
+			return nil, err
 		}
 		if expanded != nil {
 			results = append(results, expanded)
-			resultPairs = append(resultPairs, originalPair)
 		}
-		next, ok := current.Tail()
-		if !ok {
-			break
-		}
-		current = next
 	}
 
-	var result e.Expr = e.NIL
-	for i := len(results) - 1; i >= 0; i-- {
-		pair := e.Cons(results[i], result)
-		if resultPairs[i] != nil && resultPairs[i].Loc != nil {
-			pair.Loc = resultPairs[i].Loc
+	// Translate ListNodes to semantic nodes (CallNode, LambdaNode, etc.)
+	var translated []*bones.Node
+	for _, node := range results {
+		t, err := translateNode(node)
+		if err != nil {
+			return nil, err
 		}
-		result = pair
+		// Propagate location from parent
+		if t.Loc == nil && node.Loc != nil {
+			t.Loc = node.Loc
+		}
+		translated = append(translated, t)
 	}
-	if result == e.NIL {
-		return e.NIL, nil
-	}
-	return result.(e.List), nil
+	return translated, nil
 }
 
-// expandExpr returns the original expression unchanged when no macros are
-// present, preserving source position information.
-func (exp *Reanimator) expandExpr(expr e.Expr) (e.Expr, error) {
-	list, isList := expr.(e.List)
-	if !isList || list == e.NIL {
-		return expr, nil
+func (exp *Reanimator) expandNode(node *bones.Node, scope *macroScope) (*bones.Node, error) {
+	if node == nil || node.IsNil() {
+		return node, nil
+	}
+	if node.Kind != bones.ListNode || len(node.Children) == 0 {
+		return node, nil
 	}
 
-	head := list.First()
-	headId := identName(head)
+	head := node.Children[0]
+	headName := head.IdentName()
 
-	// define-syntax: register the macro, produce nothing in output
-	if headId == "define-syntax" {
-		return exp.processDefineSyntax(list)
+	// define-syntax: register macro, strip from output
+	if headName == "define-syntax" {
+		return exp.processDefineSyntax(node, scope)
 	}
 
 	// Known macro call: expand and re-process
-	if headId != "" {
-		if binding, found := exp.scopes.lookup(e.Identifier(headId)); found {
-			expanded, err := exp.expandMacroCall(binding, list)
+	if headName != "" {
+		if binding, found := scope.lookup(headName); found {
+			expanded, err := exp.expandMacroCall(binding, node, scope)
 			if err != nil {
 				return nil, err
 			}
-			return exp.expandExpr(expanded)
+			return exp.expandNode(expanded, scope)
 		}
 	}
 
-	// Check if any sub-expression needs expansion. If not, return
-	// the original expression unchanged to preserve source positions.
-	if !exp.containsMacroCall(list) {
-		return expr, nil
+	// No macro calls in subtree? Return unchanged
+	if !exp.containsMacroCall(node, scope) {
+		return node, nil
 	}
 
-	switch headId {
-	case "quote":
-		return expr, nil
-	case "require":
-		return expr, nil
+	switch headName {
+	case "quote", "require":
+		return node, nil
 	case "lambda":
-		return exp.expandLambda(list)
+		return exp.expandLambda(node, scope)
 	case "begin":
-		return exp.expandBegin(list)
+		return exp.expandBegin(node, scope)
 	case "cond":
-		return exp.expandCond(list)
+		return exp.expandCond(node, scope)
 	case "define":
-		return exp.expandDefine(list)
+		return exp.expandDefine(node, scope)
 	case "set!":
-		return exp.expandSetBang(list)
+		return exp.expandDefine(node, scope)
 	default:
-		return exp.expandCall(list)
+		return exp.expandEach(node, scope)
 	}
 }
 
-// containsMacroCall checks whether any sub-expression in the list is a
-// macro call or define-syntax. This allows the reanimator to skip unchanged
-// expressions and preserve their source positions.
-func (exp *Reanimator) containsMacroCall(list e.List) bool {
-	current := list
-	for current != e.NIL {
-		elem := current.First()
-		if subList, ok := elem.(e.List); ok && subList != e.NIL {
-			subHead := identName(subList.First())
-			if subHead == "define-syntax" {
+func (exp *Reanimator) containsMacroCall(node *bones.Node, scope *macroScope) bool {
+	if node.Kind != bones.ListNode {
+		return false
+	}
+	for _, child := range node.Children {
+		if child.Kind == bones.ListNode && len(child.Children) > 0 {
+			name := child.Children[0].IdentName()
+			if name == "define-syntax" {
 				return true
 			}
-			if subHead != "" {
-				if _, found := exp.scopes.lookup(e.Identifier(subHead)); found {
+			if name != "" {
+				if _, found := scope.lookup(name); found {
 					return true
 				}
 			}
-			if exp.containsMacroCall(subList) {
+			if exp.containsMacroCall(child, scope) {
 				return true
 			}
 		}
-		next, ok := current.Tail()
-		if !ok {
-			break
-		}
-		current = next
 	}
 	return false
 }
 
-// processDefineSyntax handles (define-syntax name transformer).
-// Returns nil to strip the form from the output.
-func (exp *Reanimator) processDefineSyntax(form e.List) (e.Expr, error) {
-	rest, ok := form.Tail()
-	if !ok || rest == e.NIL {
+func (exp *Reanimator) processDefineSyntax(node *bones.Node, scope *macroScope) (*bones.Node, error) {
+	if len(node.Children) < 3 {
 		return nil, fmt.Errorf("bad syntax: define-syntax requires name and transformer")
 	}
 
-	name, nameOk := rest.First().(e.Identifier)
-	if !nameOk {
+	nameNode := node.Children[1]
+	name := nameNode.IdentName()
+	if name == "" {
 		return nil, fmt.Errorf("bad syntax: define-syntax name must be an identifier")
 	}
 
-	transformerDef, transformerOk := rest.Tail()
-	if !transformerOk || transformerDef == e.NIL {
-		return nil, fmt.Errorf("bad syntax: define-syntax requires a transformer")
-	}
-
-	transformerExpr := transformerDef.First()
-	transformerList, isList := transformerExpr.(e.List)
-	if !isList {
+	transformerNode := node.Children[2]
+	if transformerNode.Kind != bones.ListNode || len(transformerNode.Children) == 0 {
 		return nil, fmt.Errorf("bad syntax: transformer must be a form")
 	}
 
-	// syntax-rules: build transformer directly (no evaluation needed)
-	if e.Identifier("syntax-rules").Equiv(transformerList.First()) {
-		definitionBindings := exp.evalEnv.BoundIdentifierNames()
-		st, err := macromancy.BuildSyntaxRulesTransformer(name, transformerList, definitionBindings)
+	// syntax-rules: build Node-based transformer directly
+	if transformerNode.Children[0].IdentName() == "syntax-rules" {
+		defBindings := exp.boundIdentifierNames()
+		st, err := macromancy.BuildSyntaxRulesTransformer(name, transformerNode, defBindings)
 		if err != nil {
 			return nil, fmt.Errorf("bad syntax: %s", err)
 		}
-		exp.scopes.define(name, macroBinding{syntaxTransformer: &st})
+		scope.define(name, macroBinding{syntaxTransformer: &st})
 		return nil, nil
 	}
 
-	// General transformer: first expand macro calls within the transformer
-	// expression (e.g., the lambda body might call syntax-case), then
-	// evaluate the expanded expression to get a Function.
-	expandedTransformer, err := exp.expandExpr(transformerExpr)
+	// General transformer: expand, translate, evaluate to get a Function,
+	// then store it for later invocation during macro calls.
+	expandedNode, err := exp.expandNode(transformerNode, scope)
 	if err != nil {
 		return nil, fmt.Errorf("define-syntax: failed to expand transformer: %w", err)
 	}
-	result, err := exp.evaluator.Evaluate(e.Cons(expandedTransformer, e.NIL))
+	translated, err := translateNode(expandedNode)
+	if err != nil {
+		return nil, fmt.Errorf("define-syntax: failed to translate transformer: %w", err)
+	}
+	resultNode, err := exp.evaluator.ConsumeNodes([]*bones.Node{translated})
 	if err != nil {
 		return nil, fmt.Errorf("define-syntax: failed to evaluate transformer: %w", err)
 	}
-	fun, isFun := result.(ev.Function)
-	if !isFun {
+	if resultNode.Kind != bones.FunctionNode || resultNode.FuncVal == nil {
 		return nil, fmt.Errorf("bad syntax: transformer must be a procedure")
 	}
-	gst := &generalSyntaxTransformer{fun: fun}
-	exp.scopes.define(name, macroBinding{generalTransformer: gst})
+	scope.define(name, macroBinding{generalTransformer: &generalTransformer{funcNode: resultNode}})
 	return nil, nil
 }
 
-func (exp *Reanimator) expandMacroCall(binding macroBinding, callable e.List) (e.Expr, error) {
+func (exp *Reanimator) expandMacroCall(binding macroBinding, node *bones.Node, scope *macroScope) (*bones.Node, error) {
 	if binding.syntaxTransformer != nil {
 		mark := exp.freshMark()
-		expanded, err := binding.syntaxTransformer.Transform(callable, mark)
+		expanded, err := binding.syntaxTransformer.Transform(node, mark)
 		if err != nil {
 			return nil, err
 		}
-		setMacroLocation(expanded, callable)
+		setMacroLocation(expanded, node)
 		return expanded, nil
 	}
 
 	if binding.generalTransformer != nil {
 		mark := exp.freshMark()
-		wrapped := macromancy.WrapExpr(callable, macromancy.NewMarkSet())
+
+		// Node-based hygiene: wrap, mark, invoke, mark again, resolve
+		wrapped := macromancy.WrapSyntax(node, macromancy.NewMarkSet())
 		markedInput := macromancy.ApplyMark(wrapped, mark)
 
-		// Invoke the transformer via EvalSubExpression. The Function value
-		// is embedded directly in the call expression (it self-evaluates),
-		// and the marked input is quoted so it's passed as data.
-		quotedInput := &e.Quote{Quoted: markedInput}
-		callExpr := e.Cons(binding.generalTransformer.fun, e.Cons(quotedInput, e.NIL))
-		result, err := exp.evaluator.EvalSubExpression(callExpr)
+		// Build a call node: (transformer-fn (quote markedInput))
+		quotedInput := bones.QuoteNodeVal(markedInput)
+		callNode := &bones.Node{
+			Kind:     bones.CallNode,
+			Children: []*bones.Node{binding.generalTransformer.funcNode, quotedInput},
+		}
+		resultNode, err := exp.evaluator.EvalSubExpression(callNode)
 		if err != nil {
 			return nil, err
 		}
 
-		marked := macromancy.ApplyMark(result, mark)
-		resolved := macromancy.ResolveExpr(marked)
-		setMacroLocation(resolved, callable)
+		// Apply mark again (toggle cancels input marks) and resolve
+		marked := macromancy.ApplyMark(resultNode, mark)
+		resolved := macromancy.ResolveSyntax(marked)
+		setMacroLocation(resolved, node)
 		return resolved, nil
 	}
 
 	return nil, fmt.Errorf("internal error: macro binding has no transformer")
 }
 
-// --- Recursive expansion into sub-expressions ---
-
-func (exp *Reanimator) expandLambda(form e.List) (e.Expr, error) {
-	// (lambda params body ...)
-	rest, ok := form.Tail()
-	if !ok || rest == e.NIL {
-		return form, nil
+func (exp *Reanimator) expandLambda(node *bones.Node, scope *macroScope) (*bones.Node, error) {
+	if len(node.Children) < 3 {
+		return node, nil
 	}
-	params := rest.First()
-	body, ok := rest.Tail()
-	if !ok {
-		return form, nil
-	}
+	saved := scope
+	scope = newMacroScope(saved)
+	defer func() { scope = saved }()
 
-	// Push a new macro scope for inner define-syntax
-	saved := exp.scopes
-	exp.scopes = newMacroScope(saved)
-	defer func() { exp.scopes = saved }()
-
-	expandedBody, err := exp.expandSequence(body)
+	expandedBody, err := exp.expandSequence(node.Children[2:], scope)
 	if err != nil {
 		return nil, err
 	}
 
-	return rebuildList(form.First(), e.Cons(params, expandedBody)), nil
+	children := make([]*bones.Node, 0, 2+len(expandedBody))
+	children = append(children, node.Children[0]) // lambda keyword
+	children = append(children, node.Children[1]) // params
+	children = append(children, expandedBody...)
+	return &bones.Node{Kind: bones.ListNode, Children: children, Loc: node.Loc}, nil
 }
 
-func (exp *Reanimator) expandBegin(form e.List) (e.Expr, error) {
-	// (begin expr ...)
-	rest, ok := form.Tail()
-	if !ok {
-		return form, nil
+func (exp *Reanimator) expandBegin(node *bones.Node, scope *macroScope) (*bones.Node, error) {
+	if len(node.Children) < 2 {
+		return node, nil
 	}
-	expandedBody, err := exp.expandSequence(rest)
+	expandedBody, err := exp.expandSequence(node.Children[1:], scope)
 	if err != nil {
 		return nil, err
 	}
-	return rebuildList(form.First(), expandedBody), nil
+	children := make([]*bones.Node, 0, 1+len(expandedBody))
+	children = append(children, node.Children[0]) // begin keyword
+	children = append(children, expandedBody...)
+	return &bones.Node{Kind: bones.ListNode, Children: children, Loc: node.Loc}, nil
 }
 
-func (exp *Reanimator) expandCond(form e.List) (e.Expr, error) {
-	// (cond (pred consequent ...) ...)
-	rest, ok := form.Tail()
-	if !ok {
-		return form, nil
+func (exp *Reanimator) expandCond(node *bones.Node, scope *macroScope) (*bones.Node, error) {
+	if len(node.Children) < 2 {
+		return node, nil
 	}
-	var clauses []e.Expr
-	current := rest
-	for current != e.NIL {
-		clause := current.First()
-		clauseList, isList := clause.(e.List)
-		if isList && clauseList != e.NIL {
-			expanded, err := exp.expandEachInList(clauseList)
+	children := []*bones.Node{node.Children[0]} // cond keyword
+	for _, clause := range node.Children[1:] {
+		if clause.Kind == bones.ListNode && len(clause.Children) > 0 {
+			expanded, err := exp.expandEach(clause, scope)
 			if err != nil {
 				return nil, err
 			}
-			clauses = append(clauses, expanded)
+			children = append(children, expanded)
 		} else {
-			clauses = append(clauses, clause)
+			children = append(children, clause)
 		}
-		next, ok := current.Tail()
-		if !ok {
-			break
-		}
-		current = next
 	}
-	return rebuildList(form.First(), listFromSlice(clauses)), nil
+	return &bones.Node{Kind: bones.ListNode, Children: children, Loc: node.Loc}, nil
 }
 
-func (exp *Reanimator) expandDefine(form e.List) (e.Expr, error) {
-	// (define name value)
-	rest, ok := form.Tail()
-	if !ok || rest == e.NIL {
-		return form, nil
+func (exp *Reanimator) expandDefine(node *bones.Node, scope *macroScope) (*bones.Node, error) {
+	if len(node.Children) < 3 {
+		return node, nil
 	}
-	name := rest.First()
-	valueExpr, ok := rest.Tail()
-	if !ok || valueExpr == e.NIL {
-		return form, nil
-	}
-	expandedVal, err := exp.expandExpr(valueExpr.First())
+	expandedVal, err := exp.expandNode(node.Children[2], scope)
 	if err != nil {
 		return nil, err
 	}
-	return rebuildList(form.First(), e.Cons(name, e.Cons(expandedVal, e.NIL))), nil
+	return &bones.Node{
+		Kind:     bones.ListNode,
+		Children: []*bones.Node{node.Children[0], node.Children[1], expandedVal},
+		Loc:      node.Loc,
+	}, nil
 }
 
-func (exp *Reanimator) expandSetBang(form e.List) (e.Expr, error) {
-	// (set! name value) — same structure as define
-	return exp.expandDefine(form)
-}
-
-func (exp *Reanimator) expandCall(form e.List) (e.Expr, error) {
-	// (f arg1 arg2 ...) — expand each sub-expression
-	return exp.expandEachInList(form)
-}
-
-// expandSequence expands a sequence of expressions (as in begin or lambda body).
-// define-syntax forms are processed and stripped from the output.
-func (exp *Reanimator) expandSequence(exprs e.List) (e.List, error) {
-	var results []e.Expr
-	current := exprs
-	for current != e.NIL {
-		expr := current.First()
-		expanded, err := exp.expandExpr(expr)
-		if err != nil {
-			return e.NIL, err
-		}
-		if expanded != nil {
-			results = append(results, expanded)
-		}
-		next, ok := current.Tail()
-		if !ok {
-			break
-		}
-		current = next
-	}
-	return listFromSlice(results), nil
-}
-
-func (exp *Reanimator) expandEachInList(list e.List) (e.Expr, error) {
-	var elems []e.Expr
-	current := list
-	for current != e.NIL {
-		expr := current.First()
-		expanded, err := exp.expandExpr(expr)
+func (exp *Reanimator) expandSequence(nodes []*bones.Node, scope *macroScope) ([]*bones.Node, error) {
+	var results []*bones.Node
+	for _, child := range nodes {
+		expanded, err := exp.expandNode(child, scope)
 		if err != nil {
 			return nil, err
 		}
 		if expanded != nil {
-			elems = append(elems, expanded)
+			results = append(results, expanded)
 		}
-		next, ok := current.Tail()
-		if !ok {
-			// Improper list — preserve the dotted tail
-			expandedTail, err := exp.expandExpr(current.Second())
-			if err != nil {
-				return nil, err
-			}
-			var result e.Expr = expandedTail
-			for i := len(elems) - 1; i >= 0; i-- {
-				result = e.Cons(elems[i], result)
-			}
-			return result, nil
-		}
-		current = next
 	}
-	return listFromSlice(elems), nil
+	return results, nil
 }
 
-// --- Helpers ---
+func (exp *Reanimator) expandEach(node *bones.Node, scope *macroScope) (*bones.Node, error) {
+	if node.Kind != bones.ListNode {
+		return node, nil
+	}
+	children := make([]*bones.Node, len(node.Children))
+	for i, child := range node.Children {
+		expanded, err := exp.expandNode(child, scope)
+		if err != nil {
+			return nil, err
+		}
+		children[i] = expanded
+	}
+	return &bones.Node{Kind: bones.ListNode, Children: children, Loc: node.Loc}, nil
+}
 
-func identName(expr e.Expr) string {
-	switch v := expr.(type) {
-	case e.Identifier:
-		return string(v)
-	case e.ScopedIdentifier:
-		return string(v.Name)
+func (exp *Reanimator) boundIdentifierNames() map[string]bool {
+	return exp.evalEnv.BoundIdentifierNames()
+}
+
+// --- Node-based translate ---
+
+func translateNode(node *bones.Node) (*bones.Node, error) {
+	if node == nil || node.IsNil() {
+		return node, nil
+	}
+
+	// Non-list nodes pass through unchanged
+	if node.Kind != bones.ListNode {
+		return node, nil
+	}
+
+	// Empty list
+	if len(node.Children) == 0 {
+		return node, nil
+	}
+
+	headName := node.Children[0].IdentName()
+	switch headName {
+	case "quote":
+		return translateQuote(node)
+	case "define":
+		return translateDefineOrSet(node, bones.DefineNode)
+	case "set!":
+		return translateDefineOrSet(node, bones.SetNode)
+	case "lambda":
+		return translateLambda(node)
+	case "cond":
+		return translateCond(node)
+	case "begin":
+		return translateBegin(node)
+	case "require":
+		return translateRequire(node)
 	default:
-		return ""
+		return translateCall(node)
 	}
 }
 
-func listFromSlice(exprs []e.Expr) e.List {
-	if len(exprs) == 0 {
-		return e.NIL
+func translateQuote(node *bones.Node) (*bones.Node, error) {
+	if len(node.Children) < 2 {
+		return nil, fmt.Errorf("bad syntax: quote requires an argument")
 	}
-	var result e.Expr = e.NIL
-	for i := len(exprs) - 1; i >= 0; i-- {
-		result = e.Cons(exprs[i], result)
-	}
-	return result.(e.List)
+	return &bones.Node{Kind: bones.QuoteNode, Quoted: node.Children[1], Loc: node.Loc}, nil
 }
 
-func rebuildList(head e.Expr, tail e.Expr) e.Expr {
-	return e.Cons(head, tail)
+func translateDefineOrSet(node *bones.Node, kind bones.NodeKind) (*bones.Node, error) {
+	if len(node.Children) < 3 {
+		return nil, fmt.Errorf("bad syntax: missing value in binding")
+	}
+	nameNode := node.Children[1]
+	valueNode, err := translateNode(node.Children[2])
+	if err != nil {
+		return nil, err
+	}
+	inheritLoc(nameNode, node)
+	inheritLoc(valueNode, node)
+	return &bones.Node{
+		Kind:     kind,
+		Loc:      node.Loc,
+		Children: []*bones.Node{nameNode, valueNode},
+	}, nil
 }
 
-// setMacroLocation stamps expanded code with the macro call site's location.
-func setMacroLocation(expanded e.Expr, callSite e.List) {
-	expandedPair, ok := expanded.(*e.Pair)
-	if !ok {
+func translateLambda(node *bones.Node) (*bones.Node, error) {
+	if len(node.Children) < 3 {
+		return nil, fmt.Errorf("bad syntax: lambda requires parameters and body")
+	}
+	params, err := translateParams(node.Children[1])
+	if err != nil {
+		return nil, err
+	}
+	var bodyNodes []*bones.Node
+	for _, child := range node.Children[2:] {
+		t, err := translateNode(child)
+		if err != nil {
+			return nil, err
+		}
+		inheritLoc(t, node)
+		bodyNodes = append(bodyNodes, t)
+	}
+	return &bones.Node{
+		Kind:     bones.LambdaNode,
+		Loc:      node.Loc,
+		Params:   params,
+		Children: bodyNodes,
+	}, nil
+}
+
+func translateParams(paramNode *bones.Node) (*bones.ParamSpec, error) {
+	// Single identifier: all-variadic
+	if paramNode.Kind == bones.IdentifierNode {
+		return &bones.ParamSpec{Variadic: paramNode}, nil
+	}
+	if paramNode.Kind != bones.ListNode {
+		return nil, fmt.Errorf("bad syntax: invalid parameter list")
+	}
+	spec := &bones.ParamSpec{}
+	for _, child := range paramNode.Children {
+		spec.Fixed = append(spec.Fixed, child)
+	}
+	if paramNode.DottedTail != nil {
+		spec.Variadic = paramNode.DottedTail
+	}
+	return spec, nil
+}
+
+func translateCond(node *bones.Node) (*bones.Node, error) {
+	var clauses []*bones.CondClause
+	for _, clauseNode := range node.Children[1:] {
+		if clauseNode.Kind != bones.ListNode || len(clauseNode.Children) == 0 {
+			return nil, fmt.Errorf("bad syntax: cond clause must be a list")
+		}
+		clause, err := translateCondClause(clauseNode)
+		if err != nil {
+			return nil, err
+		}
+		clauses = append(clauses, clause)
+	}
+	return &bones.Node{Kind: bones.CondNode, Loc: node.Loc, Clauses: clauses}, nil
+}
+
+func translateCondClause(clauseNode *bones.Node) (*bones.CondClause, error) {
+	test := clauseNode.Children[0]
+	isElse := test.IdentName() == "else"
+
+	var bodyNodes []*bones.Node
+	for _, child := range clauseNode.Children[1:] {
+		t, err := translateNode(child)
+		if err != nil {
+			return nil, err
+		}
+		bodyNodes = append(bodyNodes, t)
+	}
+
+	result := &bones.CondClause{IsElse: isElse, Consequent: bodyNodes}
+	if !isElse {
+		testNode, err := translateNode(test)
+		if err != nil {
+			return nil, err
+		}
+		result.Test = testNode
+	}
+	return result, nil
+}
+
+func translateBegin(node *bones.Node) (*bones.Node, error) {
+	var bodyNodes []*bones.Node
+	for _, child := range node.Children[1:] {
+		t, err := translateNode(child)
+		if err != nil {
+			return nil, err
+		}
+		inheritLoc(t, node)
+		bodyNodes = append(bodyNodes, t)
+	}
+	return &bones.Node{Kind: bones.BeginNode, Loc: node.Loc, Children: bodyNodes}, nil
+}
+
+func translateRequire(node *bones.Node) (*bones.Node, error) {
+	return &bones.Node{Kind: bones.RequireNode, Loc: node.Loc, RawArgs: node.Children[1:]}, nil
+}
+
+func translateCall(node *bones.Node) (*bones.Node, error) {
+	children := make([]*bones.Node, len(node.Children))
+	for i, child := range node.Children {
+		t, err := translateNode(child)
+		if err != nil {
+			return nil, err
+		}
+		inheritLoc(t, node)
+		children[i] = t
+	}
+	return &bones.Node{Kind: bones.CallNode, Loc: node.Loc, Children: children}, nil
+}
+
+func inheritLoc(child *bones.Node, parent *bones.Node) {
+	if child.Loc == nil && parent.Loc != nil {
+		child.Loc = parent.Loc
+	}
+}
+
+func setMacroLocation(expanded *bones.Node, callSite *bones.Node) {
+	if expanded == nil || callSite == nil || callSite.Loc == nil {
 		return
 	}
-	callPair, ok := callSite.(*e.Pair)
-	if !ok {
-		return
+	macroName := ""
+	if len(callSite.Children) > 0 {
+		macroName = callSite.Children[0].IdentName()
 	}
-	if callPair.Loc == nil {
-		return
-	}
-
-	macroName := identName(callPair.H)
-	loc := &e.MacroExpansionLocation{MacroName: macroName, CallSite: callPair.Loc}
-	setLocationRecursive(expandedPair, loc)
+	loc := &bones.MacroExpansionLocation{MacroName: macroName, CallSite: callSite.Loc}
+	setLocationRecursive(expanded, loc)
 }
 
-func setLocationRecursive(pair *e.Pair, loc e.CodeLocation) {
-	if pair.Loc == nil {
-		pair.Loc = loc
+func setLocationRecursive(node *bones.Node, loc bones.CodeLocation) {
+	if node.Loc == nil {
+		node.Loc = loc
 	}
-	if child, ok := pair.H.(*e.Pair); ok {
-		setLocationRecursive(child, loc)
-	}
-	if child, ok := pair.T.(*e.Pair); ok {
-		setLocationRecursive(child, loc)
+	if node.Kind == bones.ListNode {
+		for _, child := range node.Children {
+			setLocationRecursive(child, loc)
+		}
 	}
 }

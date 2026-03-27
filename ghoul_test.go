@@ -48,14 +48,14 @@ func TestYieldsEvaluationErrorWhenThereIsAnErrror(t *testing.T) {
 func TestExpandsMacrosBeforeEvaluating(t *testing.T) {
 	g := New()
 	in := "(define-syntax baz (syntax-rules () ((baz x y) (+ x y)))) (baz 1 2)"
-	expected := e.Integer(3)
+	expected := e.IntNode(3)
 	res, err := g.Process(strings.NewReader(in))
 
 	if err != nil {
 		t.Errorf("Got an error '%s' when processing '%s'", err, in)
 	}
 
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Got %s, expected %s when evaluating '%s'", res.Repr(), expected.Repr(), in)
 	}
 }
@@ -63,23 +63,23 @@ func TestExpandsMacrosBeforeEvaluating(t *testing.T) {
 func TestBasicBuiltInFunctions(t *testing.T) {
 	cases := []struct {
 		in  string
-		out e.Expr
+		out *e.Node
 	}{
-		{"(eq? 1 1)", e.Boolean(true)},
-		{"(eq? 1 \"3\")", e.Boolean(false)},
+		{"(eq? 1 1)", e.BoolNode(true)},
+		{"(eq? 1 \"3\")", e.BoolNode(false)},
 
-		{"(and #t #t)", e.Boolean(true)},
-		{"(and #t #f)", e.Boolean(false)},
+		{"(and #t #t)", e.BoolNode(true)},
+		{"(and #t #f)", e.BoolNode(false)},
 
-		{"(< 1 2)", e.Boolean(true)},
-		{"(< 2 1)", e.Boolean(false)},
+		{"(< 1 2)", e.BoolNode(true)},
+		{"(< 2 1)", e.BoolNode(false)},
 
-		{"(mod 9 3)", e.Integer(0)},
-		{"(mod 1 3)", e.Integer(1)},
+		{"(mod 9 3)", e.IntNode(0)},
+		{"(mod 1 3)", e.IntNode(1)},
 
-		{"(+ 9 3)", e.Integer(12)},
-		{"(+ 1 3)", e.Integer(4)},
-		{"(+ -1 3)", e.Integer(2)},
+		{"(+ 9 3)", e.IntNode(12)},
+		{"(+ 1 3)", e.IntNode(4)},
+		{"(+ -1 3)", e.IntNode(2)},
 	}
 
 	for _, c := range cases {
@@ -90,7 +90,7 @@ func TestBasicBuiltInFunctions(t *testing.T) {
 			t.Errorf("'%s' yielded an unexpected error: %s", c.in, err.Error())
 		}
 
-		if !c.out.Equiv(res) {
+		if !res.Equiv(c.out) {
 			t.Errorf("'%s' failed, expected %s, got %s", c.in, c.out.Repr(), res.Repr())
 		}
 	}
@@ -103,13 +103,13 @@ func TestHygienicMacroOrWithTmp(t *testing.T) {
 (define tmp 5)
 (my-or #f tmp)
 `
-	expected := e.Integer(5)
+	expected := e.IntNode(5)
 	res, err := g.Process(strings.NewReader(in))
 
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -123,13 +123,13 @@ func TestHygienicMacroSwapWithTmp(t *testing.T) {
 (my-swap a b)
 a
 `
-	expected := e.Integer(20)
+	expected := e.IntNode(20)
 	res, err := g.Process(strings.NewReader(in))
 
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -144,13 +144,13 @@ func TestHygienicMacroSwapWithTmpVariable(t *testing.T) {
 (my-swap tmp other)
 tmp
 `
-	expected := e.Integer(20)
+	expected := e.IntNode(20)
 	res, err := g.Process(strings.NewReader(in))
 
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s (user's tmp should be swapped), got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -164,12 +164,12 @@ func TestSyntaxRulesWithEllipsis(t *testing.T) {
 (define-syntax my-begin (syntax-rules () ((my-begin x ...) (begin x ...))))
 (my-begin (define a 1) (define b 2) (+ a b))
 `
-	expected := e.Integer(3)
+	expected := e.IntNode(3)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if res != nil && !expected.Equiv(res) {
+	if res != nil && !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -182,12 +182,12 @@ func TestSyntaxRulesWithEllipsisMultipleArgs(t *testing.T) {
 `
 	// (add-all 1 2 3) should expand to (+ 1 (+ 2 3))
 	// But this requires ... to work in both pattern matching and template expansion
-	expected := e.Integer(6)
+	expected := e.IntNode(6)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if res != nil && !expected.Equiv(res) {
+	if res != nil && !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -200,12 +200,12 @@ func TestSyntaxRulesLiterals(t *testing.T) {
   ((my-if test then else alt) (cond (test then) (else alt)))))
 (my-if #t 1 else 2)
 `
-	expected := e.Integer(1)
+	expected := e.IntNode(1)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if res != nil && !expected.Equiv(res) {
+	if res != nil && !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -220,12 +220,12 @@ func TestSyntaxRulesLiteralPreventsBinding(t *testing.T) {
   ((test-lit x arrow y) (+ x y))))
 (test-lit 3 arrow 4)
 `
-	expected := e.Integer(7)
+	expected := e.IntNode(7)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if res != nil && !expected.Equiv(res) {
+	if res != nil && !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -256,12 +256,12 @@ func TestSyntaxRulesLiteralNotBoundAsVariable(t *testing.T) {
   ((my-if test then else alt) (cond (test then) (else alt)))))
 (my-if (eq? 1 2) 10 else 20)
 `
-	expected := e.Integer(20)
+	expected := e.IntNode(20)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if res != nil && !expected.Equiv(res) {
+	if res != nil && !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -273,13 +273,13 @@ func TestGeneralTransformerAlways42(t *testing.T) {
   (lambda (stx) 42))
 (always-42 anything)
 `
-	expected := e.Integer(42)
+	expected := e.IntNode(42)
 	res, err := g.Process(strings.NewReader(in))
 
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -294,13 +294,13 @@ func TestGeneralTransformerWithListConstruction(t *testing.T) {
     (list '+ (syntax->datum arg) 3)))
 (add-3 7)
 `
-	expected := e.Integer(10)
+	expected := e.IntNode(10)
 	res, err := g.Process(strings.NewReader(in))
 
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -313,12 +313,12 @@ func TestNestedMacroExpansion(t *testing.T) {
 (define-syntax add-two (syntax-rules () ((add-two x) (add-one (add-one x)))))
 (add-two 3)
 `
-	expected := e.Integer(5)
+	expected := e.IntNode(5)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -334,12 +334,12 @@ func TestNestedMacrosWithSameTmpVariable(t *testing.T) {
 	// save-second expands to: (begin (define tmp$1 20) (save-first tmp$1 10))
 	// save-first then expands to: (begin (define tmp$2 tmp$1) tmp$2)
 	// tmp$2 = tmp$1 = 20, so result is 20
-	expected := e.Integer(20)
+	expected := e.IntNode(20)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -357,12 +357,12 @@ func TestNestedMacrosWithUserTmpVariable(t *testing.T) {
 	// wrap-b expands to: (begin (define tmp$1 tmp) (wrap-a tmp$1))
 	// wrap-a expands to: (begin (define tmp$2 tmp$1) tmp$2)
 	// tmp$2 = tmp$1 = user's tmp = 99
-	expected := e.Integer(99)
+	expected := e.IntNode(99)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -375,12 +375,12 @@ func TestMacroExpandingToDefineSyntax(t *testing.T) {
 (def-adder add-five 5)
 (add-five 10)
 `
-	expected := e.Integer(15)
+	expected := e.IntNode(15)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -396,12 +396,12 @@ func TestGeneralTransformerHygienePassthroughIdentifiers(t *testing.T) {
 (define x 42)
 (passthrough x)
 `
-	expected := e.Integer(42)
+	expected := e.IntNode(42)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -421,12 +421,12 @@ func TestGeneralTransformerHygieneIntroducedBinding(t *testing.T) {
 	// With correct hygiene: the 'x in (define x 99) is introduced by the transformer
 	// and gets marked, while the x from user input passes through unmarked.
 	// So user's x (42) is returned, not 99.
-	expected := e.Integer(42)
+	expected := e.IntNode(42)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -440,10 +440,10 @@ func TestSyntaxRulesMultipleClauses(t *testing.T) {
 	cases := []struct {
 		name     string
 		call     string
-		expected e.Expr
+		expected *e.Node
 	}{
-		{"second clause matches single arg", "(my-op 10)", e.Integer(11)},
-		{"first clause matches two args", "(my-op 3 4)", e.Integer(7)},
+		{"second clause matches single arg", "(my-op 10)", e.IntNode(11)},
+		{"first clause matches two args", "(my-op 3 4)", e.IntNode(7)},
 	}
 
 	for _, c := range cases {
@@ -453,7 +453,7 @@ func TestSyntaxRulesMultipleClauses(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Got error: %s", err)
 			}
-			if res != nil && !c.expected.Equiv(res) {
+			if res != nil && !res.Equiv(c.expected) {
 				t.Errorf("Expected %s, got %s", c.expected.Repr(), res.Repr())
 			}
 		})
@@ -476,12 +476,12 @@ func TestQuotedIdentifiersInTransformerGetHygiene(t *testing.T) {
 	// bind-and-return defines its own scoped x=99 and returns that,
 	// so result is 99 (the macro's own x, not the user's).
 	// The user's x=42 remains untouched.
-	expected := e.Integer(99)
+	expected := e.IntNode(99)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Errorf("Got error: %s", err)
 	}
-	if res != nil && !expected.Equiv(res) {
+	if res != nil && !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -554,12 +554,12 @@ func TestNestedEllipsisLetMacro(t *testing.T) {
    ((lambda (var ...) body ...) val ...))))
 (let ((x 1) (y 2)) (+ x y))
 `
-	expected := e.Integer(3)
+	expected := e.IntNode(3)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -572,12 +572,12 @@ func TestNestedEllipsisLetMacroMultipleBody(t *testing.T) {
    ((lambda (var ...) body ...) val ...))))
 (let ((x 10) (y 20)) (define z (+ x y)) z)
 `
-	expected := e.Integer(30)
+	expected := e.IntNode(30)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -590,12 +590,12 @@ func TestNestedEllipsisLetMacroEmptyBindings(t *testing.T) {
    ((lambda (var ...) body ...) val ...))))
 (let () 42)
 `
-	expected := e.Integer(42)
+	expected := e.IntNode(42)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -607,12 +607,12 @@ func TestWildcardInSyntaxRules(t *testing.T) {
   ((first-of x _) x)))
 (first-of 42 99)
 `
-	expected := e.Integer(42)
+	expected := e.IntNode(42)
 	res, err := g.Process(strings.NewReader(in))
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !expected.Equiv(res) {
+	if !res.Equiv(expected) {
 		t.Errorf("Expected %s, got %s", expected.Repr(), res.Repr())
 	}
 }
@@ -623,7 +623,7 @@ func TestPreludeLetMacro(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !e.Integer(30).Equiv(res) {
+	if !res.Equiv(e.IntNode(30)) {
 		t.Errorf("Expected 30, got %s", res.Repr())
 	}
 }
@@ -635,7 +635,7 @@ func TestPreludeLetStarMacro(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !e.Integer(3).Equiv(res) {
+	if !res.Equiv(e.IntNode(3)) {
 		t.Errorf("Expected 3, got %s", res.Repr())
 	}
 }
@@ -646,7 +646,7 @@ func TestPreludeLetStarEmptyBindings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !e.Integer(42).Equiv(res) {
+	if !res.Equiv(e.IntNode(42)) {
 		t.Errorf("Expected 42, got %s", res.Repr())
 	}
 }
@@ -657,7 +657,7 @@ func TestPreludeLetStarSingleBinding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !e.Integer(15).Equiv(res) {
+	if !res.Equiv(e.IntNode(15)) {
 		t.Errorf("Expected 15, got %s", res.Repr())
 	}
 }
@@ -668,7 +668,7 @@ func TestPreludeWhenMacro(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !e.Integer(42).Equiv(res) {
+	if !res.Equiv(e.IntNode(42)) {
 		t.Errorf("Expected 42, got %s", res.Repr())
 	}
 }
@@ -695,7 +695,7 @@ func TestScopedIdentifierMacroCallExpansion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !e.Integer(6).Equiv(res) {
+	if !res.Equiv(e.IntNode(6)) {
 		t.Errorf("Expected 6, got %s", res.Repr())
 	}
 }
@@ -727,7 +727,7 @@ func TestGeneralTransformerNestedDefineInsideLambda(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !e.Integer(1).Equiv(res) {
+	if !res.Equiv(e.IntNode(1)) {
 		t.Errorf("Expected 1, got %s", res.Repr())
 	}
 }
@@ -746,7 +746,7 @@ func TestPreludeSyntaxCaseAdd1(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
 	}
-	if !e.Integer(42).Equiv(res) {
+	if !res.Equiv(e.IntNode(42)) {
 		t.Errorf("Expected 42, got %s", res.Repr())
 	}
 }

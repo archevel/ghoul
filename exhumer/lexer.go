@@ -28,15 +28,10 @@ func (p Position) String() string {
 }
 
 type schemeLexer struct {
-	scanner          *bufio.Scanner
-	lpair            e.List
-	pos              *Position
-	PairSrcPositions map[e.Pair]Position
-	Filename         *string
-}
-
-func (l schemeLexer) SetPairSrcPosition(pair *e.Pair, pos Position) {
-	l.PairSrcPositions[*pair] = pos
+	scanner  *bufio.Scanner
+	result   *e.Node
+	pos      *Position
+	Filename *string
 }
 
 func scanToNextNonComment(scanner *bufio.Scanner) {
@@ -189,10 +184,8 @@ const SPECIAL_IDENTIFIERS = `§¶½!@£¤$%€&¥/=?+\^~*´_:,<>|«»©“”µ�
 
 func NewLexer(reader io.Reader) *schemeLexer {
 	s := bufio.NewScanner(reader)
-	pairSrcPositions := make(map[e.Pair]Position)
-	lexer := schemeLexer{scanner: s, lpair: e.NIL, pos: &Position{1, 1}, PairSrcPositions: pairSrcPositions}
+	lexer := schemeLexer{scanner: s, pos: &Position{1, 1}}
 	s.Split(makePositionAwareSplitter(lexer.pos))
-
 	return &lexer
 }
 

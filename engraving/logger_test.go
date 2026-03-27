@@ -69,7 +69,7 @@ func TestCanLogExpressions(t *testing.T) {
 
 	l := NewWithWriter(m, slog.LevelWarn)
 
-	l.Warn("hello: %s", e.String("<name here>"))
+	l.Warn("hello: %s", e.StrNode("<name here>"))
 
 	written := *m.written
 	if len(written) != 1 {

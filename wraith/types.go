@@ -72,34 +72,35 @@ type ResultConversionInfo struct {
 }
 
 func (tm *TypeMapper) initializeTemplates() error {
+	// Built-in types use Node kind checks and direct field access
 	builtInTypeTemplate := `
-	ghoulArg_{{.Name}} := args.First()
-	{{.Name}}_val, ok := ghoulArg_{{.Name}}.(e.{{.BuiltInType}})
-	if !ok {
-		return nil, fmt.Errorf("expected {{.BuiltInType | lower}} for parameter '{{.Name}}', got %s", e.TypeName(ghoulArg_{{.Name}}))
+	ghoulArg_{{.Name}} := args[argIdx]
+	if ghoulArg_{{.Name}}.Kind != e.{{.BuiltInType | kindConst}} {
+		return nil, fmt.Errorf("expected {{.BuiltInType | lower}} for parameter '{{.Name}}', got %s", e.NodeTypeName(ghoulArg_{{.Name}}))
 	}
-	{{.Name}} := {{.Type}}({{.Name}}_val)
-	args, _ = args.Tail()
+	{{.Name}} := {{.Type}}(ghoulArg_{{.Name}}.{{.BuiltInType | fieldName}})
+	argIdx++
 `
 
+	// Foreign (mummy) types extract the Go value from the MummyNode's ForeignVal
 	foreignTypeTemplate := `
-	ghoulArg_{{.Name}} := args.First()
-	mummy_{{.Name}}, ok := ghoulArg_{{.Name}}.(*mummy.Mummy)
-	if !ok {
-		return nil, fmt.Errorf("expected mummy for parameter '{{.Name}}', got %s", e.TypeName(ghoulArg_{{.Name}}))
+	ghoulArg_{{.Name}} := args[argIdx]
+	if ghoulArg_{{.Name}}.Kind != e.MummyNode {
+		return nil, fmt.Errorf("expected mummy for parameter '{{.Name}}', got %s", e.NodeTypeName(ghoulArg_{{.Name}}))
 	}
 	var {{.Name}} {{.Type}}
-	if mummy_{{.Name}}.Unwrap() != nil {
-		{{.Name}}, ok = mummy_{{.Name}}.Unwrap().({{.Type}})
+	if ghoulArg_{{.Name}}.ForeignVal != nil {
+		var ok bool
+		{{.Name}}, ok = ghoulArg_{{.Name}}.ForeignVal.({{.Type}})
 		if !ok {
-			{{.Name}}_ptr, ok := mummy_{{.Name}}.Unwrap().(*{{.Type}})
+			{{.Name}}_ptr, ok := ghoulArg_{{.Name}}.ForeignVal.(*{{.Type}})
 			if !ok {
-				return nil, fmt.Errorf("parameter '{{.Name}}': mummy contains %T, expected {{.Type}}", mummy_{{.Name}}.Unwrap())
+				return nil, fmt.Errorf("parameter '{{.Name}}': mummy contains %T, expected {{.Type}}", ghoulArg_{{.Name}}.ForeignVal)
 			}
 			{{.Name}} = *{{.Name}}_ptr
 		}
 	}
-	args, _ = args.Tail()
+	argIdx++
 `
 
 	funcMap := template.FuncMap{
@@ -113,6 +114,34 @@ func (tm *TypeMapper) initializeTemplates() error {
 				return "boolean"
 			case "Float":
 				return "float"
+			default:
+				return s
+			}
+		},
+		"kindConst": func(s string) string {
+			switch s {
+			case "Integer":
+				return "IntegerNode"
+			case "String":
+				return "StringNode"
+			case "Boolean":
+				return "BooleanNode"
+			case "Float":
+				return "FloatNodeKind"
+			default:
+				return s
+			}
+		},
+		"fieldName": func(s string) string {
+			switch s {
+			case "Integer":
+				return "IntVal"
+			case "String":
+				return "StrVal"
+			case "Boolean":
+				return "BoolVal"
+			case "Float":
+				return "FloatVal"
 			default:
 				return s
 			}
@@ -159,32 +188,32 @@ func (tm *TypeMapper) generateVariadicConversion(info ArgConversionInfo, w io.Wr
 	name := info.Name
 
 	fmt.Fprintf(w, "\tvar %s %s\n", name, info.Type)
-	fmt.Fprintf(w, "\tfor args != e.NIL {\n")
+	fmt.Fprintf(w, "\tfor argIdx < len(args) {\n")
 
 	if info.BuiltInType != "" {
 		elemType := strings.TrimPrefix(info.Type, "[]")
-		fmt.Fprintf(w, "\t\tghoulElem := args.First()\n")
-		fmt.Fprintf(w, "\t\telemVal, ok := ghoulElem.(e.%s)\n", info.BuiltInType)
-		fmt.Fprintf(w, "\t\tif !ok {\n")
-		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: expected %s, got %%s\", e.TypeName(ghoulElem))\n",
+		kindConst := builtInKindConst(info.BuiltInType)
+		fieldName := builtInFieldName(info.BuiltInType)
+		fmt.Fprintf(w, "\t\tghoulElem := args[argIdx]\n")
+		fmt.Fprintf(w, "\t\tif ghoulElem.Kind != e.%s {\n", kindConst)
+		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: expected %s, got %%s\", e.NodeTypeName(ghoulElem))\n",
 			name, strings.ToLower(info.BuiltInType))
 		fmt.Fprintf(w, "\t\t}\n")
-		fmt.Fprintf(w, "\t\t%s = append(%s, %s(elemVal))\n", name, name, elemType)
+		fmt.Fprintf(w, "\t\t%s = append(%s, %s(ghoulElem.%s))\n", name, name, elemType, fieldName)
 	} else {
 		elemType := strings.TrimPrefix(info.Type, "[]")
-		fmt.Fprintf(w, "\t\tghoulElem := args.First()\n")
-		fmt.Fprintf(w, "\t\tmummyElem, ok := ghoulElem.(*mummy.Mummy)\n")
-		fmt.Fprintf(w, "\t\tif !ok {\n")
-		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: expected mummy, got %%s\", e.TypeName(ghoulElem))\n", name)
+		fmt.Fprintf(w, "\t\tghoulElem := args[argIdx]\n")
+		fmt.Fprintf(w, "\t\tif ghoulElem.Kind != e.MummyNode {\n")
+		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: expected mummy, got %%s\", e.NodeTypeName(ghoulElem))\n", name)
 		fmt.Fprintf(w, "\t\t}\n")
-		fmt.Fprintf(w, "\t\telem, ok := mummyElem.Unwrap().(%s)\n", elemType)
+		fmt.Fprintf(w, "\t\telem, ok := ghoulElem.ForeignVal.(%s)\n", elemType)
 		fmt.Fprintf(w, "\t\tif !ok {\n")
-		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: mummy contains %%T, expected %s\", mummyElem.Unwrap())\n", name, elemType)
+		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: mummy contains %%T, expected %s\", ghoulElem.ForeignVal)\n", name, elemType)
 		fmt.Fprintf(w, "\t\t}\n")
 		fmt.Fprintf(w, "\t\t%s = append(%s, elem)\n", name, name)
 	}
 
-	fmt.Fprintf(w, "\t\targs, _ = args.Tail()\n")
+	fmt.Fprintf(w, "\t\targIdx++\n")
 	fmt.Fprintf(w, "\t}\n")
 	return nil
 }
@@ -193,44 +222,37 @@ func (tm *TypeMapper) generateFunctionAdapter(info ArgConversionInfo, w io.Write
 	sig := info.FuncSignature
 	name := info.Name
 
-	// Assert the argument is a Ghoul Function
-	fmt.Fprintf(w, "\tghoulArg_%s := args.First()\n", name)
-	fmt.Fprintf(w, "\tghoulFunc_%s, ok := ghoulArg_%s.(ghoulEval.Function)\n", name, name)
-	fmt.Fprintf(w, "\tif !ok {\n")
-	fmt.Fprintf(w, "\t\treturn nil, fmt.Errorf(\"expected function for parameter '%s', got %%s\", e.TypeName(ghoulArg_%s))\n", name, name)
+	// Assert the argument is a Ghoul Function (stored as a FunctionNode)
+	fmt.Fprintf(w, "\tghoulArg_%s := args[argIdx]\n", name)
+	fmt.Fprintf(w, "\tif ghoulArg_%s.FuncVal == nil {\n", name)
+	fmt.Fprintf(w, "\t\treturn nil, fmt.Errorf(\"expected function for parameter '%s', got %%s\", e.NodeTypeName(ghoulArg_%s))\n", name, name)
 	fmt.Fprintf(w, "\t}\n")
+	fmt.Fprintf(w, "\tghoulFunc_%s := ghoulArg_%s.FuncVal\n", name, name)
 
-	// Build the Go function adapter signature
+	// Build the Go function adapter
 	fmt.Fprintf(w, "\t%s := %s{\n", name, info.Type)
 
-	// Build ghoul argument list from Go parameters (in reverse to build cons list)
-	fmt.Fprintf(w, "\t\tvar ghoulArgs e.List = e.NIL\n")
-	for i := len(sig.Params) - 1; i >= 0; i-- {
-		p := sig.Params[i]
+	// Build ghoul argument slice from Go parameters
+	fmt.Fprintf(w, "\t\tghoulArgs := make([]*e.Node, %d)\n", len(sig.Params))
+	for i, p := range sig.Params {
 		if p.GhoulType != "" {
-			fmt.Fprintf(w, "\t\tghoulArgs = e.Cons(e.%s(p%d), ghoulArgs)\n", p.GhoulType, i)
+			fmt.Fprintf(w, "\t\tghoulArgs[%d] = e.%s(p%d)\n", i, nodeConstructor(p.GhoulType), i)
 		} else {
-			fmt.Fprintf(w, "\t\tghoulArgs = e.Cons(mummy.Entomb(p%d, \"%s\"), ghoulArgs)\n", i, p.Type)
+			fmt.Fprintf(w, "\t\tghoulArgs[%d] = e.MummyNodeVal(p%d, \"%s\")\n", i, i, p.Type)
 		}
 	}
 
 	if len(sig.Results) == 0 {
-		fmt.Fprintf(w, "\t\t(*ghoulFunc_%s.Fun)(ghoulArgs, ev)\n", name)
+		fmt.Fprintf(w, "\t\t(*ghoulFunc_%s)(ghoulArgs, ev)\n", name)
 	} else if len(sig.Results) == 1 {
-		fmt.Fprintf(w, "\t\tresult, _ := (*ghoulFunc_%s.Fun)(ghoulArgs, ev)\n", name)
+		fmt.Fprintf(w, "\t\tresult, _ := (*ghoulFunc_%s)(ghoulArgs, ev)\n", name)
 		r := sig.Results[0]
 		fmt.Fprintf(w, "\t\treturn %s\n", tm.ghoulToGoConversion("result", r))
 	} else {
-		fmt.Fprintf(w, "\t\tresult, _ := (*ghoulFunc_%s.Fun)(ghoulArgs, ev)\n", name)
+		fmt.Fprintf(w, "\t\tresult, _ := (*ghoulFunc_%s)(ghoulArgs, ev)\n", name)
 		for i, r := range sig.Results {
-			if i == 0 {
-				fmt.Fprintf(w, "\t\tresultList := result.(e.List)\n")
-			}
 			varName := fmt.Sprintf("goResult%d", i)
-			fmt.Fprintf(w, "\t\t%s := %s\n", varName, tm.ghoulToGoConversion("resultList.First()", r))
-			if i < len(sig.Results)-1 {
-				fmt.Fprintf(w, "\t\tresultList, _ = resultList.Tail()\n")
-			}
+			fmt.Fprintf(w, "\t\t%s := %s\n", varName, tm.ghoulToGoConversion(fmt.Sprintf("result.Children[%d]", i), r))
 		}
 		fmt.Fprintf(w, "\t\treturn ")
 		for i := range sig.Results {
@@ -243,22 +265,22 @@ func (tm *TypeMapper) generateFunctionAdapter(info ArgConversionInfo, w io.Write
 	}
 
 	fmt.Fprintf(w, "\t}\n")
-	fmt.Fprintf(w, "\targs, _ = args.Tail()\n")
+	fmt.Fprintf(w, "\targIdx++\n")
 	return nil
 }
 
 func (tm *TypeMapper) ghoulToGoConversion(exprVar string, param FuncParamInfo) string {
 	switch param.GhoulType {
 	case "Integer":
-		return fmt.Sprintf("%s(%s.(e.Integer))", param.Type, exprVar)
+		return fmt.Sprintf("%s(%s.IntVal)", param.Type, exprVar)
 	case "String":
-		return fmt.Sprintf("%s(%s.(e.String))", param.Type, exprVar)
+		return fmt.Sprintf("%s(%s.StrVal)", param.Type, exprVar)
 	case "Boolean":
-		return fmt.Sprintf("%s(%s.(e.Boolean))", param.Type, exprVar)
+		return fmt.Sprintf("%s(%s.BoolVal)", param.Type, exprVar)
 	case "Float":
-		return fmt.Sprintf("%s(%s.(e.Float))", param.Type, exprVar)
+		return fmt.Sprintf("%s(%s.FloatVal)", param.Type, exprVar)
 	default:
-		return fmt.Sprintf("%s.(*mummy.Mummy).Unwrap().(%s)", exprVar, param.Type)
+		return fmt.Sprintf("%s.ForeignVal.(%s)", exprVar, param.Type)
 	}
 }
 
@@ -407,16 +429,63 @@ func (tm *TypeMapper) convertValueToExpression(valueName, goType string) string 
 	if ghoulType, exists := tm.primitiveMap[goType]; exists {
 		switch ghoulType {
 		case "Boolean":
-			return fmt.Sprintf("e.Boolean(%s)", valueName)
+			return fmt.Sprintf("e.BoolNode(%s)", valueName)
 		case "Integer":
-			return fmt.Sprintf("e.Integer(%s)", valueName)
+			return fmt.Sprintf("e.IntNode(int64(%s))", valueName)
 		case "Float":
-			return fmt.Sprintf("e.Float(%s)", valueName)
+			return fmt.Sprintf("e.FloatNode(float64(%s))", valueName)
 		case "String":
-			return fmt.Sprintf("e.String(%s)", valueName)
+			return fmt.Sprintf("e.StrNode(string(%s))", valueName)
 		}
 	}
 
-	return fmt.Sprintf("mummy.Entomb(%s, \"%s\")", valueName, goType)
+	return fmt.Sprintf("e.MummyNodeVal(%s, \"%s\")", valueName, goType)
 }
 
+// builtInKindConst returns the Node kind constant name for a built-in ghoul type
+func builtInKindConst(ghoulType string) string {
+	switch ghoulType {
+	case "Integer":
+		return "IntegerNode"
+	case "String":
+		return "StringNode"
+	case "Boolean":
+		return "BooleanNode"
+	case "Float":
+		return "FloatNodeKind"
+	default:
+		return ghoulType
+	}
+}
+
+// builtInFieldName returns the Node field name for a built-in ghoul type
+func builtInFieldName(ghoulType string) string {
+	switch ghoulType {
+	case "Integer":
+		return "IntVal"
+	case "String":
+		return "StrVal"
+	case "Boolean":
+		return "BoolVal"
+	case "Float":
+		return "FloatVal"
+	default:
+		return ghoulType
+	}
+}
+
+// nodeConstructor returns the e.XNode constructor name for a ghoul type
+func nodeConstructor(ghoulType string) string {
+	switch ghoulType {
+	case "Integer":
+		return "IntNode"
+	case "String":
+		return "StrNode"
+	case "Boolean":
+		return "BoolNode"
+	case "Float":
+		return "FloatNode"
+	default:
+		return ghoulType
+	}
+}

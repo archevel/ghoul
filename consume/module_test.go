@@ -1,6 +1,7 @@
 package consume
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +44,7 @@ func TestModuleStateCaching(t *testing.T) {
 	ms := NewModuleState("")
 	exports := &ModuleExports{
 		Names:    []string{"foo"},
-		Bindings: map[string]e.Expr{"foo": e.Integer(42)},
+		Bindings: map[string]*e.Node{"foo": e.IntNode(42)},
 	}
 	ms.CacheModule("utils.ghl", exports)
 
@@ -51,7 +52,7 @@ func TestModuleStateCaching(t *testing.T) {
 	if cached == nil {
 		t.Fatal("expected cached module")
 	}
-	if !cached.Bindings["foo"].Equiv(e.Integer(42)) {
+	if !cached.Bindings["foo"].Equiv(e.IntNode(42)) {
 		t.Error("expected foo=42 in cached exports")
 	}
 }
@@ -106,14 +107,15 @@ func TestLoadGhoulModule(t *testing.T) {
 	ms := NewModuleState(mainPath)
 	ev := New(engraving.StandardLogger, env)
 	ev.moduleState = ms
+	ev.moduleLoader = testModuleLoader(ev)
 
 	r := strings.NewReader("(require utils) utils:x")
 	_, parsed := p.Parse(r)
-	result, err := ev.Evaluate(parsed.Expressions)
+	result, err := ev.EvaluateNode(context.Background(), parsed.Expressions)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.Integer(42)) {
+	if !result.Equiv(e.IntNode(42)) {
 		t.Errorf("expected 42, got %s", result.Repr())
 	}
 }
@@ -123,8 +125,8 @@ func TestModuleIsolation(t *testing.T) {
 	dir := t.TempDir()
 
 	// utils.ghl requires a sarcophagus
-	dummyFunc := func(args e.List, ev *Evaluator) (e.Expr, error) {
-		return e.Integer(77), nil
+	dummyFunc := func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+		return e.IntNode(77), nil
 	}
 	mummy.RegisterSarcophagus("dummypkg", "dummypkg", &mummy.SarcophagusEntry{
 		Names: []string{"magic"},
@@ -142,15 +144,16 @@ func TestModuleIsolation(t *testing.T) {
 	ms := NewModuleState(mainPath)
 	ev := New(engraving.StandardLogger, env)
 	ev.moduleState = ms
+	ev.moduleLoader = testModuleLoader(ev)
 
 	// After requiring utils, dummypkg should NOT be in main's environment
 	r := strings.NewReader("(require utils) utils:val")
 	_, parsed := p.Parse(r)
-	result, err := ev.Evaluate(parsed.Expressions)
+	result, err := ev.EvaluateNode(context.Background(), parsed.Expressions)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.Integer(77)) {
+	if !result.Equiv(e.IntNode(77)) {
 		t.Errorf("expected 77, got %s", result.Repr())
 	}
 
@@ -173,14 +176,15 @@ func TestRequireFromSubdirectory(t *testing.T) {
 	ms := NewModuleState(mainPath)
 	ev := New(engraving.StandardLogger, env)
 	ev.moduleState = ms
+	ev.moduleLoader = testModuleLoader(ev)
 
 	r := strings.NewReader("(require lib/helpers) lib/helpers:helper-val")
 	_, parsed := p.Parse(r)
-	result, err := ev.Evaluate(parsed.Expressions)
+	result, err := ev.EvaluateNode(context.Background(), parsed.Expressions)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.Integer(123)) {
+	if !result.Equiv(e.IntNode(123)) {
 		t.Errorf("expected 123, got %s", result.Repr())
 	}
 }
@@ -195,14 +199,15 @@ func TestRequireFromSubdirectoryWithAlias(t *testing.T) {
 	ms := NewModuleState(mainPath)
 	ev := New(engraving.StandardLogger, env)
 	ev.moduleState = ms
+	ev.moduleLoader = testModuleLoader(ev)
 
 	r := strings.NewReader("(require lib/helpers as h) h:x")
 	_, parsed := p.Parse(r)
-	result, err := ev.Evaluate(parsed.Expressions)
+	result, err := ev.EvaluateNode(context.Background(), parsed.Expressions)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.Integer(77)) {
+	if !result.Equiv(e.IntNode(77)) {
 		t.Errorf("expected 77, got %s", result.Repr())
 	}
 }
@@ -218,10 +223,11 @@ func TestCircularDependencyError(t *testing.T) {
 	ms := NewModuleState(mainPath)
 	ev := New(engraving.StandardLogger, env)
 	ev.moduleState = ms
+	ev.moduleLoader = testModuleLoader(ev)
 
 	r := strings.NewReader("(require a)")
 	_, parsed := p.Parse(r)
-	_, err := ev.Evaluate(parsed.Expressions)
+	_, err := ev.EvaluateNode(context.Background(), parsed.Expressions)
 	if err == nil {
 		t.Fatal("expected circular dependency error")
 	}
@@ -241,11 +247,12 @@ func TestRequireGhoulModuleNameConflict(t *testing.T) {
 	ms := NewModuleState(mainPath)
 	ev := New(engraving.StandardLogger, env)
 	ev.moduleState = ms
+	ev.moduleLoader = testModuleLoader(ev)
 
 	// Both modules export x, requiring with same alias causes conflict
 	r := strings.NewReader("(require a as m) (require b as m)")
 	_, parsed := p.Parse(r)
-	_, err := ev.Evaluate(parsed.Expressions)
+	_, err := ev.EvaluateNode(context.Background(), parsed.Expressions)
 	if err == nil {
 		t.Fatal("expected name conflict error")
 	}
@@ -264,10 +271,11 @@ func TestRequireGhoulModuleParseError(t *testing.T) {
 	ms := NewModuleState(mainPath)
 	ev := New(engraving.StandardLogger, env)
 	ev.moduleState = ms
+	ev.moduleLoader = testModuleLoader(ev)
 
 	r := strings.NewReader("(require bad)")
 	_, parsed := p.Parse(r)
-	_, err := ev.Evaluate(parsed.Expressions)
+	_, err := ev.EvaluateNode(context.Background(), parsed.Expressions)
 	if err == nil {
 		t.Fatal("expected parse error for malformed module")
 	}
@@ -286,10 +294,11 @@ func TestRequireGhoulModuleEvalError(t *testing.T) {
 	ms := NewModuleState(mainPath)
 	ev := New(engraving.StandardLogger, env)
 	ev.moduleState = ms
+	ev.moduleLoader = testModuleLoader(ev)
 
 	r := strings.NewReader("(require broken)")
 	_, parsed := p.Parse(r)
-	_, err := ev.Evaluate(parsed.Expressions)
+	_, err := ev.EvaluateNode(context.Background(), parsed.Expressions)
 	if err == nil {
 		t.Fatal("expected evaluation error for broken module")
 	}
@@ -310,14 +319,15 @@ func TestRequireSameModuleFromTwoModules(t *testing.T) {
 	ms := NewModuleState(mainPath)
 	ev := New(engraving.StandardLogger, env)
 	ev.moduleState = ms
+	ev.moduleLoader = testModuleLoader(ev)
 
 	r := strings.NewReader("(require a) (require b) a:a-val")
 	_, parsed := p.Parse(r)
-	result, err := ev.Evaluate(parsed.Expressions)
+	result, err := ev.EvaluateNode(context.Background(), parsed.Expressions)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.Integer(55)) {
+	if !result.Equiv(e.IntNode(55)) {
 		t.Errorf("expected 55, got %s", result.Repr())
 	}
 }

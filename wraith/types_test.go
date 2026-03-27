@@ -22,17 +22,17 @@ func TestBuiltInTypeTemplateForInteger(t *testing.T) {
 	}
 
 	code := buf.String()
-	if !strings.Contains(code, "ghoulArg_a := args.First()") {
-		t.Errorf("expected args.First() extraction, got:\n%s", code)
+	if !strings.Contains(code, "ghoulArg_a := args[argIdx]") {
+		t.Errorf("expected args[argIdx] extraction, got:\n%s", code)
 	}
-	if !strings.Contains(code, "a_val, ok := ghoulArg_a.(e.Integer)") {
-		t.Errorf("expected single type assertion, got:\n%s", code)
+	if !strings.Contains(code, "ghoulArg_a.Kind != e.IntegerNode") {
+		t.Errorf("expected Node kind check, got:\n%s", code)
 	}
-	if !strings.Contains(code, "a := int(a_val)") {
-		t.Errorf("expected type cast, got:\n%s", code)
+	if !strings.Contains(code, "a := int(ghoulArg_a.IntVal)") {
+		t.Errorf("expected direct field access, got:\n%s", code)
 	}
-	if !strings.Contains(code, "e.TypeName(ghoulArg_a)") {
-		t.Errorf("expected TypeName in error message, got:\n%s", code)
+	if !strings.Contains(code, "e.NodeTypeName(ghoulArg_a)") {
+		t.Errorf("expected NodeTypeName in error message, got:\n%s", code)
 	}
 	if strings.Contains(code, "Foreign") {
 		t.Errorf("should not reference Foreign, got:\n%s", code)
@@ -50,8 +50,8 @@ func TestBuiltInTypeTemplateForString(t *testing.T) {
 	}, &buf)
 
 	code := buf.String()
-	if !strings.Contains(code, "s_val, ok := ghoulArg_s.(e.String)") {
-		t.Errorf("expected String assertion, got:\n%s", code)
+	if !strings.Contains(code, "ghoulArg_s.Kind != e.StringNode") {
+		t.Errorf("expected StringNode kind check, got:\n%s", code)
 	}
 	if !strings.Contains(code, `expected string for parameter 's'`) {
 		t.Errorf("expected human-readable error message, got:\n%s", code)
@@ -66,8 +66,8 @@ func TestBuiltInTypeTemplateForBoolean(t *testing.T) {
 	}, &buf)
 
 	code := buf.String()
-	if !strings.Contains(code, "flag_val, ok := ghoulArg_flag.(e.Boolean)") {
-		t.Errorf("expected Boolean assertion, got:\n%s", code)
+	if !strings.Contains(code, "ghoulArg_flag.Kind != e.BooleanNode") {
+		t.Errorf("expected BooleanNode kind check, got:\n%s", code)
 	}
 }
 
@@ -79,17 +79,14 @@ func TestForeignTypeTemplateUsesMummy(t *testing.T) {
 	}, &buf)
 
 	code := buf.String()
-	if !strings.Contains(code, "*mummy.Mummy") {
-		t.Errorf("expected mummy.Mummy assertion, got:\n%s", code)
+	if !strings.Contains(code, "e.MummyNode") {
+		t.Errorf("expected MummyNode kind check, got:\n%s", code)
 	}
-	if !strings.Contains(code, "mummy_p.Unwrap().(testpkg.Person)") {
-		t.Errorf("expected Unwrap() call, got:\n%s", code)
+	if !strings.Contains(code, "ForeignVal.(testpkg.Person)") {
+		t.Errorf("expected ForeignVal type assertion, got:\n%s", code)
 	}
-	if !strings.Contains(code, "mummy_p.Unwrap().(*testpkg.Person)") {
+	if !strings.Contains(code, "ForeignVal.(*testpkg.Person)") {
 		t.Errorf("expected pointer fallback, got:\n%s", code)
-	}
-	if strings.Contains(code, "Foreign") {
-		t.Errorf("should not reference Foreign, got:\n%s", code)
 	}
 }
 
@@ -100,10 +97,10 @@ func TestConvertValueToExpressionPrimitives(t *testing.T) {
 		goType   string
 		expected string
 	}{
-		{"int", "e.Integer(x)"},
-		{"string", "e.String(x)"},
-		{"bool", "e.Boolean(x)"},
-		{"float64", "e.Float(x)"},
+		{"int", "e.IntNode(int64(x))"},
+		{"string", "e.StrNode(string(x))"},
+		{"bool", "e.BoolNode(x)"},
+		{"float64", "e.FloatNode(float64(x))"},
 	}
 
 	for _, c := range cases {
@@ -159,14 +156,11 @@ func TestFunctionTypeTemplateGeneratesAdapter(t *testing.T) {
 	}
 
 	code := buf.String()
-	if !strings.Contains(code, "Function") {
-		t.Errorf("expected Function type assertion, got:\n%s", code)
+	if !strings.Contains(code, "FuncVal") {
+		t.Errorf("expected FuncVal check in adapter, got:\n%s", code)
 	}
-	if !strings.Contains(code, "e.Integer") {
-		t.Errorf("expected Ghoul type conversion in adapter, got:\n%s", code)
-	}
-	if !strings.Contains(code, "mummy.Entomb") || !strings.Contains(code, "Unwrap") {
-		// Should not use mummy for function params — it wraps a Ghoul Function
+	if !strings.Contains(code, "e.IntNode") {
+		t.Errorf("expected Ghoul Node constructor in adapter, got:\n%s", code)
 	}
 }
 
@@ -187,8 +181,8 @@ func TestFunctionTypeTemplateVoidReturn(t *testing.T) {
 	}
 
 	code := buf.String()
-	if !strings.Contains(code, "Function") {
-		t.Errorf("expected Function type assertion, got:\n%s", code)
+	if !strings.Contains(code, "FuncVal") {
+		t.Errorf("expected FuncVal check in adapter, got:\n%s", code)
 	}
 }
 
@@ -200,7 +194,7 @@ func TestForeignTypeTemplateHandlesNil(t *testing.T) {
 	}, &buf)
 
 	code := buf.String()
-	if !strings.Contains(code, "Unwrap() != nil") {
+	if !strings.Contains(code, "ForeignVal != nil") {
 		t.Errorf("expected nil check in foreign template, got:\n%s", code)
 	}
 	if !strings.Contains(code, "var handler http.Handler") {
@@ -214,11 +208,11 @@ func TestGhoulToGoConversionAllTypes(t *testing.T) {
 		param    FuncParamInfo
 		expected string
 	}{
-		{FuncParamInfo{Type: "int", GhoulType: "Integer"}, "int(x.(e.Integer))"},
-		{FuncParamInfo{Type: "string", GhoulType: "String"}, "string(x.(e.String))"},
-		{FuncParamInfo{Type: "bool", GhoulType: "Boolean"}, "bool(x.(e.Boolean))"},
-		{FuncParamInfo{Type: "float64", GhoulType: "Float"}, "float64(x.(e.Float))"},
-		{FuncParamInfo{Type: "pkg.Foo", GhoulType: ""}, "x.(*mummy.Mummy).Unwrap().(pkg.Foo)"},
+		{FuncParamInfo{Type: "int", GhoulType: "Integer"}, "int(x.IntVal)"},
+		{FuncParamInfo{Type: "string", GhoulType: "String"}, "string(x.StrVal)"},
+		{FuncParamInfo{Type: "bool", GhoulType: "Boolean"}, "bool(x.BoolVal)"},
+		{FuncParamInfo{Type: "float64", GhoulType: "Float"}, "float64(x.FloatVal)"},
+		{FuncParamInfo{Type: "pkg.Foo", GhoulType: ""}, "x.ForeignVal.(pkg.Foo)"},
 	}
 	for _, c := range cases {
 		result := tm.ghoulToGoConversion("x", c.param)
@@ -244,11 +238,11 @@ func TestVariadicConversionForPrimitiveType(t *testing.T) {
 	if !strings.Contains(code, "var nums []int") {
 		t.Errorf("expected var declaration, got:\n%s", code)
 	}
-	if !strings.Contains(code, "for args != e.NIL") {
-		t.Errorf("expected loop, got:\n%s", code)
+	if !strings.Contains(code, "for argIdx < len(args)") {
+		t.Errorf("expected index-based loop, got:\n%s", code)
 	}
-	if !strings.Contains(code, "e.Integer") {
-		t.Errorf("expected Integer assertion, got:\n%s", code)
+	if !strings.Contains(code, "e.IntegerNode") {
+		t.Errorf("expected IntegerNode kind check, got:\n%s", code)
 	}
 }
 
@@ -264,11 +258,11 @@ func TestVariadicConversionForForeignType(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	code := buf.String()
-	if !strings.Contains(code, "*mummy.Mummy") {
-		t.Errorf("expected mummy assertion, got:\n%s", code)
+	if !strings.Contains(code, "e.MummyNode") {
+		t.Errorf("expected MummyNode kind check, got:\n%s", code)
 	}
-	if !strings.Contains(code, "Unwrap().(pkg.Item)") {
-		t.Errorf("expected Unwrap with type, got:\n%s", code)
+	if !strings.Contains(code, "ForeignVal.(pkg.Item)") {
+		t.Errorf("expected ForeignVal type assertion, got:\n%s", code)
 	}
 }
 
@@ -359,7 +353,7 @@ func TestQualifiedTypeToAliasMapNoClosingBracket(t *testing.T) {
 func TestConvertValueToExpressionComplexType(t *testing.T) {
 	tm, _ := NewTypeMapper()
 	result := tm.convertValueToExpression("result", "*testpkg.Person")
-	if result != `mummy.Entomb(result, "*testpkg.Person")` {
-		t.Errorf("expected mummy.Entomb, got: %s", result)
+	if result != `e.MummyNodeVal(result, "*testpkg.Person")` {
+		t.Errorf("expected e.MummyNodeVal(...), got: %s", result)
 	}
 }
