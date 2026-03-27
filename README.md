@@ -2,6 +2,7 @@
 Ghoul is a lisp interpreter that aims to be simple to understand while being a bit more advanced than a naive interpreter.
 
 #### Explicit goals:
+- [ ] Undead themed names
 - [ ] Easy to understand code base
 - [ ] Support simple integration of Golang code
 - [x] Proper tail call optimizations
