@@ -116,13 +116,11 @@ func collectEllipsisVars(expr e.Expr, vars map[e.Identifier]bool, literals map[e
 			break
 		}
 
-		// Check if the next element is `...`
 		if tail != e.NIL {
 			nextId := toIdentifier(tail.First())
 			if nextId == e.Identifier("...") {
 				// Everything in head is an ellipsis variable
 				collectIdentifiers(head, vars, literals)
-				// Skip past the `...`
 				tail, ok = tail.Tail()
 				if !ok {
 					break

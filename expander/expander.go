@@ -19,7 +19,6 @@ import (
 	"github.com/archevel/ghoul/stdlib"
 )
 
-// Expander performs macro expansion on parsed expression trees.
 type Expander struct {
 	scopes      *macroScope
 	evalEnv     *ev.Environment
@@ -112,7 +111,6 @@ func (exp *Expander) ExpandAll(exprs e.List) (e.List, error) {
 		current = next
 	}
 
-	// Rebuild the list preserving source positions from original pairs
 	var result e.Expr = e.NIL
 	for i := len(results) - 1; i >= 0; i-- {
 		pair := e.Cons(results[i], result)
@@ -127,9 +125,8 @@ func (exp *Expander) ExpandAll(exprs e.List) (e.List, error) {
 	return result.(e.List), nil
 }
 
-// expandExpr expands a single expression, recursing into sub-expressions.
-// For expressions that don't contain macro calls, the original expression
-// is returned unchanged to preserve source position information.
+// expandExpr returns the original expression unchanged when no macros are
+// present, preserving source position information.
 func (exp *Expander) expandExpr(expr e.Expr) (e.Expr, error) {
 	list, isList := expr.(e.List)
 	if !isList || list == e.NIL {
@@ -266,7 +263,6 @@ func (exp *Expander) processDefineSyntax(form e.List) (e.Expr, error) {
 	return nil, nil
 }
 
-// expandMacroCall applies a macro transformer to a call form.
 func (exp *Expander) expandMacroCall(binding macroBinding, callable e.List) (e.Expr, error) {
 	if binding.syntaxTransformer != nil {
 		mark := exp.freshMark()
@@ -293,7 +289,6 @@ func (exp *Expander) expandMacroCall(binding macroBinding, callable e.List) (e.E
 			return nil, err
 		}
 
-		// Post-expansion: apply mark again and resolve
 		marked := macromancy.ApplyMark(result, mark)
 		resolved := macromancy.ResolveExpr(marked)
 		setMacroLocation(resolved, callable)
@@ -442,7 +437,6 @@ func (exp *Expander) expandEachInList(list e.List) (e.Expr, error) {
 			if err != nil {
 				return nil, err
 			}
-			// Rebuild as improper list
 			var result e.Expr = expandedTail
 			for i := len(elems) - 1; i >= 0; i-- {
 				result = e.Cons(elems[i], result)
@@ -456,8 +450,6 @@ func (exp *Expander) expandEachInList(list e.List) (e.Expr, error) {
 
 // --- Helpers ---
 
-// identName extracts the identifier name from an expression, handling
-// both plain Identifiers and ScopedIdentifiers.
 func identName(expr e.Expr) string {
 	switch v := expr.(type) {
 	case e.Identifier:
@@ -469,7 +461,6 @@ func identName(expr e.Expr) string {
 	}
 }
 
-// listFromSlice builds a proper Pair list from a slice of expressions.
 func listFromSlice(exprs []e.Expr) e.List {
 	if len(exprs) == 0 {
 		return e.NIL
@@ -481,7 +472,6 @@ func listFromSlice(exprs []e.Expr) e.List {
 	return result.(e.List)
 }
 
-// rebuildList creates a new list with the given head and tail list.
 func rebuildList(head e.Expr, tail e.Expr) e.Expr {
 	return e.Cons(head, tail)
 }

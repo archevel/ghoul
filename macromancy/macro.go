@@ -191,8 +191,6 @@ func walkAndReplaceHygienicImpl(toWalk e.Expr, bound bindings, mark Mark, patter
 	return toWalk
 }
 
-// findRepeatedVarsInTemplate collects all identifiers in a template expression
-// that have repeated bindings.
 func findRepeatedVarsInTemplate(tmpl e.Expr, bound bindings) []e.Identifier {
 	var result []e.Identifier
 	findRepeatedVarsWalk(tmpl, bound, &result)
@@ -222,11 +220,9 @@ func findRepeatedVarsWalk(expr e.Expr, bound bindings, result *[]e.Identifier) {
 // is bound to its i-th value as a single var.
 func bindingsForIteration(bound bindings, repeatedVars []e.Identifier, i int) bindings {
 	iter := newBindings()
-	// Copy all single vars
 	for k, v := range bound.vars {
 		iter.vars[k] = v
 	}
-	// Map repeated vars to their i-th value
 	for _, v := range repeatedVars {
 		if vals, ok := bound.repeated[v]; ok && i < len(vals) {
 			iter.vars[v] = vals[i]
@@ -256,8 +252,6 @@ func lookupEllipsisBinding(bound bindings) e.Expr {
 	return nil
 }
 
-// appendExprs appends the elements of a list to a tail expression,
-// producing a proper list splice.
 func appendExprs(list e.Expr, tail e.Expr) e.Expr {
 	if list == e.NIL {
 		return tail
@@ -430,8 +424,6 @@ func matchFinalCodeExpression(macroList e.List, code e.Expr, bound bindings, has
 		bound.vars[id] = e.NIL
 		return matchWalk(macroList.Second(), code, bound, hasEllipsis, literals)
 	}
-	// Pattern has multiple elements remaining but code is a single atom —
-	// the pattern expects more structure than the code provides.
 	return false, bindings{}
 }
 

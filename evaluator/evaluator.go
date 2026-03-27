@@ -99,7 +99,6 @@ func (ev *Evaluator) stepThroughContinuationsWithContext(ctx context.Context) (e
 
 	ev.log.Trace("Starting to step through continuations")
 	for len(*ev.conts) > 0 {
-		// Check for context cancellation/timeout on each iteration
 		select {
 		case <-ctx.Done():
 			ev.log.Trace("Evaluation canceled due to context")

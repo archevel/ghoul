@@ -21,7 +21,7 @@ type Ghoul interface {
 }
 
 func New() Ghoul {
-	return NewLoggingGhoul(logging.StandardLogger) // Less verbose by default
+	return NewLoggingGhoul(logging.StandardLogger)
 }
 
 func NewLoggingGhoul(logger logging.Logger) Ghoul {
