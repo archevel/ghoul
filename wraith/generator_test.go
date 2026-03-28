@@ -26,8 +26,8 @@ func TestGenerateSliceConstructorOutput(t *testing.T) {
 	if wrapper.GhoulName != "person-slice" {
 		t.Errorf("expected ghoul name 'person-slice', got '%s'", wrapper.GhoulName)
 	}
-	if wrapper.GoFuncName != "personslice" {
-		t.Errorf("expected go func name 'personslice', got '%s'", wrapper.GoFuncName)
+	if wrapper.GoFuncName != "mummy_personslice" {
+		t.Errorf("expected go func name 'w_personslice', got '%s'", wrapper.GoFuncName)
 	}
 	if !strings.Contains(wrapper.GeneratedCode, "[]*pkg.Person") {
 		t.Errorf("expected []*pkg.Person in generated code, got:\n%s", wrapper.GeneratedCode)
@@ -70,7 +70,7 @@ func TestGenerateInterfaceMethodWrapperOutput(t *testing.T) {
 	if wrapper.GhoulName != "writer-write" {
 		t.Errorf("expected 'writer-write', got '%s'", wrapper.GhoulName)
 	}
-	if wrapper.GoFuncName != "writerwrite" {
+	if wrapper.GoFuncName != "mummy_writerwrite" {
 		t.Errorf("expected 'writerwrite', got '%s'", wrapper.GoFuncName)
 	}
 	if !strings.Contains(wrapper.GeneratedCode, "pkg.Writer") {
@@ -129,8 +129,8 @@ func TestMethodNamingConvention(t *testing.T) {
 	if wrapper.GhoulName != "person-get-age" {
 		t.Errorf("expected 'person-get-age', got '%s'", wrapper.GhoulName)
 	}
-	if wrapper.GoFuncName != "persongetage" {
-		t.Errorf("expected 'persongetage', got '%s'", wrapper.GoFuncName)
+	if wrapper.GoFuncName != "mummy_persongetage" {
+		t.Errorf("expected 'w_persongetage', got '%s'", wrapper.GoFuncName)
 	}
 }
 

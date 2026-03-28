@@ -61,6 +61,7 @@ type FunctionWrapperData struct {
 	ReceiverInfo   *ArgConversionInfo
 	IsVariadic     bool
 	GeneratedCode  string
+	sourceFunc     *FunctionInfo // for import collection; not exported
 }
 
 // initializeTemplates creates the code generation templates
@@ -192,38 +193,19 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 			strings.Join(skippedFunctions, "\n  "))
 	}
 
-	// Collect imports referenced by function parameter/return types
+	// Collect imports from types used by generated wrappers only.
+	// Functions that were skipped don't contribute imports.
 	importSet := map[string]bool{packageInfo.ImportPath: true}
-	for _, fn := range packageInfo.Functions {
-		for _, p := range fn.Params {
-			collectTypeImports(p.Type, importSet)
-		}
-		for _, r := range fn.Results {
-			collectTypeImports(r.Type, importSet)
-		}
-		if fn.Receiver != nil {
-			collectTypeImports(fn.Receiver.Type, importSet)
-		}
-	}
-	for _, s := range packageInfo.Structs {
-		for _, f := range s.Fields {
-			collectTypeImports(f.Type, importSet)
-		}
-	}
-	for _, iface := range packageInfo.Interfaces {
-		for _, m := range iface.Methods {
-			for _, p := range m.Params {
-				collectTypeImports(p.Type, importSet)
-			}
-			for _, r := range m.Results {
-				collectTypeImports(r.Type, importSet)
-			}
+	for _, w := range functionWrappers {
+		if w.sourceFunc != nil {
+			collectUsedImports(w.sourceFunc, importSet, g.typeMapper)
 		}
 	}
 	imports = imports[:0]
 	for imp := range importSet {
 		imports = append(imports, imp)
 	}
+	imports = filterUnusedImports(imports, functionWrappers)
 
 	// Prepare template data
 	templateData := TemplateData{
@@ -278,8 +260,9 @@ func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperD
 		ghoulName = toGhoulName(typeName) + "-" + toGhoulName(funcInfo.Name)
 	}
 
-	goFuncName := strings.ReplaceAll(ghoulName, "-", "")
+	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
 
+	funcInfoCopy := funcInfo
 	wrapper := FunctionWrapperData{
 		OriginalName:   funcInfo.Name,
 		GhoulName:      ghoulName,
@@ -290,6 +273,7 @@ func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperD
 		ParameterNames: []string{},
 		HasReceiver:    funcInfo.Receiver != nil,
 		IsVariadic:     funcInfo.IsVariadic,
+		sourceFunc:     &funcInfoCopy,
 	}
 
 	if funcInfo.Receiver != nil {
@@ -540,7 +524,7 @@ func (g *Generator) writeToFile(content string) error {
 
 func (g *Generator) generateConstructor(structInfo StructInfo, importPath string) (FunctionWrapperData, error) {
 	ghoulName := "make-" + strings.ToLower(structInfo.Name)
-	goFuncName := strings.ReplaceAll(ghoulName, "-", "")
+	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
 	packagePrefix := getPackagePrefix(importPath)
 	qualifiedType := packagePrefix + "." + structInfo.Name
 
@@ -613,7 +597,7 @@ func buildGoFuncLiteralType(goType types.Type) string {
 func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method FunctionInfo, importPath string) (FunctionWrapperData, error) {
 	typeName := strings.ToLower(ifaceName)
 	ghoulName := typeName + "-" + strings.ToLower(method.Name)
-	goFuncName := strings.ReplaceAll(ghoulName, "-", "")
+	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
 	packagePrefix := getPackagePrefix(importPath)
 	qualifiedIface := packagePrefix + "." + ifaceName
 
@@ -715,7 +699,7 @@ func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method Func
 
 func (g *Generator) generateValueAccessor(valInfo ValueInfo, importPath string) FunctionWrapperData {
 	ghoulName := toGhoulName(valInfo.Name)
-	goFuncName := strings.ReplaceAll(ghoulName, "-", "")
+	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
 	packagePrefix := getPackagePrefix(importPath)
 	qualifiedName := packagePrefix + "." + valInfo.Name
 
@@ -747,6 +731,80 @@ func isUnexportedType(goType types.Type) bool {
 		}
 	}
 	return false
+}
+
+// collectUsedImports adds imports for types that will appear as Go code
+// references in the generated wrapper. Only primitive-mapped types (which
+// use _e.IntNode etc. directly) and mummy-wrapped types (which use the
+// package-qualified type in assertion) contribute imports.
+func collectUsedImports(fn *FunctionInfo, imports map[string]bool, tm *TypeMapper) {
+	// Collect from all parameter and return types
+	for _, p := range fn.Params {
+		collectTypeImports(p.Type, imports)
+	}
+	for _, r := range fn.Results {
+		collectTypeImports(r.Type, imports)
+	}
+	if fn.Receiver != nil {
+		collectTypeImports(fn.Receiver.Type, imports)
+	}
+}
+
+// filterUnusedImports removes imports that don't appear as package references
+// in any of the generated wrapper code.
+func filterUnusedImports(imports []string, wrappers []FunctionWrapperData) []string {
+	var filtered []string
+	for _, imp := range imports {
+		pkgName := filepath.Base(imp)
+		used := false
+		for _, w := range wrappers {
+			// Check for pkgName. as a Go package reference (not inside strings)
+			if strings.Contains(w.GeneratedCode, pkgName+".") {
+				used = true
+				break
+			}
+		}
+		if used {
+			filtered = append(filtered, imp)
+		}
+	}
+	return filtered
+}
+
+// allImportPaths collects all possible import paths from the package's types.
+func allImportPaths(info *PackageInfo) []string {
+	importSet := map[string]bool{}
+	for _, fn := range info.Functions {
+		for _, p := range fn.Params {
+			collectTypeImports(p.Type, importSet)
+		}
+		for _, r := range fn.Results {
+			collectTypeImports(r.Type, importSet)
+		}
+		if fn.Receiver != nil {
+			collectTypeImports(fn.Receiver.Type, importSet)
+		}
+	}
+	for _, s := range info.Structs {
+		for _, f := range s.Fields {
+			collectTypeImports(f.Type, importSet)
+		}
+	}
+	for _, iface := range info.Interfaces {
+		for _, m := range iface.Methods {
+			for _, p := range m.Params {
+				collectTypeImports(p.Type, importSet)
+			}
+			for _, r := range m.Results {
+				collectTypeImports(r.Type, importSet)
+			}
+		}
+	}
+	var result []string
+	for imp := range importSet {
+		result = append(result, imp)
+	}
+	return result
 }
 
 // collectTypeImports extracts package import paths from a Go type.
@@ -793,7 +851,7 @@ func toGhoulName(name string) string {
 
 func (g *Generator) generateSliceConstructor(structInfo StructInfo, importPath string) FunctionWrapperData {
 	ghoulName := strings.ToLower(structInfo.Name) + "-slice"
-	goFuncName := strings.ReplaceAll(ghoulName, "-", "")
+	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
 	packagePrefix := getPackagePrefix(importPath)
 	qualifiedType := packagePrefix + "." + structInfo.Name
 

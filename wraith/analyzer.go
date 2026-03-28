@@ -236,6 +236,10 @@ func (a *Analyzer) processFunctionDecl(funcDecl *ast.FuncDecl, pkg *packages.Pac
 	if funcDecl.Recv != nil && len(funcDecl.Recv.List) > 0 {
 		recv := funcDecl.Recv.List[0]
 		recvType := pkg.TypesInfo.TypeOf(recv.Type)
+		// Skip methods on unexported types
+		if isUnexportedType(recvType) {
+			return nil
+		}
 		receiver = &ParameterInfo{
 			Name: getFieldName(recv),
 			Type: recvType,

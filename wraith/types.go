@@ -233,7 +233,7 @@ func (tm *TypeMapper) generateFunctionAdapter(info ArgConversionInfo, w io.Write
 	fmt.Fprintf(w, "\t%s := %s{\n", name, info.Type)
 
 	// Build ghoul argument slice from Go parameters
-	fmt.Fprintf(w, "\t\tghoulArgs := make([]*e.Node, %d)\n", len(sig.Params))
+	fmt.Fprintf(w, "\t\tghoulArgs := make([]*_e.Node, %d)\n", len(sig.Params))
 	for i, p := range sig.Params {
 		if p.GhoulType != "" {
 			fmt.Fprintf(w, "\t\tghoulArgs[%d] = _e.%s(p%d)\n", i, nodeConstructor(p.GhoulType), i)

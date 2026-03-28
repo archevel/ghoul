@@ -351,11 +351,11 @@ func TestTypeAliasParametersWrappedAsPrimitives(t *testing.T) {
 	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
 	code := string(content)
 
-	if !strings.Contains(code, "addscores") {
+	if !strings.Contains(code, "mummy_addscores") {
 		t.Fatal("expected addscores function to be generated")
 	}
 	// Extract the addscores function body to check it specifically
-	idx := strings.Index(code, "func addscores")
+	idx := strings.Index(code, "func mummy_addscores")
 	if idx < 0 {
 		t.Fatal("could not find addscores function")
 	}
@@ -532,7 +532,7 @@ func TestMultiNameFieldsInConstructor(t *testing.T) {
 	if !strings.Contains(code, "make-point") {
 		t.Fatal("expected make-point constructor")
 	}
-	idx := strings.Index(code, "func makepoint")
+	idx := strings.Index(code, "func mummy_makepoint")
 	if idx < 0 {
 		t.Fatal("could not find makepoint function")
 	}
