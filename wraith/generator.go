@@ -192,6 +192,39 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 			strings.Join(skippedFunctions, "\n  "))
 	}
 
+	// Collect imports referenced by function parameter/return types
+	importSet := map[string]bool{packageInfo.ImportPath: true}
+	for _, fn := range packageInfo.Functions {
+		for _, p := range fn.Params {
+			collectTypeImports(p.Type, importSet)
+		}
+		for _, r := range fn.Results {
+			collectTypeImports(r.Type, importSet)
+		}
+		if fn.Receiver != nil {
+			collectTypeImports(fn.Receiver.Type, importSet)
+		}
+	}
+	for _, s := range packageInfo.Structs {
+		for _, f := range s.Fields {
+			collectTypeImports(f.Type, importSet)
+		}
+	}
+	for _, iface := range packageInfo.Interfaces {
+		for _, m := range iface.Methods {
+			for _, p := range m.Params {
+				collectTypeImports(p.Type, importSet)
+			}
+			for _, r := range m.Results {
+				collectTypeImports(r.Type, importSet)
+			}
+		}
+	}
+	imports = imports[:0]
+	for imp := range importSet {
+		imports = append(imports, imp)
+	}
+
 	// Prepare template data
 	templateData := TemplateData{
 		PackageName: g.config.PackageName,
@@ -231,15 +264,18 @@ func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperD
 		if reason := g.typeMapper.UnsupportedTypeReason(result.Type); reason != "" {
 			return FunctionWrapperData{}, fmt.Errorf("return value '%s' uses unsupported %s", result.Name, reason)
 		}
+		if isUnexportedType(result.Type) {
+			return FunctionWrapperData{}, fmt.Errorf("return value '%s' uses unexported type %s", result.Name, result.Type)
+		}
 	}
 
-	ghoulName := strings.ToLower(funcInfo.Name)
+	ghoulName := toGhoulName(funcInfo.Name)
 	if funcInfo.Receiver != nil {
 		typeName := funcInfo.Receiver.Type.String()
 		typeName = strings.TrimPrefix(typeName, "*")
 		parts := strings.Split(typeName, ".")
 		typeName = parts[len(parts)-1]
-		ghoulName = strings.ToLower(typeName) + "-" + strings.ToLower(funcInfo.Name)
+		ghoulName = toGhoulName(typeName) + "-" + toGhoulName(funcInfo.Name)
 	}
 
 	goFuncName := strings.ReplaceAll(ghoulName, "-", "")
@@ -711,6 +747,36 @@ func isUnexportedType(goType types.Type) bool {
 		}
 	}
 	return false
+}
+
+// collectTypeImports extracts package import paths from a Go type.
+func collectTypeImports(t types.Type, imports map[string]bool) {
+	switch typ := t.(type) {
+	case *types.Named:
+		if pkg := typ.Obj().Pkg(); pkg != nil {
+			imports[pkg.Path()] = true
+		}
+	case *types.Pointer:
+		collectTypeImports(typ.Elem(), imports)
+	case *types.Slice:
+		collectTypeImports(typ.Elem(), imports)
+	case *types.Array:
+		collectTypeImports(typ.Elem(), imports)
+	case *types.Map:
+		collectTypeImports(typ.Key(), imports)
+		collectTypeImports(typ.Elem(), imports)
+	case *types.Signature:
+		for i := 0; i < typ.Params().Len(); i++ {
+			collectTypeImports(typ.Params().At(i).Type(), imports)
+		}
+		for i := 0; i < typ.Results().Len(); i++ {
+			collectTypeImports(typ.Results().At(i).Type(), imports)
+		}
+	case *types.Interface:
+		for i := 0; i < typ.NumMethods(); i++ {
+			collectTypeImports(typ.Method(i).Type(), imports)
+		}
+	}
 }
 
 // toGhoulName converts CamelCase to kebab-case for Lisp conventions

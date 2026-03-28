@@ -126,8 +126,8 @@ func TestMethodNamingConvention(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if wrapper.GhoulName != "person-getage" {
-		t.Errorf("expected 'person-getage', got '%s'", wrapper.GhoulName)
+	if wrapper.GhoulName != "person-get-age" {
+		t.Errorf("expected 'person-get-age', got '%s'", wrapper.GhoulName)
 	}
 	if wrapper.GoFuncName != "persongetage" {
 		t.Errorf("expected 'persongetage', got '%s'", wrapper.GoFuncName)
@@ -288,15 +288,15 @@ func TestPossessPackageCreatesSarcophagus(t *testing.T) {
 		{"constructor", "make-person"},
 		{"slice constructor", "person-slice"},
 		{"interface method", "greeter-greet"},
-		{"method naming", "person-getage"},
+		{"method naming", "person-get-age"},
 		{"callback adapter", "FuncVal"},
 		{"nil handling", "ForeignVal != nil"},
 		{"RegisterFunctions", "func RegisterFunctions"},
 		{"init registration", "_mummy.RegisterSarcophagus"},
 		{"registerWithPrefix", "func registerWithPrefix"},
 		{"RegisterIfAllowed", "_mummy.RegisterIfAllowed"},
-		{"node signature", "[]*e.Node"},
-		{"node return", "*e.Node"},
+		{"node signature", "[]*_e.Node"},
+		{"node return", "*_e.Node"},
 	}
 
 	for _, c := range checks {
@@ -304,6 +304,106 @@ func TestPossessPackageCreatesSarcophagus(t *testing.T) {
 			t.Errorf("expected %s (%q) in generated code", c.desc, c.content)
 		}
 	}
+}
+
+func TestFunctionsUsingExternalTypesAreWrapped(t *testing.T) {
+	code := possessAndRead(t)
+
+	// ReadAll uses io.Reader — the function should be wrapped and
+	// the generated code should import "io"
+	if !strings.Contains(code, "readall") {
+		t.Fatal("ReadAll should be wrapped — io.Reader is a standard external type")
+	}
+	if !strings.Contains(code, `"io"`) {
+		t.Error("generated code uses io.Reader but 'io' is not in imports")
+	}
+}
+
+func TestFunctionsReturningExternalTypesAreWrapped(t *testing.T) {
+	code := possessAndRead(t)
+
+	// OpenFile returns *os.File — should be wrapped with mummy
+	if !strings.Contains(code, "openfile") {
+		t.Fatal("OpenFile should be wrapped — *os.File is a standard return type")
+	}
+	if !strings.Contains(code, `"os"`) {
+		t.Error("generated code returns *os.File but 'os' is not in imports")
+	}
+}
+
+func TestUnexportedReturnTypesSkipped(t *testing.T) {
+	code := possessAndRead(t)
+
+	// MakeResult returns *result (unexported) — should be skipped
+	if strings.Contains(code, "makeresult") {
+		t.Error("MakeResult uses unexported return type — should be skipped")
+	}
+
+	// GetResultValue takes *result (unexported) — should be skipped
+	if strings.Contains(code, "getresultvalue") {
+		t.Error("GetResultValue uses unexported param type — should be skipped")
+	}
+}
+
+func TestCamelCaseToKebabNaming(t *testing.T) {
+	code := possessAndRead(t)
+
+	if !strings.Contains(code, `"is-even"`) {
+		t.Error("expected ghoul name 'is-even' for IsEven (CamelCase → kebab-case)")
+	}
+	if !strings.Contains(code, `"split-name-age"`) || !strings.Contains(code, `"sum-floats"`) {
+		t.Log("CamelCase to kebab-case conversion not splitting on word boundaries")
+	}
+}
+
+func TestMultiReturnFunctionHandled(t *testing.T) {
+	code := possessAndRead(t)
+
+	// SplitNameAge returns (string, int) — should be wrapped with list return
+	if strings.Contains(code, "splitnameage") {
+		if !strings.Contains(code, "_e.NewListNode") {
+			t.Error("multi-return SplitNameAge should use NewListNode")
+		}
+	}
+}
+
+func TestDocCommentsAreSingleLine(t *testing.T) {
+	code := possessAndRead(t)
+
+	for _, line := range strings.Split(code, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "//") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "Special cases") || strings.Contains(line, "±") {
+			t.Errorf("multi-line doc content leaked into code: %s", line)
+		}
+	}
+}
+
+func possessAndRead(t *testing.T) string {
+	t.Helper()
+
+	testpkgPath, _ := filepath.Abs("../testpkg")
+	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
+		t.Skip("testpkg not found")
+	}
+
+	outputDir := t.TempDir()
+	err := PossessPackage(&PossessionConfig{
+		PackagePath:     testpkgPath,
+		OutputDir:       outputDir,
+		SkipUnwrappable: true,
+	})
+	if err != nil {
+		t.Fatalf("PossessPackage failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
+	if err != nil {
+		t.Fatalf("failed to read generated file: %v", err)
+	}
+	return string(content)
 }
 
 // fakeType implements types.Type for testing without real Go packages

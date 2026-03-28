@@ -409,12 +409,9 @@ func TestUnexportedReturnTypeWrappedAsMummy(t *testing.T) {
 	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
 	code := string(content)
 
-	// MakeResult returns *result (unexported) — should be entombed as mummy
-	if !strings.Contains(code, "makeresult") {
-		t.Error("expected makeresult function to be generated")
-	}
-	if !strings.Contains(code, "MummyNodeVal") {
-		t.Error("expected MummyNodeVal for unexported return type")
+	// MakeResult returns *result (unexported) — should be skipped
+	if strings.Contains(code, "makeresult") {
+		t.Error("makeresult should be skipped because it returns an unexported type")
 	}
 
 	// GetResultValue takes *result (unexported) — should be skipped
