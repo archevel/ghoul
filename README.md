@@ -46,10 +46,6 @@ go test ./...
 ## TODOs
 - Replace `cond` with `match` keyword and have it use pattern matching
 - Implement a symbol table and use integers instead of strings to compare/find the right values
-- Clean up tests into separate files with distinct areas
-- Use `fn` instead of `lambda`?
-- Use `do` instead of `begin`?
-- Use `def` instead of `define`?
 
 ## Package Structure
 
