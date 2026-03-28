@@ -1,0 +1,37 @@
+;; testing.ghl — A tiny test framework as a reusable module
+;;
+;; Provides:
+;;   test-case   — function: (test-case "name" expected actual)
+;;   test-suite  — function: (test-suite "name" thunk) where thunk runs tests
+;;   run-tests   — function: prints summary of pass/fail counts
+
+;; Track results
+(define pass-count 0)
+(define fail-count 0)
+
+;; test-case compares expected and actual, prints PASS/FAIL, tracks results
+(define test-case (lambda (name expected actual)
+  (cond
+    ((eq? expected actual)
+     (begin
+       (set! pass-count (+ pass-count 1))
+       (println (string-append "  PASS: " name))))
+    (else
+     (begin
+       (set! fail-count (+ fail-count 1))
+       (println (string-append "  FAIL: " name)))))))
+
+;; test-suite prints a heading then runs a thunk containing test-cases
+(define test-suite (lambda (name thunk)
+  (println name)
+  (thunk)))
+
+;; run-tests prints the final summary
+(define run-tests (lambda ()
+  (println "")
+  (println (string-append "Results: "
+    (number->string pass-count) " passed, "
+    (number->string fail-count) " failed"))
+  (cond
+    ((eq? fail-count 0) (println "All tests passed!"))
+    (else (println "Some tests failed.")))))

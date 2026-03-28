@@ -473,6 +473,10 @@ func translateParams(paramNode *bones.Node) (*bones.ParamSpec, error) {
 	if paramNode.Kind == bones.IdentifierNode {
 		return &bones.ParamSpec{Variadic: paramNode}, nil
 	}
+	// () — empty parameter list
+	if paramNode.IsNil() {
+		return &bones.ParamSpec{}, nil
+	}
 	if paramNode.Kind != bones.ListNode {
 		return nil, fmt.Errorf("bad syntax: invalid parameter list")
 	}

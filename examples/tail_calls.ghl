@@ -1,0 +1,72 @@
+;; tail_calls.ghl — Tail call optimization demos
+;;
+;; These examples use deep recursion that would crash Python with
+;; "RecursionError: maximum recursion depth exceeded" (default limit: 1000).
+;; Ghoul optimizes tail calls, so they run in constant stack space.
+;;
+;; Run: ghoul examples/tail_calls.ghl
+
+;; --- Countdown from 1,000,000 ---
+;; Python equivalent would blow the stack at ~1000:
+;;   def countdown(n):
+;;       if n == 0: return "done"
+;;       return countdown(n - 1)
+
+(define countdown (lambda (n)
+  (cond
+    ((eq? n 0) "done")
+    (else (countdown (- n 1))))))
+
+(println (string-append "Countdown from 1,000,000: " (countdown 1000000)))
+
+;; --- Sum via tail-recursive accumulator ---
+;; Sums 1 + 2 + ... + n without growing the stack.
+;; Python: sum_to(1_000_000) -> RecursionError
+
+(define sum-to (lambda (n acc)
+  (cond
+    ((eq? n 0) acc)
+    (else (sum-to (- n 1) (+ acc n))))))
+
+(println (string-append "Sum 1..1,000,000: " (number->string (sum-to 1000000 0))))
+
+;; --- Mutual recursion ---
+;; even? and odd? call each other. In Python this would overflow
+;; at around n=500 due to the mutual call chain.
+
+(define my-even? (lambda (n)
+  (cond
+    ((eq? n 0) #t)
+    (else (my-odd? (- n 1))))))
+
+(define my-odd? (lambda (n)
+  (cond
+    ((eq? n 0) #f)
+    (else (my-even? (- n 1))))))
+
+(println (string-append "Is 999,999 odd? " (cond ((my-odd? 999999) "yes") (else "no"))))
+(println (string-append "Is 1,000,000 even? " (cond ((my-even? 1000000) "yes") (else "no"))))
+
+;; --- Fibonacci with accumulator ---
+;; Tail-recursive fib runs in O(n) time and constant stack space.
+;; The naive recursive version would be exponential, and even the
+;; linear Python version would hit the recursion limit at ~1000.
+
+(define fib (lambda (n a b)
+  (cond
+    ((eq? n 0) a)
+    (else (fib (- n 1) b (+ a b))))))
+
+(println (string-append "Fibonacci(50): " (number->string (fib 50 0 1))))
+
+;; --- Collatz sequence length ---
+;; Counts steps until n reaches 1. The sequence can be very long
+;; (e.g. 837799 takes 524 steps) — well beyond Python's stack.
+
+(define collatz-length (lambda (n steps)
+  (cond
+    ((eq? n 1) steps)
+    ((eq? 0 (mod n 2)) (collatz-length (/ n 2) (+ steps 1)))
+    (else (collatz-length (+ (* 3 n) 1) (+ steps 1))))))
+
+(println (string-append "Collatz steps for 837799: " (number->string (collatz-length 837799 0))))

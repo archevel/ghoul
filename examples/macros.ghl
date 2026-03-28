@@ -1,0 +1,85 @@
+;; macros.ghl — Hygienic macro examples
+;;
+;; Ghoul supports syntax-rules (pattern-based) and general transformers
+;; (lambda-based). All macros are hygienic — bindings introduced by the
+;; macro cannot capture or shadow user bindings.
+;;
+;; Run: ghoul examples/macros.ghl
+
+;; --- Simple pattern macros with syntax-rules ---
+
+;; 'unless' is defined in the prelude, but here's how you'd write it:
+(define-syntax my-unless (syntax-rules ()
+  ((my-unless test body ...)
+   (cond ((not test) (begin body ...))))))
+
+(my-unless (eq? 1 2)
+  (println "1 is not 2 — my-unless works"))
+
+;; --- swap: the classic hygiene test ---
+;; This macro introduces a temporary variable 'tmp'. Even if the user
+;; has their own 'tmp', the macro's 'tmp' won't interfere.
+
+(define-syntax swap! (syntax-rules ()
+  ((swap! x y)
+   (begin
+     (define tmp x)
+     (set! x y)
+     (set! y tmp)))))
+
+(define a 10)
+(define b 20)
+(swap! a b)
+(println (string-append "After swap: a=" (number->string a) " b=" (number->string b)))
+
+;; Hygiene proof — user's 'tmp' is unaffected:
+(define tmp 99)
+(define other 42)
+(swap! tmp other)
+(println (string-append "After swapping tmp and other: tmp=" (number->string tmp) " other=" (number->string other)))
+
+;; --- Ellipsis patterns ---
+
+;; 'my-list' wraps any number of arguments into a list.
+(define-syntax my-list (syntax-rules ()
+  ((my-list x ...) (list x ...))))
+
+(println (my-list 1 2 3 4 5))
+
+;; --- Multiple clauses ---
+;; Patterns are tried in order. The first match wins.
+
+(define-syntax my-and (syntax-rules ()
+  ((my-and) #t)
+  ((my-and x) x)
+  ((my-and x rest ...)
+   (cond (x (my-and rest ...)) (else #f)))))
+
+(println (cond ((my-and #t #t #t) "my-and #t #t #t: true") (else "false")))
+(println (cond ((my-and #t #f #t) "my-and #t #f #t: true") (else "my-and #t #f #t: false")))
+(println (cond ((my-and) "my-and (no args): true") (else "false")))
+
+;; --- Defining let ourselves ---
+;; The prelude's 'let' uses nested ellipsis: ((var val) ...) captures
+;; pairs of bindings. Here it is from scratch:
+
+(define-syntax my-let (syntax-rules ()
+  ((my-let ((var val) ...) body ...)
+   ((lambda (var ...) body ...) val ...))))
+
+(println (string-append "my-let result: "
+  (number->string
+    (my-let ((x 10) (y 20) (z 30))
+      (+ x (+ y z))))))
+
+;; --- General transformer ---
+;; For cases where pattern matching isn't enough, use a lambda.
+;; The transformer receives the full syntax object and can construct
+;; arbitrary output using list operations.
+
+(define-syntax double-call (lambda (stx)
+  ;; (double-call expr) -> (+ expr expr)
+  (define expr (car (cdr stx)))
+  (list '+ (syntax->datum expr) (syntax->datum expr))))
+
+(println (string-append "double-call (+ 1 2): " (number->string (double-call (+ 1 2)))))

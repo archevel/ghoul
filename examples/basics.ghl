@@ -1,0 +1,65 @@
+;; basics.ghl — Core Ghoul features
+;;
+;; Run: ghoul examples/basics.ghl
+
+;; --- Definitions and arithmetic ---
+
+(define pi 3.14159)
+(define radius 5.0)
+(define area (* pi (* radius radius)))
+(println (string-append "Area of circle with radius 5: " (number->string area)))
+
+;; --- Functions ---
+
+;; Functions are defined with lambda. define binds them to names.
+(define square (lambda (x) (* x x)))
+(println (string-append "10 squared: " (number->string (square 10))))
+
+;; Multiple expressions in a body — last value is returned.
+(define describe (lambda (n)
+  (define sq (square n))
+  (string-append (number->string n) " squared is " (number->string sq))))
+(println (describe 7))
+
+;; --- Conditionals ---
+
+;; cond is the only branching form. It tests clauses top to bottom.
+(define fizzbuzz (lambda (n)
+  (cond
+    ((eq? 0 (mod n 15)) "FizzBuzz")
+    ((eq? 0 (mod n 3))  "Fizz")
+    ((eq? 0 (mod n 5))  "Buzz")
+    (else                (number->string n)))))
+
+(define fizzbuzz-range (lambda (i max)
+  (cond
+    ((<= i max)
+     (println (fizzbuzz i))
+     (fizzbuzz-range (+ i 1) max)))))
+(fizzbuzz-range 1 20)
+
+;; --- Lists ---
+
+(define nums (list 1 2 3 4 5 6 7 8 9 10))
+(println (string-append "Sum: " (number->string (foldl + 0 nums))))
+(println (string-append "Evens: " (number->string (length (filter (lambda (x) (eq? 0 (mod x 2))) nums)))))
+(println (string-append "First doubled: " (number->string (car (map (lambda (x) (* x 2)) nums)))))
+(println (reverse nums))
+
+;; --- Higher-order functions ---
+
+;; compose takes two functions and returns their composition.
+(define compose (lambda (f g)
+  (lambda (x) (f (g x)))))
+
+(define add1 (lambda (x) (+ x 1)))
+(define double (lambda (x) (* x 2)))
+(define double-then-add1 (compose add1 double))
+(println (string-append "double-then-add1(5): " (number->string (double-then-add1 5))))
+
+;; --- Variadic functions ---
+;; A dot in the parameter list captures remaining args as a list.
+
+(define my-sum (lambda (first . rest)
+  (foldl + first rest)))
+(println (string-append "my-sum(1 2 3 4 5): " (number->string (my-sum 1 2 3 4 5))))

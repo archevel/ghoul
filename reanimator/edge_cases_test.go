@@ -633,6 +633,24 @@ func TestTranslateNodeRequire(t *testing.T) {
 	}
 }
 
+func TestTranslateNodeZeroArgLambda(t *testing.T) {
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(lambda () 42)`)
+	result, err := r.ReanimateNodes(nodes)
+	if err != nil {
+		t.Fatalf("zero-arg lambda should work: %v", err)
+	}
+	if len(result) != 1 || result[0].Kind != bones.LambdaNode {
+		t.Errorf("expected LambdaNode, got %v", result)
+	}
+	if len(result[0].Params.Fixed) != 0 {
+		t.Errorf("expected 0 fixed params, got %d", len(result[0].Params.Fixed))
+	}
+	if result[0].Params.Variadic != nil {
+		t.Error("expected no variadic param")
+	}
+}
+
 func TestTranslateNodeParamsInvalid(t *testing.T) {
 	// lambda with non-identifier, non-list params: (lambda 42 body)
 	node := bones.NewListNode([]*bones.Node{

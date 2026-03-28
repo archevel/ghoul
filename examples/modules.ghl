@@ -1,0 +1,50 @@
+;; modules.ghl — Using modules from separate files
+;;
+;; This example requires lib/testing.ghl which defines test-case and
+;; test-suite functions. Modules are loaded with (require path) where
+;; the path is relative to the current file.
+;;
+;; Run: ghoul examples/modules.ghl
+
+;; Load the test framework. 'as t' gives all exports the t: prefix.
+(require lib/testing as t)
+
+;; --- Test arithmetic ---
+
+(t:test-suite "Arithmetic" (lambda ()
+  (t:test-case "addition" 5 (+ 2 3))
+  (t:test-case "multiplication" 42 (* 6 7))
+  (t:test-case "modulo" 1 (mod 10 3))
+  (t:test-case "negative" -3 (- 2 5))))
+
+;; --- Test list operations ---
+
+(t:test-suite "Lists" (lambda ()
+  (t:test-case "car" 1 (car (list 1 2 3)))
+  (t:test-case "length" 4 (length (list 10 20 30 40)))
+  (t:test-case "map" (list 2 4 6) (map (lambda (x) (* x 2)) (list 1 2 3)))
+  (t:test-case "filter" (list 2 4) (filter (lambda (x) (eq? 0 (mod x 2))) (list 1 2 3 4 5)))
+  (t:test-case "foldl" 10 (foldl + 0 (list 1 2 3 4)))
+  (t:test-case "reverse" (list 3 2 1) (reverse (list 1 2 3)))))
+
+;; --- Test string operations ---
+
+(t:test-suite "Strings" (lambda ()
+  (t:test-case "string-append" "hello world" (string-append "hello" " " "world"))
+  (t:test-case "string-length" 5 (string-length "ghoul"))
+  (t:test-case "string-contains" #t (string-contains? "abcdef" "cde"))
+  (t:test-case "substring" "ell" (substring "hello" 1 4))
+  (t:test-case "upcase" "GHOUL" (string-upcase "ghoul"))))
+
+;; --- Test tail-recursive functions ---
+
+(define fib (lambda (n a b)
+  (cond ((eq? n 0) a)
+        (else (fib (- n 1) b (+ a b))))))
+
+(t:test-suite "Tail recursion" (lambda ()
+  (t:test-case "fib(10)" 55 (fib 10 0 1))
+  (t:test-case "fib(20)" 6765 (fib 20 0 1))))
+
+;; Print summary
+(t:run-tests)

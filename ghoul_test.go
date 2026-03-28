@@ -751,3 +751,34 @@ func TestPreludeSyntaxCaseAdd1(t *testing.T) {
 	}
 }
 
+func TestZeroArgLambda(t *testing.T) {
+	g := New()
+	res, err := g.Process(strings.NewReader(`(define f (lambda () 42)) (f)`))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !res.Equiv(e.IntNode(42)) {
+		t.Errorf("Expected 42, got %s", res.Repr())
+	}
+}
+
+func TestZeroArgLambdaClosure(t *testing.T) {
+	g := New()
+	res, err := g.Process(strings.NewReader(`
+(define make-counter (lambda (start)
+  (define count start)
+  (lambda ()
+    (set! count (+ count 1))
+    count)))
+(define c (make-counter 0))
+(c)
+(c)
+(c)
+`))
+	if err != nil {
+		t.Fatalf("Got error: %s", err)
+	}
+	if !res.Equiv(e.IntNode(3)) {
+		t.Errorf("Expected 3, got %s", res.Repr())
+	}
+}
