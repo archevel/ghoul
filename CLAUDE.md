@@ -14,13 +14,13 @@ Everything is `*bones.Node`. There is no `Expr` interface, no separate `Pair`/`L
 
 The codebase is organized into thematically named packages:
 
-- **`ghoul.go`**: The ghoul itself — the public API that orchestrates the three phases. Creates the exhumer, reanimator, and consumer with a shared mark counter for hygiene. Injects a `ModuleLoader` function into the consumer to handle `require` without import cycles. Returns `*bones.Node`.
+- **`ghoul.go`**: The ghoul itself — the public API that orchestrates the three phases. Creates the exhumer, reanimator, and consumer with a shared mark counter and environment. Injects a `ModuleLoader` into the reanimator to handle `require` during expansion. Returns `*bones.Node`.
 - **`cmd/ghoul/main.go`**: CLI interface supporting both REPL mode and file execution.
 - **`cmd/wraith/main.go`**: CLI for the wraith tool — possesses Go packages and generates sarcophagi.
 - **`bones/`**: The unified type system — `node.go` defines `*Node` with all node kinds, and `location.go` defines `CodeLocation`, `SourcePosition`, and `MacroExpansionLocation`. Foundation package with no ghoul imports.
 - **`exhumer/`**: Digs up structure from raw text — lexer and yacc-based parser for Lisp syntax. Produces `*bones.Node` trees (ListNode with Children) with `SourcePosition` set on parsed nodes.
-- **`reanimator/`**: Brings macromancy macros to life — walks the `*Node` tree, processes `define-syntax` forms to register macros, expands macro calls, then translates the fully-expanded tree into semantic nodes (`CallNode`, `LambdaNode`, `DefineNode`, `CondNode`, `BeginNode`, `SetNode`, `RequireNode`). Uses a sub-evaluator (via `consume`) for general transformer bodies.
-- **`consume/`**: How the ghoul feeds — bytecode compiler and stack VM with proper tail call optimization. Files: `evaluator.go` (wrapper, translation from syntax to semantic nodes), `compiler.go` (AST to bytecode), `bytecode.go` (opcode definitions, CodeObject), `vm.go` (stack-based VM execution loop), `cps_evaluator.go` (entry points: ConsumeNodes, EvalSubExpression), `environment.go` (scope maps storing `*Node` values), `require.go` (require form handling), `module.go` (module loading state and exports), `suggest.go` (Levenshtein-based typo suggestions).
+- **`reanimator/`**: Brings macromancy macros to life — walks the `*Node` tree, processes `define-syntax` forms to register macros, expands macro calls, handles `require` (loading sarcophagi and Ghoul modules during expansion so macros from required modules are available), then translates the fully-expanded tree into semantic nodes (`CallNode`, `LambdaNode`, `DefineNode`, `CondNode`, `BeginNode`, `SetNode`). Uses a sub-evaluator (via `consume`) for general transformer bodies.
+- **`consume/`**: How the ghoul feeds — bytecode compiler and stack VM with proper tail call optimization. Files: `evaluator.go` (wrapper, translation from syntax to semantic nodes), `compiler.go` (AST to bytecode), `bytecode.go` (opcode definitions, CodeObject), `vm.go` (stack-based VM execution loop), `cps_evaluator.go` (entry points: ConsumeNodes, EvalSubExpression), `environment.go` (scope maps storing `*Node` values), `module.go` (module loading state and exports), `suggest.go` (Levenshtein-based typo suggestions).
 - **`macromancy/`**: The dark arts — `macro.go` (pattern matching and transformer construction), `syntax_object.go` (hygiene via `SyntaxObject` wrapping), `marks.go` (mark types for hygienic expansion). Nested ellipsis and wildcard (`_`) patterns are supported.
 - **`tome/`**: The book of spells — standard library functions (`car`, `cdr`, `cons`, `list`, `+`, `-`, `eq?`, `map`, `filter`, `syntax-match?`, `assoc`, etc.).
 - **`mummy/`**: Wraith support — sarcophagus registry (`RegisterSarcophagus`, `LookupSarcophagus`) and conversion functions (`bytes`, `int-slice`, `float-slice`, `go-nil`, `string-from-bytes`). Mummy values are stored as `MummyNode` in `*bones.Node` (Kind: `MummyNode`, `ForeignVal` holds the Go value, `TypeNameV` holds the type name).
@@ -82,7 +82,7 @@ All values are `*bones.Node`. The `Kind` field determines the node's role:
 - `ListNode` — S-expression list; `Children` holds elements, `DottedTail` for improper lists
 
 **Semantic nodes** (produced by the reanimator's translation step):
-- `DefineNode`, `SetNode`, `LambdaNode`, `CondNode`, `BeginNode`, `CallNode`, `RequireNode`
+- `DefineNode`, `SetNode`, `LambdaNode`, `CondNode`, `BeginNode`, `CallNode`
 - These reuse `Children` for operands, plus `Params` (ParamSpec) for lambda and `Clauses` ([]*CondClause) for cond
 
 **Runtime nodes** (produced during evaluation):
@@ -93,7 +93,7 @@ All values are `*bones.Node`. The `Kind` field determines the node's role:
 
 ### Three-Phase Processing
 1. **Exhume** (`exhumer/`): Parse source text into `*bones.Node` trees (ListNode with Children) with source positions.
-2. **Reanimate** (`reanimator/`): Walk the node tree, process `define-syntax` forms to register macros, expand macro calls, strip all macro-related forms, and translate the result into semantic nodes (`CallNode`, `LambdaNode`, etc.) for the consumer. General transformer bodies are pre-expanded then evaluated through a sub-evaluator.
+2. **Reanimate** (`reanimator/`): Walk the node tree, process `define-syntax` forms to register macros, expand macro calls, handle `require` (loading modules and sarcophagi eagerly so macros from required modules are available), strip all macro-related and require forms, and translate the result into semantic nodes (`CallNode`, `LambdaNode`, etc.) for the consumer.
 3. **Consume** (`consume/`): Compile semantic nodes to bytecode and execute on a stack-based VM.
 
 ### Consumer (Evaluator)
@@ -102,8 +102,9 @@ All values are `*bones.Node`. The `Kind` field determines the node's role:
   - `ConsumeNodes([]*bones.Node)` — main pipeline entry point, compiles and runs semantic nodes produced by the reanimator
   - `EvaluateNode(*bones.Node)` — translates a syntax node tree to semantic nodes then compiles and runs; used internally by the reanimator for macro transformer evaluation
 - `EvalSubExpression(*bones.Node)` — evaluates a single node with a fresh VM
-- The consumer does NOT handle `define-syntax` or macro expansion — that is the reanimator's job
-- Module loading uses a `ModuleLoader` function injected by `ghoul.go` — the loader runs the full pipeline (parse -> expand -> translate -> evaluate) to avoid import cycles between `consume` and `ghoul`
+- The consumer does NOT handle `define-syntax`, macro expansion, or `require` — those are the reanimator's job
+- Module loading uses a `ModuleLoader` function injected into the reanimator by `ghoul.go` — the loader runs the full pipeline (parse -> expand -> evaluate) with a fresh macro scope per module, extracting both runtime exports and macro exports
+- The reanimator and consumer share the same environment, so bindings from `require` (loaded during expansion) are visible at runtime
 - Environment scope maps use `scopeKey` (Name + canonical marks string) as keys and store `*Node` values directly
 - Lookup fallback: scoped identifiers with marks fall back to name-only lookup for macro-introduced references to existing bindings
 

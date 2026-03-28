@@ -104,6 +104,80 @@ func TestModFloatErrors(t *testing.T) {
 	if err == nil { t.Fatal("expected error for mod on floats") }
 }
 
+// --- Variadic arithmetic ---
+
+func TestAddNoArgs(t *testing.T) {
+	result, err := evalWithStdlib("(+)")
+	if err != nil { t.Fatal(err) }
+	if !result.Equiv(e.IntNode(0)) { t.Errorf("expected 0, got %s", result.Repr()) }
+}
+
+func TestAddSingle(t *testing.T) {
+	result, err := evalWithStdlib("(+ 5)")
+	if err != nil { t.Fatal(err) }
+	if !result.Equiv(e.IntNode(5)) { t.Errorf("expected 5, got %s", result.Repr()) }
+}
+
+func TestAddMultiple(t *testing.T) {
+	result, err := evalWithStdlib("(+ 1 2 3 4 5)")
+	if err != nil { t.Fatal(err) }
+	if !result.Equiv(e.IntNode(15)) { t.Errorf("expected 15, got %s", result.Repr()) }
+}
+
+func TestAddMultipleMixed(t *testing.T) {
+	result, err := evalWithStdlib("(+ 1 2.0 3)")
+	if err != nil { t.Fatal(err) }
+	if !result.Equiv(e.FloatNode(6.0)) { t.Errorf("expected 6.0, got %s", result.Repr()) }
+}
+
+func TestMultiplyNoArgs(t *testing.T) {
+	result, err := evalWithStdlib("(*)")
+	if err != nil { t.Fatal(err) }
+	if !result.Equiv(e.IntNode(1)) { t.Errorf("expected 1, got %s", result.Repr()) }
+}
+
+func TestMultiplyMultiple(t *testing.T) {
+	result, err := evalWithStdlib("(* 2 3 4)")
+	if err != nil { t.Fatal(err) }
+	if !result.Equiv(e.IntNode(24)) { t.Errorf("expected 24, got %s", result.Repr()) }
+}
+
+func TestSubtractNegation(t *testing.T) {
+	result, err := evalWithStdlib("(- 5)")
+	if err != nil { t.Fatal(err) }
+	if !result.Equiv(e.IntNode(-5)) { t.Errorf("expected -5, got %s", result.Repr()) }
+}
+
+func TestSubtractMultiple(t *testing.T) {
+	result, err := evalWithStdlib("(- 10 3 2)")
+	if err != nil { t.Fatal(err) }
+	if !result.Equiv(e.IntNode(5)) { t.Errorf("expected 5, got %s", result.Repr()) }
+}
+
+func TestSubtractNoArgs(t *testing.T) {
+	_, err := evalWithStdlib("(-)")
+	if err == nil { t.Fatal("expected error for (-) with no args") }
+}
+
+func TestDivideMultiple(t *testing.T) {
+	result, err := evalWithStdlib("(/ 100 5 2)")
+	if err != nil { t.Fatal(err) }
+	if !result.Equiv(e.IntNode(10)) { t.Errorf("expected 10, got %s", result.Repr()) }
+}
+
+func TestDivideReciprocal(t *testing.T) {
+	result, err := evalWithStdlib("(/ 4)")
+	if err != nil { t.Fatal(err) }
+	if !result.Equiv(e.FloatNode(0.25)) { t.Errorf("expected 0.25, got %s", result.Repr()) }
+}
+
+func TestDivideNoArgs(t *testing.T) {
+	_, err := evalWithStdlib("(/)")
+	if err == nil { t.Fatal("expected error for (/) with no args") }
+}
+
+// --- Type errors ---
+
 func TestArithmeticTypeError(t *testing.T) {
 	_, err := evalWithStdlib(`(+ "a" 1)`)
 	if err == nil { t.Fatal("expected type error") }

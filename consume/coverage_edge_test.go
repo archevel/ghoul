@@ -13,7 +13,7 @@ func TestBoundIdentifierNamesIncludesSpecialForms(t *testing.T) {
 	env := NewEnvironment()
 	names := env.BoundIdentifierNames()
 
-	specialForms := []string{"cond", "else", "begin", "lambda", "define", "set!", "define-syntax", "syntax-rules", "quote", "require"}
+	specialForms := []string{"cond", "else", "begin", "lambda", "define", "set!", "define-syntax", "syntax-rules", "quote"}
 	for _, sf := range specialForms {
 		if !names[sf] {
 			t.Errorf("BoundIdentifierNames should include special form %q", sf)

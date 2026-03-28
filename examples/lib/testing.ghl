@@ -1,9 +1,10 @@
 ;; testing.ghl — A tiny test framework as a reusable module
 ;;
-;; Provides:
+;; Provides both functions and macros:
 ;;   test-case   — function: (test-case "name" expected actual)
 ;;   test-suite  — function: (test-suite "name" thunk) where thunk runs tests
 ;;   run-tests   — function: prints summary of pass/fail counts
+;;   assert-eq   — macro: (assert-eq expected expr) prints PASS/FAIL inline
 
 ;; Track results
 (define pass-count 0)
@@ -35,3 +36,14 @@
   (cond
     ((eq? fail-count 0) (println "All tests passed!"))
     (else (println "Some tests failed.")))))
+
+;; assert-eq is a macro — it can be exported and used in requiring files.
+;; This demonstrates that macros defined with define-syntax in a module
+;; are available to files that require it.
+(define-syntax assert-eq (syntax-rules ()
+  ((assert-eq expected actual)
+   (cond
+     ((= expected actual)
+      (println (string-append "  PASS: " (number->string expected))))
+     (else
+      (println (string-append "  FAIL: expected " (number->string expected))))))))

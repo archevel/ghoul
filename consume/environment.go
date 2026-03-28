@@ -66,7 +66,7 @@ func (env environment) BoundIdentifierNames() map[string]bool {
 	result := map[string]bool{
 		"cond": true, "else": true, "begin": true, "lambda": true,
 		"define": true, "set!": true, "define-syntax": true,
-		"syntax-rules": true, "quote": true, "require": true,
+		"syntax-rules": true, "quote": true,
 	}
 	for i := range env {
 		for key := range *env[i] {

@@ -26,7 +26,6 @@ const (
 	CondNode
 	BeginNode
 	CallNode
-	RequireNode
 
 	// Runtime nodes
 	FunctionNode
@@ -65,9 +64,6 @@ type Node struct {
 
 	// Cond
 	Clauses []*CondClause
-
-	// Require
-	RawArgs []*Node
 
 	// Function closure
 	FuncVal *func([]*Node, Evaluator) (*Node, error)
@@ -227,7 +223,7 @@ func (n *Node) Repr() string {
 		}
 		return "'()"
 	case ListNode, CallNode, DefineNode, SetNode, LambdaNode,
-		CondNode, BeginNode, RequireNode:
+		CondNode, BeginNode:
 		return reprList(n)
 	case FunctionNode:
 		return "#<procedure>"
@@ -339,7 +335,7 @@ func (n *Node) equivNode(other *Node) bool {
 		}
 		return n.Quoted.Equiv(other.Quoted)
 	case ListNode, CallNode, DefineNode, SetNode, LambdaNode,
-		CondNode, BeginNode, RequireNode:
+		CondNode, BeginNode:
 		return equivList(n, other)
 	case ForeignNode, MummyNode:
 		if other.Kind != n.Kind {
@@ -376,7 +372,7 @@ func equivList(a, b *Node) bool {
 func isListLike(n *Node) bool {
 	switch n.Kind {
 	case ListNode, CallNode, DefineNode, SetNode, LambdaNode,
-		CondNode, BeginNode, RequireNode:
+		CondNode, BeginNode:
 		return true
 	}
 	return false
@@ -414,7 +410,7 @@ func NodeTypeName(n *Node) string {
 	case QuoteNode:
 		return "quoted expression"
 	case ListNode, CallNode, DefineNode, SetNode, LambdaNode,
-		CondNode, BeginNode, RequireNode:
+		CondNode, BeginNode:
 		return "list"
 	case FunctionNode:
 		return "procedure"

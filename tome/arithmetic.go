@@ -7,89 +7,136 @@ import (
 	ev "github.com/archevel/ghoul/consume"
 )
 
-// extractNumsFromNodes extracts two numeric arguments, promoting to float if mixed.
-// Returns (intA, intB, true) for integer pair, or (floatA, floatB, false) for float/mixed.
-func extractNumsFromNodes(name string, args []*e.Node) (int64, int64, float64, float64, bool, error) {
-	fst := args[0]
-	snd := args[1]
-
-	fstIsInt := fst.Kind == e.IntegerNode
-	fstIsFloat := fst.Kind == e.FloatNodeKind
-	sndIsInt := snd.Kind == e.IntegerNode
-	sndIsFloat := snd.Kind == e.FloatNodeKind
-
-	if fstIsInt && sndIsInt {
-		return fst.IntVal, snd.IntVal, 0, 0, true, nil
+// asFloat coerces an integer or float node to float64.
+func asFloat(node *e.Node) (float64, bool) {
+	switch node.Kind {
+	case e.IntegerNode:
+		return float64(node.IntVal), true
+	case e.FloatNodeKind:
+		return node.FloatVal, true
 	}
-	if fstIsFloat && sndIsFloat {
-		return 0, 0, fst.FloatVal, snd.FloatVal, false, nil
-	}
-	if fstIsInt && sndIsFloat {
-		return 0, 0, float64(fst.IntVal), snd.FloatVal, false, nil
-	}
-	if fstIsFloat && sndIsInt {
-		return 0, 0, fst.FloatVal, float64(snd.IntVal), false, nil
-	}
-
-	if !fstIsInt && !fstIsFloat {
-		return 0, 0, 0, 0, false, fmt.Errorf("%s: expected number as first argument, got %s", name, e.NodeTypeName(fst))
-	}
-	return 0, 0, 0, 0, false, fmt.Errorf("%s: expected number as second argument, got %s", name, e.NodeTypeName(snd))
+	return 0, false
 }
 
-func numBinOp(name string, intOp func(a, b int64) (*e.Node, error), floatOp func(a, b float64) (*e.Node, error)) func([]*e.Node, *ev.Evaluator) (*e.Node, error) {
-	return func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
-		ia, ib, fa, fb, isInt, err := extractNumsFromNodes(name, args)
-		if err != nil {
-			return nil, err
-		}
-		if isInt {
-			return intOp(ia, ib)
-		}
-		return floatOp(fa, fb)
+// numResult returns an IntNode if val is a whole number and allInt is true,
+// otherwise a FloatNode.
+func numResult(val float64, allInt bool) *e.Node {
+	if allInt {
+		return e.IntNode(int64(val))
 	}
+	return e.FloatNode(val)
 }
 
 func registerArithmetic(env *ev.Environment) {
-	env.Register("+", numBinOp("+",
-		func(a, b int64) (*e.Node, error) { return e.IntNode(a + b), nil },
-		func(a, b float64) (*e.Node, error) { return e.FloatNode(a + b), nil },
-	))
+	// (+) → 0, (+ a) → a, (+ a b ...) → sum
+	env.Register("+", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		acc := 0.0
+		allInt := true
+		for _, arg := range args {
+			v, ok := asFloat(arg)
+			if !ok {
+				return nil, fmt.Errorf("+: expected number, got %s", e.NodeTypeName(arg))
+			}
+			if arg.Kind == e.FloatNodeKind {
+				allInt = false
+			}
+			acc += v
+		}
+		return numResult(acc, allInt), nil
+	})
 
-	env.Register("-", numBinOp("-",
-		func(a, b int64) (*e.Node, error) { return e.IntNode(a - b), nil },
-		func(a, b float64) (*e.Node, error) { return e.FloatNode(a - b), nil },
-	))
+	// (*) → 1, (* a) → a, (* a b ...) → product
+	env.Register("*", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		acc := 1.0
+		allInt := true
+		for _, arg := range args {
+			v, ok := asFloat(arg)
+			if !ok {
+				return nil, fmt.Errorf("*: expected number, got %s", e.NodeTypeName(arg))
+			}
+			if arg.Kind == e.FloatNodeKind {
+				allInt = false
+			}
+			acc *= v
+		}
+		return numResult(acc, allInt), nil
+	})
 
-	env.Register("*", numBinOp("*",
-		func(a, b int64) (*e.Node, error) { return e.IntNode(a * b), nil },
-		func(a, b float64) (*e.Node, error) { return e.FloatNode(a * b), nil },
-	))
+	// (- a) → negation, (- a b ...) → a - b - ...
+	env.Register("-", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		if len(args) == 0 {
+			return nil, fmt.Errorf("-: expected at least one argument")
+		}
+		first, ok := asFloat(args[0])
+		if !ok {
+			return nil, fmt.Errorf("-: expected number, got %s", e.NodeTypeName(args[0]))
+		}
+		allInt := args[0].Kind == e.IntegerNode
+		if len(args) == 1 {
+			return numResult(-first, allInt), nil
+		}
+		acc := first
+		for _, arg := range args[1:] {
+			v, ok := asFloat(arg)
+			if !ok {
+				return nil, fmt.Errorf("-: expected number, got %s", e.NodeTypeName(arg))
+			}
+			if arg.Kind == e.FloatNodeKind {
+				allInt = false
+			}
+			acc -= v
+		}
+		return numResult(acc, allInt), nil
+	})
 
-	env.Register("/", numBinOp("/",
-		func(a, b int64) (*e.Node, error) {
-			if b == 0 {
+	// (/ a) → 1/a, (/ a b ...) → a / b / ...
+	env.Register("/", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		if len(args) == 0 {
+			return nil, fmt.Errorf("/: expected at least one argument")
+		}
+		first, ok := asFloat(args[0])
+		if !ok {
+			return nil, fmt.Errorf("/: expected number, got %s", e.NodeTypeName(args[0]))
+		}
+		allInt := args[0].Kind == e.IntegerNode
+		if len(args) == 1 {
+			if first == 0 {
 				return nil, fmt.Errorf("/: division by zero")
 			}
-			return e.IntNode(a / b), nil
-		},
-		func(a, b float64) (*e.Node, error) {
-			if b == 0 {
+			return numResult(1.0/first, false), nil
+		}
+		acc := first
+		for _, arg := range args[1:] {
+			v, ok := asFloat(arg)
+			if !ok {
+				return nil, fmt.Errorf("/: expected number, got %s", e.NodeTypeName(arg))
+			}
+			if v == 0 {
 				return nil, fmt.Errorf("/: division by zero")
 			}
-			return e.FloatNode(a / b), nil
-		},
-	))
-
-	env.Register("mod", numBinOp("mod",
-		func(a, b int64) (*e.Node, error) {
-			if b == 0 {
-				return nil, fmt.Errorf("mod: division by zero")
+			if arg.Kind == e.FloatNodeKind {
+				allInt = false
 			}
-			return e.IntNode(a % b), nil
-		},
-		func(a, b float64) (*e.Node, error) {
-			return nil, fmt.Errorf("mod: not supported for floats")
-		},
-	))
+			acc /= v
+		}
+		return numResult(acc, allInt), nil
+	})
+
+	// mod stays binary
+	env.Register("mod", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
+		if len(args) != 2 {
+			return nil, fmt.Errorf("mod: expected 2 arguments, got %d", len(args))
+		}
+		a, b := args[0], args[1]
+		if a.Kind != e.IntegerNode {
+			return nil, fmt.Errorf("mod: expected integer as first argument, got %s", e.NodeTypeName(a))
+		}
+		if b.Kind != e.IntegerNode {
+			return nil, fmt.Errorf("mod: expected integer as second argument, got %s", e.NodeTypeName(b))
+		}
+		if b.IntVal == 0 {
+			return nil, fmt.Errorf("mod: division by zero")
+		}
+		return e.IntNode(a.IntVal % b.IntVal), nil
+	})
 }
