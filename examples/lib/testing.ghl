@@ -43,7 +43,7 @@
 (define-syntax assert-eq (syntax-rules ()
   ((assert-eq expected actual)
    (cond
-     ((= expected actual)
+     ((eq? expected actual)
       (println (string-append "  PASS: " (number->string expected))))
      (else
       (println (string-append "  FAIL: expected " (number->string expected))))))))
