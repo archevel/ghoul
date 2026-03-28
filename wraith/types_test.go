@@ -197,7 +197,7 @@ func TestForeignTypeTemplateHandlesNil(t *testing.T) {
 	if !strings.Contains(code, "ForeignVal != nil") {
 		t.Errorf("expected nil check in foreign template, got:\n%s", code)
 	}
-	if !strings.Contains(code, "var handler http.Handler") {
+	if !strings.Contains(code, "var param_handler http.Handler") {
 		t.Errorf("expected var declaration for nil case, got:\n%s", code)
 	}
 }
@@ -235,7 +235,7 @@ func TestVariadicConversionForPrimitiveType(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	code := buf.String()
-	if !strings.Contains(code, "var nums []int") {
+	if !strings.Contains(code, "var param_nums []int") {
 		t.Errorf("expected var declaration, got:\n%s", code)
 	}
 	if !strings.Contains(code, "for argIdx < len(args)") {

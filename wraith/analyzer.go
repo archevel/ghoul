@@ -201,6 +201,12 @@ func (a *Analyzer) processStructType(name string, structType *ast.StructType, pk
 			continue
 		}
 		fieldType := pkg.TypesInfo.TypeOf(field.Type)
+		if isUnexportedType(fieldType) {
+			continue
+		}
+		if containsFuncType(fieldType) {
+			continue
+		}
 		for _, fieldName := range field.Names {
 			if fieldName.IsExported() {
 				fields = append(fields, FieldInfo{
@@ -272,24 +278,35 @@ func (a *Analyzer) processFunctionDecl(funcDecl *ast.FuncDecl, pkg *packages.Pac
 
 	// Process return values
 	var results []ParameterInfo
+	resultIdx := 0
 	if funcDecl.Type.Results != nil {
-		for i, field := range funcDecl.Type.Results.List {
+		for _, field := range funcDecl.Type.Results.List {
 			fieldType := pkg.TypesInfo.TypeOf(field.Type)
-			fieldName := getFieldName(field)
 
-			// Generate name if not provided
-			if fieldName == "" {
-				if i == len(funcDecl.Type.Results.List)-1 && isErrorType(fieldType) {
-					fieldName = "err"
-				} else {
-					fieldName = fmt.Sprintf("r%d", i)
+			// Handle multiple names for the same type (e.g., "dir, file string")
+			if len(field.Names) > 1 {
+				for _, name := range field.Names {
+					results = append(results, ParameterInfo{
+						Name: name.Name,
+						Type: fieldType,
+					})
+					resultIdx++
 				}
+			} else {
+				fieldName := getFieldName(field)
+				if fieldName == "" {
+					if isErrorType(fieldType) {
+						fieldName = "err"
+					} else {
+						fieldName = fmt.Sprintf("r%d", resultIdx)
+					}
+				}
+				results = append(results, ParameterInfo{
+					Name: fieldName,
+					Type: fieldType,
+				})
+				resultIdx++
 			}
-
-			results = append(results, ParameterInfo{
-				Name: fieldName,
-				Type: fieldType,
-			})
 		}
 	}
 
@@ -368,6 +385,24 @@ func getFieldName(field *ast.Field) string {
 		return field.Names[0].Name
 	}
 	return ""
+}
+
+// containsFuncType checks whether a type contains a function signature
+// anywhere in its structure (e.g. map values, slice elements, pointers).
+func containsFuncType(t types.Type) bool {
+	switch typ := t.Underlying().(type) {
+	case *types.Signature:
+		return true
+	case *types.Pointer:
+		return containsFuncType(typ.Elem())
+	case *types.Slice:
+		return containsFuncType(typ.Elem())
+	case *types.Array:
+		return containsFuncType(typ.Elem())
+	case *types.Map:
+		return containsFuncType(typ.Key()) || containsFuncType(typ.Elem())
+	}
+	return false
 }
 
 // isErrorType checks if a type is the built-in error interface

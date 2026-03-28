@@ -301,11 +301,11 @@ func TestVariadicFunctionWithNoArgs(t *testing.T) {
 	// The generated variadic code should declare the var before the loop,
 	// so an empty call (no args for the variadic param) results in a nil slice
 	// which Go accepts with ... spread
-	if !strings.Contains(code, "var nums []int") {
-		t.Error("expected 'var nums []int' declaration before loop")
+	if !strings.Contains(code, "var param_nums []int") {
+		t.Error("expected 'var param_nums []int' declaration before loop")
 	}
-	if !strings.Contains(code, "nums...)") {
-		t.Error("expected 'nums...' spread in function call")
+	if !strings.Contains(code, "param_nums...)") {
+		t.Error("expected 'param_nums...' spread in function call")
 	}
 }
 

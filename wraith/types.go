@@ -78,7 +78,7 @@ func (tm *TypeMapper) initializeTemplates() error {
 	if ghoulArg_{{.Name}}.Kind != _e.{{.BuiltInType | kindConst}} {
 		return nil, _fmt.Errorf("expected {{.BuiltInType | lower}} for parameter '{{.Name}}', got %s", _e.NodeTypeName(ghoulArg_{{.Name}}))
 	}
-	{{.Name}} := {{.Type}}(ghoulArg_{{.Name}}.{{.BuiltInType | fieldName}})
+	param_{{.Name}} := {{.Type}}(ghoulArg_{{.Name}}.{{.BuiltInType | fieldName}})
 	argIdx++
 `
 
@@ -88,16 +88,16 @@ func (tm *TypeMapper) initializeTemplates() error {
 	if ghoulArg_{{.Name}}.Kind != _e.MummyNode {
 		return nil, _fmt.Errorf("expected mummy for parameter '{{.Name}}', got %s", _e.NodeTypeName(ghoulArg_{{.Name}}))
 	}
-	var {{.Name}} {{.Type}}
+	var param_{{.Name}} {{.Type}}
 	if ghoulArg_{{.Name}}.ForeignVal != nil {
 		var ok bool
-		{{.Name}}, ok = ghoulArg_{{.Name}}.ForeignVal.({{.Type}})
+		param_{{.Name}}, ok = ghoulArg_{{.Name}}.ForeignVal.({{.Type}})
 		if !ok {
-			{{.Name}}_ptr, ok := ghoulArg_{{.Name}}.ForeignVal.(*{{.Type}})
+			param_{{.Name}}_ptr, ok := ghoulArg_{{.Name}}.ForeignVal.(*{{.Type}})
 			if !ok {
 				return nil, _fmt.Errorf("parameter '{{.Name}}': mummy contains %T, expected {{.Type}}", ghoulArg_{{.Name}}.ForeignVal)
 			}
-			{{.Name}} = *{{.Name}}_ptr
+			param_{{.Name}} = *param_{{.Name}}_ptr
 		}
 	}
 	argIdx++
@@ -186,8 +186,9 @@ func (tm *TypeMapper) GenerateArgumentConversion(info ArgConversionInfo, w io.Wr
 
 func (tm *TypeMapper) generateVariadicConversion(info ArgConversionInfo, w io.Writer) error {
 	name := info.Name
+	varName := "param_" + name
 
-	fmt.Fprintf(w, "\tvar %s %s\n", name, info.Type)
+	fmt.Fprintf(w, "\tvar %s %s\n", varName, info.Type)
 	fmt.Fprintf(w, "\tfor argIdx < len(args) {\n")
 
 	if info.BuiltInType != "" {
@@ -199,7 +200,7 @@ func (tm *TypeMapper) generateVariadicConversion(info ArgConversionInfo, w io.Wr
 		fmt.Fprintf(w, "\t\t\treturn nil, _fmt.Errorf(\"%s: expected %s, got %%s\", _e.NodeTypeName(ghoulElem))\n",
 			name, strings.ToLower(info.BuiltInType))
 		fmt.Fprintf(w, "\t\t}\n")
-		fmt.Fprintf(w, "\t\t%s = append(%s, %s(ghoulElem.%s))\n", name, name, elemType, fieldName)
+		fmt.Fprintf(w, "\t\t%s = append(%s, %s(ghoulElem.%s))\n", varName, varName, elemType, fieldName)
 	} else {
 		elemType := strings.TrimPrefix(info.Type, "[]")
 		fmt.Fprintf(w, "\t\tghoulElem := args[argIdx]\n")
@@ -210,7 +211,7 @@ func (tm *TypeMapper) generateVariadicConversion(info ArgConversionInfo, w io.Wr
 		fmt.Fprintf(w, "\t\tif !ok {\n")
 		fmt.Fprintf(w, "\t\t\treturn nil, _fmt.Errorf(\"%s: mummy contains %%T, expected %s\", ghoulElem.ForeignVal)\n", name, elemType)
 		fmt.Fprintf(w, "\t\t}\n")
-		fmt.Fprintf(w, "\t\t%s = append(%s, elem)\n", name, name)
+		fmt.Fprintf(w, "\t\t%s = append(%s, elem)\n", varName, varName)
 	}
 
 	fmt.Fprintf(w, "\t\targIdx++\n")
@@ -230,7 +231,7 @@ func (tm *TypeMapper) generateFunctionAdapter(info ArgConversionInfo, w io.Write
 	fmt.Fprintf(w, "\tghoulFunc_%s := ghoulArg_%s.FuncVal\n", name, name)
 
 	// Build the Go function adapter
-	fmt.Fprintf(w, "\t%s := %s{\n", name, info.Type)
+	fmt.Fprintf(w, "\tparam_%s := %s{\n", name, info.Type)
 
 	// Build ghoul argument slice from Go parameters
 	fmt.Fprintf(w, "\t\tghoulArgs := make([]*_e.Node, %d)\n", len(sig.Params))
@@ -360,6 +361,11 @@ func qualifiedTypeToAlias(typeStr string) string {
 	if strings.HasPrefix(inner, "[]") {
 		prefix += "[]"
 		inner = inner[2:]
+		// Strip pointers after slice prefix (e.g. "[]*net/http.Cookie")
+		for strings.HasPrefix(inner, "*") {
+			prefix += "*"
+			inner = inner[1:]
+		}
 	}
 
 	// Handle map types: map[K]V where K and V may be qualified

@@ -207,6 +207,22 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 			collectUsedImports(w.sourceFunc, importSet, g.typeMapper)
 		}
 	}
+	// Struct fields and interface methods also contribute imports
+	for _, s := range packageInfo.Structs {
+		for _, f := range s.Fields {
+			collectTypeImports(f.Type, importSet)
+		}
+	}
+	for _, iface := range packageInfo.Interfaces {
+		for _, m := range iface.Methods {
+			for _, p := range m.Params {
+				collectTypeImports(p.Type, importSet)
+			}
+			for _, r := range m.Results {
+				collectTypeImports(r.Type, importSet)
+			}
+		}
+	}
 	imports = imports[:0]
 	for imp := range importSet {
 		imports = append(imports, imp)
@@ -335,7 +351,7 @@ func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperD
 		}
 
 		wrapper.Arguments = append(wrapper.Arguments, argInfo)
-		wrapper.ParameterNames = append(wrapper.ParameterNames, paramName)
+		wrapper.ParameterNames = append(wrapper.ParameterNames, "param_"+paramName)
 	}
 
 	// Process return values
@@ -409,7 +425,7 @@ func (g *Generator) generateFunctionBody(wrapper *FunctionWrapperData, importPat
 	// Generate the actual function call
 	packagePrefix := getPackagePrefix(importPath)
 	if wrapper.HasReceiver {
-		fmt.Fprintf(&body, "receiver.%s(", wrapper.OriginalName)
+		fmt.Fprintf(&body, "param_receiver.%s(", wrapper.OriginalName)
 	} else {
 		fmt.Fprintf(&body, "%s.%s(", packagePrefix, wrapper.OriginalName)
 	}
@@ -554,7 +570,7 @@ func (g *Generator) generateConstructor(structInfo StructInfo, importPath string
 	// Generate struct construction
 	fmt.Fprintf(&body, "\n\tresult := &%s{\n", qualifiedType)
 	for _, field := range structInfo.Fields {
-		fmt.Fprintf(&body, "\t\t%s: %s,\n", field.Name, field.Name)
+		fmt.Fprintf(&body, "\t\t%s: param_%s,\n", field.Name, field.Name)
 	}
 	fmt.Fprintf(&body, "\t}\n")
 	fmt.Fprintf(&body, "\treturn _e.MummyNodeVal(result, \"*%s\"), nil\n", qualifiedType)
@@ -615,7 +631,7 @@ func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method Func
 	fmt.Fprintf(&body, "\tif ghoulArg_receiver.Kind != _e.MummyNode {\n")
 	fmt.Fprintf(&body, "\t\treturn nil, _fmt.Errorf(\"expected mummy for 'receiver', got %%s\", _e.NodeTypeName(ghoulArg_receiver))\n")
 	fmt.Fprintf(&body, "\t}\n")
-	fmt.Fprintf(&body, "\treceiver, ok := ghoulArg_receiver.ForeignVal.(%s)\n", qualifiedIface)
+	fmt.Fprintf(&body, "\tparam_receiver, ok := ghoulArg_receiver.ForeignVal.(%s)\n", qualifiedIface)
 	fmt.Fprintf(&body, "\tif !ok {\n")
 	fmt.Fprintf(&body, "\t\treturn nil, _fmt.Errorf(\"expected %s in mummy, got %%T\", ghoulArg_receiver.ForeignVal)\n", qualifiedIface)
 	fmt.Fprintf(&body, "\t}\n")
@@ -646,7 +662,7 @@ func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method Func
 		if err != nil {
 			return FunctionWrapperData{}, fmt.Errorf("failed to generate arg conversion: %w", err)
 		}
-		paramNames = append(paramNames, paramName)
+		paramNames = append(paramNames, "param_"+paramName)
 	}
 
 	// Generate method call
@@ -677,7 +693,7 @@ func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method Func
 		}
 		fmt.Fprint(&body, " := ")
 	}
-	fmt.Fprintf(&body, "receiver.%s(", method.Name)
+	fmt.Fprintf(&body, "param_receiver.%s(", method.Name)
 	for i, p := range paramNames {
 		if i > 0 {
 			fmt.Fprint(&body, ", ")
@@ -768,15 +784,16 @@ func collectUsedImports(fn *FunctionInfo, imports map[string]bool, tm *TypeMappe
 }
 
 // filterUnusedImports removes imports that don't appear as package references
-// in any of the generated wrapper code.
+// in any of the generated wrapper code. String literals are stripped first so
+// type names inside MummyNodeVal("hash.Hash") don't count as real usage.
 func filterUnusedImports(imports []string, wrappers []FunctionWrapperData) []string {
 	var filtered []string
 	for _, imp := range imports {
 		pkgName := filepath.Base(imp)
 		used := false
 		for _, w := range wrappers {
-			// Check for pkgName. as a Go package reference (not inside strings)
-			if strings.Contains(w.GeneratedCode, pkgName+".") {
+			code := stripStringLiterals(w.GeneratedCode)
+			if strings.Contains(code, pkgName+".") {
 				used = true
 				break
 			}
@@ -786,6 +803,29 @@ func filterUnusedImports(imports []string, wrappers []FunctionWrapperData) []str
 		}
 	}
 	return filtered
+}
+
+// stripStringLiterals replaces the content of Go string literals with empty
+// strings so that type names inside quotes don't affect import detection.
+func stripStringLiterals(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	inString := false
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && inString {
+			i++ // skip escaped char
+			continue
+		}
+		if s[i] == '"' {
+			inString = !inString
+			b.WriteByte('"')
+			continue
+		}
+		if !inString {
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
 }
 
 // allImportPaths collects all possible import paths from the package's types.
