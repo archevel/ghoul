@@ -2,9 +2,11 @@ package ghoul
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	ev "github.com/archevel/ghoul/consume"
 	"github.com/archevel/ghoul/reanimator"
@@ -13,23 +15,40 @@ import (
 	"github.com/archevel/ghoul/exhumer"
 )
 
+//go:embed prelude/prelude.ghl
+var preludeSource string
+
 type Ghoul interface {
 	Process(exprReader io.Reader) (*e.Node, error)
 	ProcessFile(filename string) (*e.Node, error)
 	ProcessWithContext(ctx context.Context, exprReader io.Reader, filename *string) (*e.Node, error)
 }
 
+// New creates a Ghoul instance with the standard prelude loaded.
 func New() Ghoul {
 	return NewLoggingGhoul(engraving.StandardLogger)
 }
 
+// NewBare creates a Ghoul instance without the prelude.
+func NewBare() Ghoul {
+	return newGhoul(engraving.StandardLogger, false)
+}
+
 func NewLoggingGhoul(logger engraving.Logger) Ghoul {
+	return newGhoul(logger, true)
+}
+
+func newGhoul(logger engraving.Logger, loadPrelude bool) Ghoul {
 	var markCounter uint64
 	exp := reanimator.New(logger, &markCounter)
 	// The evaluator shares the reanimator's environment so that bindings
 	// from require (loaded during expansion) are visible at runtime.
 	evaluator := ev.NewWithMarkCounter(logger, exp.EvalEnv(), &markCounter)
-	return ghoul{reanimator: exp, evaluator: evaluator}
+	g := ghoul{reanimator: exp, evaluator: evaluator}
+	if loadPrelude {
+		g.Process(strings.NewReader(preludeSource))
+	}
+	return g
 }
 
 type ghoul struct {

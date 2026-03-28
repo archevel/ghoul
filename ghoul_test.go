@@ -9,21 +9,47 @@ import (
 	e "github.com/archevel/ghoul/bones"
 )
 
-// newWithPrelude creates a Ghoul instance with the standard prelude loaded.
-// This makes prelude macros (let, let*, when, unless, syntax-case, etc.)
-// available for use in test code.
-func newWithPrelude(t *testing.T) Ghoul {
-	t.Helper()
+// --- Prelude auto-loading tests ---
+
+func TestPreludeAutoLoaded(t *testing.T) {
 	g := New()
-	prelude, err := os.ReadFile("prelude/prelude.ghl")
+	res, err := g.Process(strings.NewReader("(let ((x 1) (y 2)) (+ x y))"))
 	if err != nil {
-		t.Fatalf("failed to read prelude: %v", err)
+		t.Fatalf("let should work with auto-loaded prelude: %s", err)
 	}
-	_, err = g.Process(strings.NewReader(string(prelude)))
+	if !res.Equiv(e.IntNode(3)) {
+		t.Errorf("expected 3, got %s", res.Repr())
+	}
+}
+
+func TestPreludeLetStar(t *testing.T) {
+	g := New()
+	res, err := g.Process(strings.NewReader("(let* ((x 1) (y (+ x 1))) y)"))
 	if err != nil {
-		t.Fatalf("failed to load prelude: %v", err)
+		t.Fatalf("let* should work with auto-loaded prelude: %s", err)
 	}
-	return g
+	if !res.Equiv(e.IntNode(2)) {
+		t.Errorf("expected 2, got %s", res.Repr())
+	}
+}
+
+func TestPreludeWhen(t *testing.T) {
+	g := New()
+	res, err := g.Process(strings.NewReader("(when #t 42)"))
+	if err != nil {
+		t.Fatalf("when should work with auto-loaded prelude: %s", err)
+	}
+	if !res.Equiv(e.IntNode(42)) {
+		t.Errorf("expected 42, got %s", res.Repr())
+	}
+}
+
+func TestBareSkipsPrelude(t *testing.T) {
+	g := NewBare()
+	_, err := g.Process(strings.NewReader("(let ((x 1)) x)"))
+	if err == nil {
+		t.Fatal("expected error — let should not be available without prelude")
+	}
 }
 
 func TestFailsOnUnparsableCode(t *testing.T) {
@@ -619,7 +645,7 @@ func TestWildcardInSyntaxRules(t *testing.T) {
 }
 
 func TestPreludeLetMacro(t *testing.T) {
-	g := newWithPrelude(t)
+	g := New()
 	res, err := g.Process(strings.NewReader("(let ((x 10) (y 20)) (+ x y))"))
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
@@ -630,7 +656,7 @@ func TestPreludeLetMacro(t *testing.T) {
 }
 
 func TestPreludeLetStarMacro(t *testing.T) {
-	g := newWithPrelude(t)
+	g := New()
 	// let* allows each binding to reference the previous ones
 	res, err := g.Process(strings.NewReader("(let* ((x 1) (y (+ x 1)) (z (+ y 1))) z)"))
 	if err != nil {
@@ -642,7 +668,7 @@ func TestPreludeLetStarMacro(t *testing.T) {
 }
 
 func TestPreludeLetStarEmptyBindings(t *testing.T) {
-	g := newWithPrelude(t)
+	g := New()
 	res, err := g.Process(strings.NewReader("(let* () 42)"))
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
@@ -653,7 +679,7 @@ func TestPreludeLetStarEmptyBindings(t *testing.T) {
 }
 
 func TestPreludeLetStarSingleBinding(t *testing.T) {
-	g := newWithPrelude(t)
+	g := New()
 	res, err := g.Process(strings.NewReader("(let* ((x 10)) (+ x 5))"))
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
@@ -664,7 +690,7 @@ func TestPreludeLetStarSingleBinding(t *testing.T) {
 }
 
 func TestPreludeWhenMacro(t *testing.T) {
-	g := newWithPrelude(t)
+	g := New()
 	res, err := g.Process(strings.NewReader("(when #t 42)"))
 	if err != nil {
 		t.Fatalf("Got error: %s", err)
@@ -704,7 +730,7 @@ func TestScopedIdentifierMacroCallExpansion(t *testing.T) {
 func TestGeneralTransformerNestedDefineInsideLambda(t *testing.T) {
 	// When a general transformer defines a function inside a lambda
 	// (nested define), it should work correctly through expansion.
-	g := newWithPrelude(t)
+	g := New()
 	res, err := g.Process(strings.NewReader(`
 (define-syntax test-mac
   (lambda (stx)
@@ -736,7 +762,7 @@ func TestGeneralTransformerNestedDefineInsideLambda(t *testing.T) {
 func TestPreludeSyntaxCaseAdd1(t *testing.T) {
 	// Verifies that syntax-case (defined as a prelude macro) works
 	// for a simple pattern-matching transformer.
-	g := newWithPrelude(t)
+	g := New()
 	res, err := g.Process(strings.NewReader(`
 (define-syntax add1
   (lambda (stx)
