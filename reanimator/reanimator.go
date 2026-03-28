@@ -20,12 +20,19 @@ import (
 	"github.com/archevel/ghoul/tome"
 )
 
+// ModuleLoader loads a Ghoul module file through the full pipeline
+// and returns the module's exports (including macros).
+type ModuleLoader func(filePath string, reanimator *Reanimator) (*ev.ModuleExports, error)
+
 type Reanimator struct {
-	nodeScopes  *macroScope
-	evalEnv     *ev.Environment
-	evaluator   *ev.Evaluator
-	markCounter *uint64
-	log         engraving.Logger
+	nodeScopes      *macroScope
+	evalEnv         *ev.Environment
+	evaluator       *ev.Evaluator
+	markCounter     *uint64
+	log             engraving.Logger
+	moduleState     *ev.ModuleState
+	moduleLoader    ModuleLoader
+	requiredModules map[string]bool
 }
 
 // New creates a Reanimator with its own evaluation environment for running
@@ -36,11 +43,58 @@ func New(logger engraving.Logger, markCounter *uint64) *Reanimator {
 	tome.RegisterAll(env)
 	evaluator := ev.NewWithMarkCounter(logger, env, markCounter)
 	return &Reanimator{
-		evalEnv:     env,
-		evaluator:   evaluator,
-		markCounter: markCounter,
-		log:         logger,
+		evalEnv:         env,
+		evaluator:       evaluator,
+		markCounter:     markCounter,
+		log:             logger,
+		requiredModules: map[string]bool{},
 	}
+}
+
+func (exp *Reanimator) SetModuleState(ms *ev.ModuleState) {
+	exp.moduleState = ms
+}
+
+func (exp *Reanimator) SetModuleLoader(loader ModuleLoader) {
+	exp.moduleLoader = loader
+}
+
+// EvalEnv returns the reanimator's evaluation environment, used by the
+// module loader to create child environments that share builtins.
+func (exp *Reanimator) EvalEnv() *ev.Environment {
+	return exp.evalEnv
+}
+
+// Evaluator returns the reanimator's sub-evaluator, used by the module
+// loader to create child evaluators for module code execution.
+func (exp *Reanimator) Evaluator() *ev.Evaluator {
+	return exp.evaluator
+}
+
+// ExportMacros returns the macro bindings from the current top-level scope
+// as opaque interface{} values for storage in ModuleExports.
+func (exp *Reanimator) ExportMacros() map[string]interface{} {
+	if exp.nodeScopes == nil {
+		return nil
+	}
+	result := make(map[string]interface{}, len(exp.nodeScopes.bindings))
+	for name, binding := range exp.nodeScopes.bindings {
+		result[name] = binding
+	}
+	return result
+}
+
+// PushModuleScope saves the current macro scope and pushes a fresh child
+// scope for module expansion. Returns the saved scope for PopModuleScope.
+func (exp *Reanimator) PushModuleScope() *macroScope {
+	saved := exp.nodeScopes
+	exp.nodeScopes = newMacroScope(saved)
+	return saved
+}
+
+// PopModuleScope restores the macro scope saved by PushModuleScope.
+func (exp *Reanimator) PopModuleScope(saved *macroScope) {
+	exp.nodeScopes = saved
 }
 
 func (exp *Reanimator) freshMark() macromancy.Mark {
@@ -135,6 +189,11 @@ func (exp *Reanimator) expandNode(node *bones.Node, scope *macroScope) (*bones.N
 		return exp.processDefineSyntax(node, scope)
 	}
 
+	// require: load module eagerly, strip from output
+	if headName == "require" {
+		return exp.processRequire(node, scope)
+	}
+
 	// Known macro call: expand and re-process
 	if headName != "" {
 		if binding, found := scope.lookup(headName); found {
@@ -152,7 +211,7 @@ func (exp *Reanimator) expandNode(node *bones.Node, scope *macroScope) (*bones.N
 	}
 
 	switch headName {
-	case "quote", "require":
+	case "quote":
 		return node, nil
 	case "lambda":
 		return exp.expandLambda(node, scope)
@@ -411,8 +470,6 @@ func translateNode(node *bones.Node) (*bones.Node, error) {
 		return translateCond(node)
 	case "begin":
 		return translateBegin(node)
-	case "require":
-		return translateRequire(node)
 	default:
 		return translateCall(node)
 	}
@@ -542,9 +599,6 @@ func translateBegin(node *bones.Node) (*bones.Node, error) {
 	return &bones.Node{Kind: bones.BeginNode, Loc: node.Loc, Children: bodyNodes}, nil
 }
 
-func translateRequire(node *bones.Node) (*bones.Node, error) {
-	return &bones.Node{Kind: bones.RequireNode, Loc: node.Loc, RawArgs: node.Children[1:]}, nil
-}
 
 func translateCall(node *bones.Node) (*bones.Node, error) {
 	children := make([]*bones.Node, len(node.Children))

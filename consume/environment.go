@@ -151,9 +151,15 @@ func (env environment) LookupByName(name string) (*e.Node, error) {
 	return lookupNode(e.IdentNode(name), &env)
 }
 
-// newModuleEnvironment creates a fresh environment that shares the builtins
+// BindByName binds a value to a name in the current (top) scope.
+func (env *environment) BindByName(name string, val *e.Node) {
+	scope := currentScope(env)
+	(*scope)[keyFromName(name)] = val
+}
+
+// NewModuleEnvironment creates a fresh environment that shares the builtins
 // (bottom scope) from the parent but has its own top-level scope.
-func newModuleEnvironment(parent *environment) *environment {
+func NewModuleEnvironment(parent *environment) *environment {
 	builtins := bottomScope(parent)
 	newEnv := environment{builtins, &scope{}}
 	return &newEnv

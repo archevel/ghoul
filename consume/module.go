@@ -12,6 +12,7 @@ import (
 type ModuleExports struct {
 	Names    []string
 	Bindings map[string]*e.Node
+	Macros   map[string]interface{} // reanimator macro bindings (opaque)
 }
 
 type ModuleState struct {

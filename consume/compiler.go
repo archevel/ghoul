@@ -81,9 +81,6 @@ func compileExpr(co *CodeObject, node *bones.Node, tailPos bool) error {
 	case bones.CallNode:
 		return compileCall(co, node, tailPos)
 
-	case bones.RequireNode:
-		return compileRequire(co, node)
-
 	case bones.FunctionNode, bones.ForeignNode, bones.ListNode, bones.MummyNode:
 		// Self-evaluating runtime values
 		idx := co.addConstant(node)
@@ -268,13 +265,5 @@ func compileCall(co *CodeObject, node *bones.Node, tailPos bool) error {
 		co.emitWithOperand(OP_CALL, argc)
 	}
 
-	return nil
-}
-
-func compileRequire(co *CodeObject, node *bones.Node) error {
-	// Store the raw args as a constant for the VM to process
-	argsNode := bones.NewListNode(node.RawArgs)
-	idx := co.addConstant(argsNode)
-	co.emitWithOperand(OP_REQUIRE, idx)
 	return nil
 }

@@ -23,12 +23,9 @@ func (ev *Evaluator) ConsumeNodesWithContext(ctx context.Context, nodes []*bones
 // EvalSubExpression evaluates a single Node expression using a fresh VM.
 func (ev *Evaluator) EvalSubExpression(node *bones.Node) (*bones.Node, error) {
 	subEval := &Evaluator{
-		log:             ev.log,
-		env:             ev.env,
-		requiredModules: ev.requiredModules,
-		moduleState:     ev.moduleState,
-		markCounter:     ev.markCounter,
-		moduleLoader:    ev.moduleLoader,
+		log:         ev.log,
+		env:         ev.env,
+		markCounter: ev.markCounter,
 	}
 	return subEval.ConsumeNodes([]*bones.Node{node})
 }

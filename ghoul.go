@@ -11,7 +11,6 @@ import (
 	e "github.com/archevel/ghoul/bones"
 	"github.com/archevel/ghoul/engraving"
 	"github.com/archevel/ghoul/exhumer"
-	"github.com/archevel/ghoul/tome"
 )
 
 type Ghoul interface {
@@ -27,7 +26,9 @@ func New() Ghoul {
 func NewLoggingGhoul(logger engraving.Logger) Ghoul {
 	var markCounter uint64
 	exp := reanimator.New(logger, &markCounter)
-	evaluator := prepareEvaluator(logger, &markCounter)
+	// The evaluator shares the reanimator's environment so that bindings
+	// from require (loaded during expansion) are visible at runtime.
+	evaluator := ev.NewWithMarkCounter(logger, exp.EvalEnv(), &markCounter)
 	return ghoul{reanimator: exp, evaluator: evaluator}
 }
 
@@ -55,14 +56,14 @@ func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader, fil
 		return nil, fmt.Errorf("failed to parse Lisp code: parse result %d", parseRes)
 	}
 
+	if filename != nil {
+		g.reanimator.SetModuleState(ev.NewModuleState(*filename))
+		g.reanimator.SetModuleLoader(makeModuleLoader(g.reanimator))
+	}
+
 	boneNodes, err := g.reanimator.ReanimateNodes(parsed.Expressions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to expand macros: %w", err)
-	}
-
-	if filename != nil {
-		g.evaluator.SetModuleState(ev.NewModuleState(*filename))
-		g.evaluator.SetModuleLoader(g.makeBoneModuleLoader())
 	}
 
 	result, err := g.evaluator.ConsumeNodesWithContext(ctx, boneNodes)
@@ -72,8 +73,10 @@ func (g ghoul) ProcessWithContext(ctx context.Context, exprReader io.Reader, fil
 	return result, nil
 }
 
-func (g ghoul) makeBoneModuleLoader() ev.ModuleLoader {
-	return func(filePath string, moduleEnv *ev.Environment, state *ev.ModuleState) (*ev.ModuleExports, error) {
+// makeModuleLoader creates a loader that processes Ghoul module files
+// through the full pipeline: parse → reanimate → evaluate → extract exports.
+func makeModuleLoader(r *reanimator.Reanimator) reanimator.ModuleLoader {
+	return func(filePath string, parentReanimator *reanimator.Reanimator) (*ev.ModuleExports, error) {
 		f, err := os.Open(filePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open %s: %w", filePath, err)
@@ -85,26 +88,31 @@ func (g ghoul) makeBoneModuleLoader() ev.ModuleLoader {
 			return nil, fmt.Errorf("failed to parse %s", filePath)
 		}
 
-		boneNodes, err := g.reanimator.ReanimateNodes(parsed.Expressions)
+		// Push a fresh macro scope for module isolation, then pop after
+		savedScopes := parentReanimator.PushModuleScope()
+		boneNodes, err := parentReanimator.ReanimateNodes(parsed.Expressions)
+		macros := parentReanimator.ExportMacros()
+		parentReanimator.PopModuleScope(savedScopes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to expand macros in %s: %w", filePath, err)
 		}
 
-		moduleEval := ev.NewWithMarkCounter(g.evaluator.Log(), moduleEnv, g.evaluator.MarkCounter())
-		moduleEval.SetModuleState(state)
-		moduleEval.SetModuleLoader(g.makeBoneModuleLoader())
+		// Evaluate in a module environment to get runtime exports
+		moduleEnv := ev.NewModuleEnvironment(parentReanimator.EvalEnv())
+		moduleEval := ev.NewWithMarkCounter(
+			parentReanimator.Evaluator().Log(),
+			moduleEnv,
+			parentReanimator.Evaluator().MarkCounter(),
+		)
 
 		_, err = moduleEval.ConsumeNodes(boneNodes)
 		if err != nil {
 			return nil, err
 		}
 
-		return ev.ExtractExports(moduleEnv), nil
+		exports := ev.ExtractExports(moduleEnv)
+		exports.Macros = macros
+		return exports, nil
 	}
 }
 
-func prepareEvaluator(logger engraving.Logger, markCounter *uint64) *ev.Evaluator {
-	env := ev.NewEnvironment()
-	tome.RegisterAll(env)
-	return ev.NewWithMarkCounter(logger, env, markCounter)
-}

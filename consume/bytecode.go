@@ -22,7 +22,6 @@ const (
 	OP_JUMP                      // set IP to operand
 	OP_JUMP_IF_FALSE             // pop, jump to operand if falsy
 	OP_MAKE_CLOSURE              // create closure from CodeObject at constants[operand]
-	OP_REQUIRE                   // execute require with args at constants[operand]
 )
 
 // CodeObject represents a compiled function or top-level script.
@@ -134,8 +133,6 @@ func opcodeName(op byte) string {
 		return "OP_JUMP_IF_FALSE"
 	case OP_MAKE_CLOSURE:
 		return "OP_MAKE_CLOSURE"
-	case OP_REQUIRE:
-		return "OP_REQUIRE"
 	default:
 		return fmt.Sprintf("OP_UNKNOWN(%d)", op)
 	}

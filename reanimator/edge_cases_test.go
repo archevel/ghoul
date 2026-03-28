@@ -618,18 +618,16 @@ func TestTranslateNodeCondEmptyClause(t *testing.T) {
 	}
 }
 
-func TestTranslateNodeRequire(t *testing.T) {
-	// (require foo) — should translate to RequireNode
+func TestTranslateNodeRequireIsNowCall(t *testing.T) {
+	// require is no longer a special translation target — if it somehow
+	// reaches translateNode, it gets treated as a regular call
 	node := bones.NewListNode([]*bones.Node{bones.IdentNode("require"), bones.IdentNode("foo")})
 	result, err := translateNode(node)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Kind != bones.RequireNode {
-		t.Errorf("expected RequireNode, got %d", result.Kind)
-	}
-	if len(result.RawArgs) != 1 {
-		t.Errorf("expected 1 raw arg, got %d", len(result.RawArgs))
+	if result.Kind != bones.CallNode {
+		t.Errorf("expected CallNode (require handled in expansion), got %d", result.Kind)
 	}
 }
 
@@ -818,15 +816,14 @@ func TestExpandNodeSetBangWithMacro(t *testing.T) {
 	}
 }
 
-func TestExpandNodeRequirePassthrough(t *testing.T) {
+func TestExpandNodeRequireStrippedWhenNotFound(t *testing.T) {
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require foo)`)
-	result, err := r.ReanimateNodes(nodes)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(result) != 1 || result[0].Kind != bones.RequireNode {
-		t.Errorf("require should pass through as RequireNode, got %v", result)
+	_, err := r.ReanimateNodes(nodes)
+	// require is now processed during expansion — without a module loader
+	// or sarcophagus, it should error
+	if err == nil {
+		t.Fatal("expected error for require of nonexistent module")
 	}
 }
 

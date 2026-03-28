@@ -1,16 +1,16 @@
-package consume
+package reanimator
 
 import (
 	"strings"
 	"testing"
 
 	e "github.com/archevel/ghoul/bones"
+	ev "github.com/archevel/ghoul/consume"
 	"github.com/archevel/ghoul/mummy"
-	p "github.com/archevel/ghoul/exhumer"
 )
 
 func registerTestModule() {
-	dummyFunc := func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+	dummyFunc := func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
 		return e.IntNode(42), nil
 	}
 	mummy.RegisterSarcophagus("testmod", "github.com/example/testmod", &mummy.SarcophagusEntry{
@@ -22,99 +22,100 @@ func registerTestModule() {
 	})
 }
 
+func reanimateAndLookup(t *testing.T, input string) (*e.Node, error) {
+	t.Helper()
+	r := newTestReanimator()
+	nodes := parseNodes(t, input)
+	_, err := r.ReanimateNodes(nodes)
+	if err != nil {
+		return nil, err
+	}
+	return r.evalEnv.LookupByName("testmod:foo")
+}
+
 func TestRequireBasic(t *testing.T) {
 	defer mummy.ClearRegistry()
 	registerTestModule()
-	env := NewEnvironment()
-
-	in := `(require testmod) (testmod:foo)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	result, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require testmod)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.IntNode(42)) {
-		t.Errorf("expected 42, got %s", result.Repr())
+	val, err := r.evalEnv.LookupByName("testmod:foo")
+	if err != nil {
+		t.Fatalf("testmod:foo not found: %v", err)
+	}
+	if val.FuncVal == nil {
+		t.Error("expected function value")
 	}
 }
 
 func TestRequireWithAlias(t *testing.T) {
 	defer mummy.ClearRegistry()
 	registerTestModule()
-	env := NewEnvironment()
-
-	in := `(require testmod as tm) (tm:foo)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	result, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require testmod as tm)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.IntNode(42)) {
-		t.Errorf("expected 42, got %s", result.Repr())
+	val, err := r.evalEnv.LookupByName("tm:foo")
+	if err != nil {
+		t.Fatalf("tm:foo not found: %v", err)
+	}
+	if val.FuncVal == nil {
+		t.Error("expected function value")
 	}
 }
 
 func TestRequireWithOnly(t *testing.T) {
 	defer mummy.ClearRegistry()
 	registerTestModule()
-	env := NewEnvironment()
-
-	in := `(require testmod only (foo)) (testmod:foo)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	result, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require testmod only (foo))`)
+	_, err := r.ReanimateNodes(nodes)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.IntNode(42)) {
-		t.Errorf("expected 42, got %s", result.Repr())
+	if _, err := r.evalEnv.LookupByName("testmod:foo"); err != nil {
+		t.Fatal("testmod:foo should be registered")
 	}
 }
 
 func TestRequireWithOnlyFiltersOut(t *testing.T) {
 	defer mummy.ClearRegistry()
 	registerTestModule()
-	env := NewEnvironment()
-
-	in := `(require testmod only (foo)) (testmod:bar)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
-	if err == nil {
-		t.Fatal("expected error — bar should not be registered")
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require testmod only (foo))`)
+	_, err := r.ReanimateNodes(nodes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "undefined identifier") {
-		t.Errorf("expected undefined identifier error, got: %v", err)
+	if _, err := r.evalEnv.LookupByName("testmod:bar"); err == nil {
+		t.Fatal("testmod:bar should NOT be registered")
 	}
 }
 
 func TestRequireWithAliasAndOnly(t *testing.T) {
 	defer mummy.ClearRegistry()
 	registerTestModule()
-	env := NewEnvironment()
-
-	in := `(require testmod as tm only (bar)) (tm:bar)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	result, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require testmod as tm only (bar))`)
+	_, err := r.ReanimateNodes(nodes)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.Equiv(e.IntNode(42)) {
-		t.Errorf("expected 42, got %s", result.Repr())
+	if _, err := r.evalEnv.LookupByName("tm:bar"); err != nil {
+		t.Fatal("tm:bar should be registered")
 	}
 }
 
 func TestRequireNonexistentModule(t *testing.T) {
 	defer mummy.ClearRegistry()
-	env := NewEnvironment()
-
-	in := `(require nonexistent)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require nonexistent)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err == nil {
 		t.Fatal("expected error for nonexistent module")
 	}
@@ -127,7 +128,7 @@ func TestRequireNameClash(t *testing.T) {
 	defer mummy.ClearRegistry()
 	registerTestModule()
 
-	dummyFunc2 := func(args []*e.Node, ev *Evaluator) (*e.Node, error) {
+	dummyFunc2 := func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
 		return e.IntNode(99), nil
 	}
 	mummy.RegisterSarcophagus("othermod", "github.com/example/othermod", &mummy.SarcophagusEntry{
@@ -137,11 +138,9 @@ func TestRequireNameClash(t *testing.T) {
 		},
 	})
 
-	env := NewEnvironment()
-	in := `(require testmod as x) (require othermod as x)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require testmod as x) (require othermod as x)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err == nil {
 		t.Fatal("expected error for name clash")
 	}
@@ -153,57 +152,45 @@ func TestRequireNameClash(t *testing.T) {
 func TestRequireSameModuleTwice(t *testing.T) {
 	defer mummy.ClearRegistry()
 	registerTestModule()
-	env := NewEnvironment()
-
-	in := `(require testmod) (require testmod) (testmod:foo)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	result, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require testmod) (require testmod)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err != nil {
 		t.Fatalf("requiring same module twice should work, got: %v", err)
-	}
-	if !result.Equiv(e.IntNode(42)) {
-		t.Errorf("expected 42, got %s", result.Repr())
 	}
 }
 
 func TestRequireSameModuleDifferentAlias(t *testing.T) {
 	defer mummy.ClearRegistry()
 	registerTestModule()
-	env := NewEnvironment()
-
-	in := `(require testmod as a) (require testmod as b) (a:foo)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	result, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require testmod as a) (require testmod as b)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err != nil {
 		t.Fatalf("same module under different aliases should work, got: %v", err)
 	}
-	if !result.Equiv(e.IntNode(42)) {
-		t.Errorf("expected 42, got %s", result.Repr())
+	if _, err := r.evalEnv.LookupByName("a:foo"); err != nil {
+		t.Fatal("a:foo should be registered")
+	}
+	if _, err := r.evalEnv.LookupByName("b:foo"); err != nil {
+		t.Fatal("b:foo should be registered")
 	}
 }
 
 func TestRequireEmptyForm(t *testing.T) {
 	defer mummy.ClearRegistry()
-	env := NewEnvironment()
-
-	in := `(require)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err == nil {
 		t.Fatal("expected error for empty require")
 	}
 }
 
 func TestRequireNonIdentifierModuleName(t *testing.T) {
-	env := NewEnvironment()
-
-	in := `(require 42)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require 42)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err == nil {
 		t.Fatal("expected error for non-identifier module name")
 	}
@@ -213,12 +200,9 @@ func TestRequireNonIdentifierModuleName(t *testing.T) {
 }
 
 func TestRequireAsMissingAlias(t *testing.T) {
-	env := NewEnvironment()
-
-	in := `(require somemod as)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require somemod as)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err == nil {
 		t.Fatal("expected error for missing alias after 'as'")
 	}
@@ -228,12 +212,9 @@ func TestRequireAsMissingAlias(t *testing.T) {
 }
 
 func TestRequireAsNonIdentifierAlias(t *testing.T) {
-	env := NewEnvironment()
-
-	in := `(require somemod as 42)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require somemod as 42)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err == nil {
 		t.Fatal("expected error for non-identifier alias")
 	}
@@ -243,12 +224,9 @@ func TestRequireAsNonIdentifierAlias(t *testing.T) {
 }
 
 func TestRequireOnlyMissingList(t *testing.T) {
-	env := NewEnvironment()
-
-	in := `(require somemod only)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require somemod only)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err == nil {
 		t.Fatal("expected error for missing name list after 'only'")
 	}
@@ -258,12 +236,9 @@ func TestRequireOnlyMissingList(t *testing.T) {
 }
 
 func TestRequireOnlyNonList(t *testing.T) {
-	env := NewEnvironment()
-
-	in := `(require somemod only foo)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require somemod only foo)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err == nil {
 		t.Fatal("expected error when 'only' is followed by non-list")
 	}
@@ -273,12 +248,9 @@ func TestRequireOnlyNonList(t *testing.T) {
 }
 
 func TestRequireOnlyListWithNonIdentifier(t *testing.T) {
-	env := NewEnvironment()
-
-	in := `(require somemod only (42))`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require somemod only (42))`)
+	_, err := r.ReanimateNodes(nodes)
 	if err == nil {
 		t.Fatal("expected error for non-identifier in 'only' list")
 	}
@@ -288,16 +260,31 @@ func TestRequireOnlyListWithNonIdentifier(t *testing.T) {
 }
 
 func TestRequireUnexpectedKeyword(t *testing.T) {
-	env := NewEnvironment()
-
-	in := `(require somemod with stuff)`
-	r := strings.NewReader(in)
-	_, parsed := p.Parse(r)
-	_, err := Evaluate(parsed.Expressions, env)
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require somemod with stuff)`)
+	_, err := r.ReanimateNodes(nodes)
 	if err == nil {
 		t.Fatal("expected error for unexpected keyword")
 	}
 	if !strings.Contains(err.Error(), "unexpected keyword 'with'") {
 		t.Errorf("expected 'unexpected keyword' in error, got: %v", err)
+	}
+}
+
+func TestRequireStripsFromOutput(t *testing.T) {
+	defer mummy.ClearRegistry()
+	registerTestModule()
+	r := newTestReanimator()
+	nodes := parseNodes(t, `(require testmod) (+ 1 2)`)
+	result, err := r.ReanimateNodes(nodes)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// require should be stripped, only (+ 1 2) remains
+	if len(result) != 1 {
+		t.Fatalf("expected 1 result (require stripped), got %d", len(result))
+	}
+	if result[0].Kind != e.CallNode {
+		t.Errorf("expected CallNode, got %d", result[0].Kind)
 	}
 }

@@ -13,7 +13,7 @@ func TestOpcodeConstants(t *testing.T) {
 		OP_LOAD_VAR, OP_DEFINE, OP_SET,
 		OP_CALL, OP_TAIL_CALL, OP_RETURN,
 		OP_JUMP, OP_JUMP_IF_FALSE,
-		OP_MAKE_CLOSURE, OP_REQUIRE,
+		OP_MAKE_CLOSURE,
 	}
 	seen := map[byte]bool{}
 	for _, op := range opcodes {

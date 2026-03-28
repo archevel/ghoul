@@ -31,20 +31,13 @@ func New(logger engraving.Logger, env *environment) *Evaluator {
 
 // NewWithMarkCounter creates an evaluator sharing an external mark counter.
 func NewWithMarkCounter(logger engraving.Logger, env *environment, markCounter *uint64) *Evaluator {
-	return &Evaluator{log: logger, env: env, requiredModules: map[string]bool{}, markCounter: markCounter}
+	return &Evaluator{log: logger, env: env, markCounter: markCounter}
 }
 
-// ModuleLoader loads a Ghoul module file through the full pipeline
-// and returns the module's exports. Injected by ghoul.go.
-type ModuleLoader func(filePath string, moduleEnv *environment, state *ModuleState) (*ModuleExports, error)
-
 type Evaluator struct {
-	log             engraving.Logger
-	env             *environment
-	requiredModules map[string]bool
-	moduleState     *ModuleState
-	markCounter     *uint64
-	moduleLoader    ModuleLoader
+	log         engraving.Logger
+	env         *environment
+	markCounter *uint64
 }
 
 // EvaluateNode translates a top-level Node tree and evaluates it.
@@ -70,14 +63,6 @@ func (ev *Evaluator) EvaluateNode(ctx context.Context, exprs *e.Node) (*e.Node, 
 		translated = append(translated, t)
 	}
 	return ev.ConsumeNodesWithContext(ctx, translated)
-}
-
-func (ev *Evaluator) SetModuleState(ms *ModuleState) {
-	ev.moduleState = ms
-}
-
-func (ev *Evaluator) SetModuleLoader(loader ModuleLoader) {
-	ev.moduleLoader = loader
 }
 
 func (ev *Evaluator) Log() engraving.Logger {
@@ -183,8 +168,6 @@ func translateForEval(node *e.Node) (*e.Node, error) {
 			body = append(body, t)
 		}
 		return &e.Node{Kind: e.BeginNode, Loc: node.Loc, Children: body}, nil
-	case "require":
-		return &e.Node{Kind: e.RequireNode, Loc: node.Loc, RawArgs: node.Children[1:]}, nil
 	default:
 		children := make([]*e.Node, len(node.Children))
 		for i, child := range node.Children {

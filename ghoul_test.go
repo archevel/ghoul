@@ -2,6 +2,7 @@ package ghoul
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -780,5 +781,172 @@ func TestZeroArgLambdaClosure(t *testing.T) {
 	}
 	if !res.Equiv(e.IntNode(3)) {
 		t.Errorf("Expected 3, got %s", res.Repr())
+	}
+}
+
+// --- Module integration tests ---
+
+func TestLoadGhoulModule(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "utils.ghl"), []byte("(define x 42) (define y 99)"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte("(require utils) utils:x"), 0644)
+
+	g := New()
+	result, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.IntNode(42)) {
+		t.Errorf("expected 42, got %s", result.Repr())
+	}
+}
+
+func TestRequireFromSubdirectory(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "lib"), 0755)
+	os.WriteFile(filepath.Join(dir, "lib", "helpers.ghl"), []byte("(define helper-val 123)"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte("(require lib/helpers) lib/helpers:helper-val"), 0644)
+
+	g := New()
+	result, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.IntNode(123)) {
+		t.Errorf("expected 123, got %s", result.Repr())
+	}
+}
+
+func TestRequireFromSubdirectoryWithAlias(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "lib"), 0755)
+	os.WriteFile(filepath.Join(dir, "lib", "helpers.ghl"), []byte("(define x 77)"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte("(require lib/helpers as h) h:x"), 0644)
+
+	g := New()
+	result, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.IntNode(77)) {
+		t.Errorf("expected 77, got %s", result.Repr())
+	}
+}
+
+func TestCircularDependencyError(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.ghl"), []byte("(require b) (define x 1)"), 0644)
+	os.WriteFile(filepath.Join(dir, "b.ghl"), []byte("(require a) (define y 2)"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte("(require a)"), 0644)
+
+	g := New()
+	_, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err == nil {
+		t.Fatal("expected circular dependency error")
+	}
+	if !strings.Contains(err.Error(), "circular dependency") {
+		t.Errorf("expected 'circular dependency' in error, got: %v", err)
+	}
+}
+
+func TestRequireGhoulModuleNameConflict(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.ghl"), []byte("(define x 1)"), 0644)
+	os.WriteFile(filepath.Join(dir, "b.ghl"), []byte("(define x 2)"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte("(require a as m) (require b as m)"), 0644)
+
+	g := New()
+	_, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err == nil {
+		t.Fatal("expected name conflict error")
+	}
+	if !strings.Contains(err.Error(), "already defined") {
+		t.Errorf("expected 'already defined' in error, got: %v", err)
+	}
+}
+
+func TestRequireGhoulModuleParseError(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "bad.ghl"), []byte("(define x"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte("(require bad)"), 0644)
+
+	g := New()
+	_, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err == nil {
+		t.Fatal("expected parse error for malformed module")
+	}
+	if !strings.Contains(err.Error(), "failed to parse") {
+		t.Errorf("expected 'failed to parse' in error, got: %v", err)
+	}
+}
+
+func TestRequireGhoulModuleEvalError(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "broken.ghl"), []byte("(undefined-func 1 2)"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte("(require broken)"), 0644)
+
+	g := New()
+	_, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err == nil {
+		t.Fatal("expected evaluation error for broken module")
+	}
+}
+
+func TestRequireMacroFromModule(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "macros.ghl"), []byte(`
+(define-syntax add1 (syntax-rules () ((add1 x) (+ x 1))))
+`), 0644)
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte(`
+(require macros as m)
+(m:add1 41)
+`), 0644)
+
+	g := New()
+	result, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.IntNode(42)) {
+		t.Errorf("expected 42, got %s", result.Repr())
+	}
+}
+
+func TestRequireModuleWithFunctionAndMacro(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "utils.ghl"), []byte(`
+(define double (lambda (x) (+ x x)))
+(define-syntax when-positive (syntax-rules ()
+  ((when-positive val body ...) (cond ((> val 0) (begin body ...))))))
+`), 0644)
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte(`
+(require utils as u)
+(u:when-positive 5 (u:double 21))
+`), 0644)
+
+	g := New()
+	result, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.IntNode(42)) {
+		t.Errorf("expected 42, got %s", result.Repr())
+	}
+}
+
+func TestRequireSameModuleFromTwoModules(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "shared.ghl"), []byte("(define val 55)"), 0644)
+	os.WriteFile(filepath.Join(dir, "a.ghl"), []byte("(require shared) (define a-val shared:val)"), 0644)
+	os.WriteFile(filepath.Join(dir, "b.ghl"), []byte("(require shared) (define b-val shared:val)"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte("(require a) (require b) a:a-val"), 0644)
+
+	g := New()
+	result, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Equiv(e.IntNode(55)) {
+		t.Errorf("expected 55, got %s", result.Repr())
 	}
 }

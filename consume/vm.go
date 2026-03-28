@@ -187,14 +187,6 @@ func (vm *VM) run(ctx context.Context, code *CodeObject) (*bones.Node, error) {
 			closure := makeClosure(codeObj, frame.env)
 			vm.push(closure)
 
-		case OP_REQUIRE:
-			idx := readUint16(frame.code.Code, frame.ip)
-			frame.ip += 2
-			if err := vm.doRequire(frame.code.Constants[idx], frame.env); err != nil {
-				return nil, err
-			}
-			vm.push(bones.Nil)
-
 		default:
 			return nil, fmt.Errorf("VM: unknown opcode %d", op)
 		}
@@ -286,11 +278,6 @@ func (vm *VM) callClosure(cd *closureData, args []*bones.Node, isTail bool, fram
 	}
 
 	return nil
-}
-
-func (vm *VM) doRequire(argsNode *bones.Node, env *environment) error {
-	_, err := doRequireArgs(argsNode.Children, vm.ev)
-	return err
 }
 
 func (vm *VM) wrapError(err error, frame *callFrame) error {
