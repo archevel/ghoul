@@ -1,5 +1,5 @@
 exhumer/parser.go
 *.output
 sarcophagi/
-cmd/ghoul/stdlib.go
+cmd/ghoul/sarcophagi.go
 ghoul
