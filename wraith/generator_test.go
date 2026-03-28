@@ -35,8 +35,8 @@ func TestGenerateSliceConstructorOutput(t *testing.T) {
 	if !strings.Contains(wrapper.GeneratedCode, "MummyNodeVal") {
 		t.Errorf("expected MummyNodeVal in result, got:\n%s", wrapper.GeneratedCode)
 	}
-	if !strings.Contains(wrapper.GeneratedCode, "e.NodeTypeName") {
-		t.Errorf("expected e.NodeTypeName in error message, got:\n%s", wrapper.GeneratedCode)
+	if !strings.Contains(wrapper.GeneratedCode, "_e.NodeTypeName") {
+		t.Errorf("expected _e.NodeTypeName in error message, got:\n%s", wrapper.GeneratedCode)
 	}
 }
 
@@ -155,8 +155,8 @@ func TestGenerateResultHandlingVoid(t *testing.T) {
 	g, _ := NewGenerator(config)
 	var buf bytes.Buffer
 	g.generateResultHandling(nil, &buf)
-	if !strings.Contains(buf.String(), "e.Nil") {
-		t.Errorf("expected e.Nil for void result, got:\n%s", buf.String())
+	if !strings.Contains(buf.String(), "_e.Nil") {
+		t.Errorf("expected _e.Nil for void result, got:\n%s", buf.String())
 	}
 }
 
@@ -167,7 +167,7 @@ func TestGenerateResultHandlingSingleReturn(t *testing.T) {
 	g.generateResultHandling([]ResultConversionInfo{
 		{Index: 0, Type: "int", Name: "result0"},
 	}, &buf)
-	if !strings.Contains(buf.String(), "e.IntNode(int64(result0))") {
+	if !strings.Contains(buf.String(), "_e.IntNode(int64(result0))") {
 		t.Errorf("expected IntNode conversion, got:\n%s", buf.String())
 	}
 }
@@ -184,7 +184,7 @@ func TestGenerateResultHandlingWithError(t *testing.T) {
 	if !strings.Contains(code, "err != nil") {
 		t.Errorf("expected error check, got:\n%s", code)
 	}
-	if !strings.Contains(code, "e.IntNode(int64(result0))") {
+	if !strings.Contains(code, "_e.IntNode(int64(result0))") {
 		t.Errorf("expected IntNode conversion, got:\n%s", code)
 	}
 }
@@ -198,7 +198,7 @@ func TestGenerateResultHandlingMultipleReturns(t *testing.T) {
 		{Index: 1, Type: "string", Name: "b"},
 	}, &buf)
 	code := buf.String()
-	if !strings.Contains(code, "e.NewListNode") {
+	if !strings.Contains(code, "_e.NewListNode") {
 		t.Errorf("expected NewListNode for multi-return, got:\n%s", code)
 	}
 }
@@ -292,9 +292,9 @@ func TestPossessPackageCreatesSarcophagus(t *testing.T) {
 		{"callback adapter", "FuncVal"},
 		{"nil handling", "ForeignVal != nil"},
 		{"RegisterFunctions", "func RegisterFunctions"},
-		{"init registration", "mummy.RegisterSarcophagus"},
+		{"init registration", "_mummy.RegisterSarcophagus"},
 		{"registerWithPrefix", "func registerWithPrefix"},
-		{"RegisterIfAllowed", "mummy.RegisterIfAllowed"},
+		{"RegisterIfAllowed", "_mummy.RegisterIfAllowed"},
 		{"node signature", "[]*e.Node"},
 		{"node return", "*e.Node"},
 	}

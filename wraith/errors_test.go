@@ -141,9 +141,9 @@ func TestResultHandlingVoidFunction(t *testing.T) {
 	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
 	code := string(content)
 
-	// SetAge is void — should return e.Nil
-	if !strings.Contains(code, "e.Nil, nil") {
-		t.Error("expected e.Nil return for void function")
+	// SetAge is void — should return _e.Nil
+	if !strings.Contains(code, "_e.Nil, nil") {
+		t.Error("expected _e.Nil return for void function")
 	}
 }
 
@@ -363,8 +363,8 @@ func TestTypeAliasParametersWrappedAsPrimitives(t *testing.T) {
 	if strings.Contains(funcBody, "*mummy.Mummy") {
 		t.Errorf("type alias for int should use IntegerNode check, not mummy:\n%s", funcBody)
 	}
-	if !strings.Contains(funcBody, "e.IntegerNode") {
-		t.Errorf("type alias for int should use e.IntegerNode check:\n%s", funcBody)
+	if !strings.Contains(funcBody, "_e.IntegerNode") {
+		t.Errorf("type alias for int should use _e.IntegerNode check:\n%s", funcBody)
 	}
 }
 

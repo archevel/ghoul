@@ -109,6 +109,15 @@ func (a *Analyzer) AnalyzePackage() (*PackageInfo, error) {
 	}
 
 	for _, file := range pkg.Syntax {
+		// Skip test files — they can contain constants that duplicate
+		// or shadow real package exports
+		filename := pkg.Fset.Position(file.Pos()).Filename
+		if strings.HasSuffix(filename, "_test.go") {
+			if a.config.Verbose {
+				fmt.Printf("  Skipping test file: %s\n", filename)
+			}
+			continue
+		}
 		functions, structs, interfaces, values := a.extractDeclarations(file, pkg)
 		packageInfo.Functions = append(packageInfo.Functions, functions...)
 		packageInfo.Structs = append(packageInfo.Structs, structs...)
@@ -117,7 +126,7 @@ func (a *Analyzer) AnalyzePackage() (*PackageInfo, error) {
 	}
 
 	if a.config.Verbose {
-		fmt.Printf("Discovered %d exported functions\n", len(packageInfo.Functions))
+		fmt.Printf("Discovered %d exported functions, %d values\n", len(packageInfo.Functions), len(packageInfo.Values))
 	}
 
 	return packageInfo, nil
@@ -138,6 +147,7 @@ func (a *Analyzer) extractDeclarations(file *ast.File, pkg *packages.Package) ([
 					functions = append(functions, *function)
 				}
 			}
+			return false // don't descend into function bodies
 		case *ast.GenDecl:
 			for _, spec := range node.Specs {
 				if typeSpec, ok := spec.(*ast.TypeSpec); ok && typeSpec.Name.IsExported() {
@@ -162,6 +172,11 @@ func (a *Analyzer) extractDeclarations(file *ast.File, pkg *packages.Package) ([
 					isVar := node.Tok.String() == "var"
 					for _, name := range valueSpec.Names {
 						if name.IsExported() {
+							// Verify the name is in the package scope, not just file-scoped
+							obj := pkg.Types.Scope().Lookup(name.Name)
+							if obj == nil {
+								continue
+							}
 							valType := pkg.TypesInfo.TypeOf(name)
 							values = append(values, ValueInfo{
 								Name:  name.Name,

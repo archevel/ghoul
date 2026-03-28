@@ -72,26 +72,26 @@ func (g *Generator) initializeTemplates() error {
 package {{.PackageName}}
 
 import (
-	"fmt"
+	_fmt "fmt"
 {{range .Imports}}	"{{.}}"
 {{end}}
-	"github.com/archevel/ghoul/mummy"
-	ghoulEval "github.com/archevel/ghoul/consume"
-	e "github.com/archevel/ghoul/bones"
+	_mummy "github.com/archevel/ghoul/mummy"
+	_eval "github.com/archevel/ghoul/consume"
+	_e "github.com/archevel/ghoul/bones"
 )
 
-var _ = mummy.LookupSarcophagus
-var _ = fmt.Sprintf
+var _ = _mummy.LookupSarcophagus
+var _ = _fmt.Sprintf
 
 func init() {
-	mummy.RegisterSarcophagus("{{.ShortName}}", "{{.ImportPath}}", &mummy.SarcophagusEntry{
+	_mummy.RegisterSarcophagus("{{.ShortName}}", "{{.ImportPath}}", &_mummy.SarcophagusEntry{
 		Names: []string{ {{range .Functions}}"{{.GhoulName}}", {{end}} },
 		Register: registerWithPrefix,
 	})
 }
 
 func registerWithPrefix(prefix string, only map[string]bool, register func(string, interface{})) {
-{{range .Functions}}	mummy.RegisterIfAllowed(prefix, only, "{{.GhoulName}}", {{.GoFuncName}}, register)
+{{range .Functions}}	_mummy.RegisterIfAllowed(prefix, only, "{{.GhoulName}}", {{.GoFuncName}}, register)
 {{end}}
 }
 
@@ -99,7 +99,7 @@ func registerWithPrefix(prefix string, only map[string]bool, register func(strin
 
 {{end}}
 // RegisterFunctions awakens all the mummified functions in this sarcophagus.
-func RegisterFunctions(env *ghoulEval.Environment) {
+func RegisterFunctions(env *_eval.Environment) {
 {{range .Functions}}	env.Register("{{.GhoulName}}", {{.GoFuncName}})
 {{end}}
 }
@@ -129,7 +129,7 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 		constructor, err := g.generateConstructor(structInfo, packageInfo.ImportPath)
 		if err != nil {
 			if g.config.Verbose {
-				fmt.Printf("Skipping constructor for %s: %v\n", structInfo.Name, err)
+				fmt.Printf("  Skipping constructor for %s: %v\n", structInfo.Name, err)
 			}
 			hasErrors = true
 			continue
@@ -146,7 +146,7 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 			wrapper, err := g.generateInterfaceMethodWrapper(ifaceInfo.Name, method, packageInfo.ImportPath)
 			if err != nil {
 				if g.config.Verbose {
-					fmt.Printf("Skipping interface method %s.%s: %v\n", ifaceInfo.Name, method.Name, err)
+					fmt.Printf("  Skipping interface method %s.%s: %v\n", ifaceInfo.Name, method.Name, err)
 				}
 				hasErrors = true
 				continue
@@ -339,13 +339,9 @@ func (g *Generator) generateFunctionBody(wrapper *FunctionWrapperData, importPat
 	var body bytes.Buffer
 
 	// Generate function signature and documentation
-	if wrapper.Documentation != "" {
-		fmt.Fprintf(&body, "// %s is the mummified version of %s.\n// Original: %s\n", wrapper.GoFuncName, wrapper.OriginalName, strings.TrimSpace(wrapper.Documentation))
-	} else {
-		fmt.Fprintf(&body, "// %s is the mummified version of %s.\n", wrapper.GoFuncName, wrapper.OriginalName)
-	}
+	fmt.Fprintf(&body, "// %s wraps %s. See Go documentation for details.\n", wrapper.GoFuncName, wrapper.OriginalName)
 
-	fmt.Fprintf(&body, "func %s(args []*e.Node, ev *ghoulEval.Evaluator) (*e.Node, error) {\n", wrapper.GoFuncName)
+	fmt.Fprintf(&body, "func %s(args []*_e.Node, ev *_eval.Evaluator) (*_e.Node, error) {\n", wrapper.GoFuncName)
 
 	// Generate argument conversion code
 	if wrapper.HasReceiver || len(wrapper.Arguments) > 0 {
@@ -432,7 +428,7 @@ func (g *Generator) generateResultHandling(results []ResultConversionInfo, body 
 
 	if errorIndex >= 0 {
 		fmt.Fprintf(body, "\tif %s != nil {\n", results[errorIndex].Name)
-		fmt.Fprintf(body, "\t\treturn nil, fmt.Errorf(\"function failed: %%w\", %s)\n", results[errorIndex].Name)
+		fmt.Fprintf(body, "\t\treturn nil, _fmt.Errorf(\"function failed: %%w\", %s)\n", results[errorIndex].Name)
 		fmt.Fprintf(body, "\t}\n")
 	}
 
@@ -446,14 +442,14 @@ func (g *Generator) generateResultHandling(results []ResultConversionInfo, body 
 
 	if len(nonErrorResults) == 0 {
 		// No return value, return Nil
-		fmt.Fprintf(body, "\treturn e.Nil, nil\n")
+		fmt.Fprintf(body, "\treturn _e.Nil, nil\n")
 	} else if len(nonErrorResults) == 1 {
 		// Single return value
 		result := nonErrorResults[0]
 		fmt.Fprintf(body, "\treturn %s, nil\n", g.convertValueToExpression(result.Name, result.Type))
 	} else {
 		// Multiple return values - create a list node
-		fmt.Fprintf(body, "\treturn e.NewListNode([]*e.Node{")
+		fmt.Fprintf(body, "\treturn _e.NewListNode([]*_e.Node{")
 		for i, result := range nonErrorResults {
 			if i > 0 {
 				fmt.Fprint(body, ", ")
@@ -514,7 +510,7 @@ func (g *Generator) generateConstructor(structInfo StructInfo, importPath string
 
 	var body bytes.Buffer
 	fmt.Fprintf(&body, "// %s raises a new %s from the grave.\n", goFuncName, structInfo.Name)
-	fmt.Fprintf(&body, "func %s(args []*e.Node, ev *ghoulEval.Evaluator) (*e.Node, error) {\n", goFuncName)
+	fmt.Fprintf(&body, "func %s(args []*_e.Node, ev *_eval.Evaluator) (*_e.Node, error) {\n", goFuncName)
 	fmt.Fprintf(&body, "\targIdx := 0\n")
 
 	// Generate field extraction
@@ -537,7 +533,7 @@ func (g *Generator) generateConstructor(structInfo StructInfo, importPath string
 		fmt.Fprintf(&body, "\t\t%s: %s,\n", field.Name, field.Name)
 	}
 	fmt.Fprintf(&body, "\t}\n")
-	fmt.Fprintf(&body, "\treturn e.MummyNodeVal(result, \"*%s\"), nil\n", qualifiedType)
+	fmt.Fprintf(&body, "\treturn _e.MummyNodeVal(result, \"*%s\"), nil\n", qualifiedType)
 	fmt.Fprintf(&body, "}")
 
 	return FunctionWrapperData{
@@ -587,17 +583,17 @@ func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method Func
 
 	var body bytes.Buffer
 	fmt.Fprintf(&body, "// %s is the mummified version of %s.%s.\n", goFuncName, ifaceName, method.Name)
-	fmt.Fprintf(&body, "func %s(args []*e.Node, ev *ghoulEval.Evaluator) (*e.Node, error) {\n", goFuncName)
+	fmt.Fprintf(&body, "func %s(args []*_e.Node, ev *_eval.Evaluator) (*_e.Node, error) {\n", goFuncName)
 	fmt.Fprintf(&body, "\targIdx := 0\n")
 
 	// Unwrap receiver from MummyNode
 	fmt.Fprintf(&body, "\tghoulArg_receiver := args[argIdx]\n")
-	fmt.Fprintf(&body, "\tif ghoulArg_receiver.Kind != e.MummyNode {\n")
-	fmt.Fprintf(&body, "\t\treturn nil, fmt.Errorf(\"expected mummy for 'receiver', got %%s\", e.NodeTypeName(ghoulArg_receiver))\n")
+	fmt.Fprintf(&body, "\tif ghoulArg_receiver.Kind != _e.MummyNode {\n")
+	fmt.Fprintf(&body, "\t\treturn nil, _fmt.Errorf(\"expected mummy for 'receiver', got %%s\", _e.NodeTypeName(ghoulArg_receiver))\n")
 	fmt.Fprintf(&body, "\t}\n")
 	fmt.Fprintf(&body, "\treceiver, ok := ghoulArg_receiver.ForeignVal.(%s)\n", qualifiedIface)
 	fmt.Fprintf(&body, "\tif !ok {\n")
-	fmt.Fprintf(&body, "\t\treturn nil, fmt.Errorf(\"expected %s in mummy, got %%T\", ghoulArg_receiver.ForeignVal)\n", qualifiedIface)
+	fmt.Fprintf(&body, "\t\treturn nil, _fmt.Errorf(\"expected %s in mummy, got %%T\", ghoulArg_receiver.ForeignVal)\n", qualifiedIface)
 	fmt.Fprintf(&body, "\t}\n")
 	fmt.Fprintf(&body, "\targIdx++\n")
 
@@ -691,7 +687,7 @@ func (g *Generator) generateValueAccessor(valInfo ValueInfo, importPath string) 
 	expr := g.typeMapper.convertValueToExpression(qualifiedName, valInfo.Type.Underlying().String())
 
 	var body bytes.Buffer
-	fmt.Fprintf(&body, "func %s(args []*e.Node, ev *ghoulEval.Evaluator) (*e.Node, error) {\n", goFuncName)
+	fmt.Fprintf(&body, "func %s(args []*_e.Node, ev *_eval.Evaluator) (*_e.Node, error) {\n", goFuncName)
 	fmt.Fprintf(&body, "\treturn %s, nil\n", expr)
 	fmt.Fprintf(&body, "}")
 
@@ -737,22 +733,22 @@ func (g *Generator) generateSliceConstructor(structInfo StructInfo, importPath s
 
 	var body bytes.Buffer
 	fmt.Fprintf(&body, "// %s creates a slice of %s from the given mummies.\n", goFuncName, structInfo.Name)
-	fmt.Fprintf(&body, "func %s(args []*e.Node, ev *ghoulEval.Evaluator) (*e.Node, error) {\n", goFuncName)
+	fmt.Fprintf(&body, "func %s(args []*_e.Node, ev *_eval.Evaluator) (*_e.Node, error) {\n", goFuncName)
 	fmt.Fprintf(&body, "\tvar result []*%s\n", qualifiedType)
 	fmt.Fprintf(&body, "\tfor _, ghoulElem := range args {\n")
-	fmt.Fprintf(&body, "\t\tif ghoulElem.Kind != e.MummyNode {\n")
-	fmt.Fprintf(&body, "\t\t\treturn nil, fmt.Errorf(\"%s: expected mummy, got %%s\", e.NodeTypeName(ghoulElem))\n", ghoulName)
+	fmt.Fprintf(&body, "\t\tif ghoulElem.Kind != _e.MummyNode {\n")
+	fmt.Fprintf(&body, "\t\t\treturn nil, _fmt.Errorf(\"%s: expected mummy, got %%s\", _e.NodeTypeName(ghoulElem))\n", ghoulName)
 	fmt.Fprintf(&body, "\t\t}\n")
 	fmt.Fprintf(&body, "\t\tp, ok := ghoulElem.ForeignVal.(*%s)\n", qualifiedType)
 	fmt.Fprintf(&body, "\t\tif !ok {\n")
-	fmt.Fprintf(&body, "\t\t\treturn nil, fmt.Errorf(\"%s: mummy contains %%T, expected *%s\", ghoulElem.ForeignVal)\n", ghoulName, qualifiedType)
+	fmt.Fprintf(&body, "\t\t\treturn nil, _fmt.Errorf(\"%s: mummy contains %%T, expected *%s\", ghoulElem.ForeignVal)\n", ghoulName, qualifiedType)
 	fmt.Fprintf(&body, "\t\t}\n")
 	fmt.Fprintf(&body, "\t\tresult = append(result, p)\n")
 	fmt.Fprintf(&body, "\t}\n")
 	fmt.Fprintf(&body, "\tif result == nil {\n")
 	fmt.Fprintf(&body, "\t\tresult = []*%s{}\n", qualifiedType)
 	fmt.Fprintf(&body, "\t}\n")
-	fmt.Fprintf(&body, "\treturn e.MummyNodeVal(result, \"[]*%s\"), nil\n", qualifiedType)
+	fmt.Fprintf(&body, "\treturn _e.MummyNodeVal(result, \"[]*%s\"), nil\n", qualifiedType)
 	fmt.Fprintf(&body, "}")
 
 	return FunctionWrapperData{

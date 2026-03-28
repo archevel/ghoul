@@ -13,6 +13,7 @@ func main() {
 	var (
 		verbose         = flag.Bool("v", false, "Enable verbose output")
 		skipUnwrappable = flag.Bool("skip-unwrappable", false, "Skip functions that can't be wrapped instead of failing")
+		outputDir       = flag.String("o", "", "Output directory for generated sarcophagus (default: next to package)")
 	)
 	flag.Parse()
 
@@ -57,6 +58,7 @@ func main() {
 
 	err = wraith.PossessPackage(&wraith.PossessionConfig{
 		PackagePath:     absPackagePath,
+		OutputDir:       *outputDir,
 		Verbose:         *verbose,
 		SkipUnwrappable: *skipUnwrappable,
 	})

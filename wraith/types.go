@@ -75,8 +75,8 @@ func (tm *TypeMapper) initializeTemplates() error {
 	// Built-in types use Node kind checks and direct field access
 	builtInTypeTemplate := `
 	ghoulArg_{{.Name}} := args[argIdx]
-	if ghoulArg_{{.Name}}.Kind != e.{{.BuiltInType | kindConst}} {
-		return nil, fmt.Errorf("expected {{.BuiltInType | lower}} for parameter '{{.Name}}', got %s", e.NodeTypeName(ghoulArg_{{.Name}}))
+	if ghoulArg_{{.Name}}.Kind != _e.{{.BuiltInType | kindConst}} {
+		return nil, _fmt.Errorf("expected {{.BuiltInType | lower}} for parameter '{{.Name}}', got %s", _e.NodeTypeName(ghoulArg_{{.Name}}))
 	}
 	{{.Name}} := {{.Type}}(ghoulArg_{{.Name}}.{{.BuiltInType | fieldName}})
 	argIdx++
@@ -85,8 +85,8 @@ func (tm *TypeMapper) initializeTemplates() error {
 	// Foreign (mummy) types extract the Go value from the MummyNode's ForeignVal
 	foreignTypeTemplate := `
 	ghoulArg_{{.Name}} := args[argIdx]
-	if ghoulArg_{{.Name}}.Kind != e.MummyNode {
-		return nil, fmt.Errorf("expected mummy for parameter '{{.Name}}', got %s", e.NodeTypeName(ghoulArg_{{.Name}}))
+	if ghoulArg_{{.Name}}.Kind != _e.MummyNode {
+		return nil, _fmt.Errorf("expected mummy for parameter '{{.Name}}', got %s", _e.NodeTypeName(ghoulArg_{{.Name}}))
 	}
 	var {{.Name}} {{.Type}}
 	if ghoulArg_{{.Name}}.ForeignVal != nil {
@@ -95,7 +95,7 @@ func (tm *TypeMapper) initializeTemplates() error {
 		if !ok {
 			{{.Name}}_ptr, ok := ghoulArg_{{.Name}}.ForeignVal.(*{{.Type}})
 			if !ok {
-				return nil, fmt.Errorf("parameter '{{.Name}}': mummy contains %T, expected {{.Type}}", ghoulArg_{{.Name}}.ForeignVal)
+				return nil, _fmt.Errorf("parameter '{{.Name}}': mummy contains %T, expected {{.Type}}", ghoulArg_{{.Name}}.ForeignVal)
 			}
 			{{.Name}} = *{{.Name}}_ptr
 		}
@@ -195,20 +195,20 @@ func (tm *TypeMapper) generateVariadicConversion(info ArgConversionInfo, w io.Wr
 		kindConst := builtInKindConst(info.BuiltInType)
 		fieldName := builtInFieldName(info.BuiltInType)
 		fmt.Fprintf(w, "\t\tghoulElem := args[argIdx]\n")
-		fmt.Fprintf(w, "\t\tif ghoulElem.Kind != e.%s {\n", kindConst)
-		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: expected %s, got %%s\", e.NodeTypeName(ghoulElem))\n",
+		fmt.Fprintf(w, "\t\tif ghoulElem.Kind != _e.%s {\n", kindConst)
+		fmt.Fprintf(w, "\t\t\treturn nil, _fmt.Errorf(\"%s: expected %s, got %%s\", _e.NodeTypeName(ghoulElem))\n",
 			name, strings.ToLower(info.BuiltInType))
 		fmt.Fprintf(w, "\t\t}\n")
 		fmt.Fprintf(w, "\t\t%s = append(%s, %s(ghoulElem.%s))\n", name, name, elemType, fieldName)
 	} else {
 		elemType := strings.TrimPrefix(info.Type, "[]")
 		fmt.Fprintf(w, "\t\tghoulElem := args[argIdx]\n")
-		fmt.Fprintf(w, "\t\tif ghoulElem.Kind != e.MummyNode {\n")
-		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: expected mummy, got %%s\", e.NodeTypeName(ghoulElem))\n", name)
+		fmt.Fprintf(w, "\t\tif ghoulElem.Kind != _e.MummyNode {\n")
+		fmt.Fprintf(w, "\t\t\treturn nil, _fmt.Errorf(\"%s: expected mummy, got %%s\", _e.NodeTypeName(ghoulElem))\n", name)
 		fmt.Fprintf(w, "\t\t}\n")
 		fmt.Fprintf(w, "\t\telem, ok := ghoulElem.ForeignVal.(%s)\n", elemType)
 		fmt.Fprintf(w, "\t\tif !ok {\n")
-		fmt.Fprintf(w, "\t\t\treturn nil, fmt.Errorf(\"%s: mummy contains %%T, expected %s\", ghoulElem.ForeignVal)\n", name, elemType)
+		fmt.Fprintf(w, "\t\t\treturn nil, _fmt.Errorf(\"%s: mummy contains %%T, expected %s\", ghoulElem.ForeignVal)\n", name, elemType)
 		fmt.Fprintf(w, "\t\t}\n")
 		fmt.Fprintf(w, "\t\t%s = append(%s, elem)\n", name, name)
 	}
@@ -225,7 +225,7 @@ func (tm *TypeMapper) generateFunctionAdapter(info ArgConversionInfo, w io.Write
 	// Assert the argument is a Ghoul Function (stored as a FunctionNode)
 	fmt.Fprintf(w, "\tghoulArg_%s := args[argIdx]\n", name)
 	fmt.Fprintf(w, "\tif ghoulArg_%s.FuncVal == nil {\n", name)
-	fmt.Fprintf(w, "\t\treturn nil, fmt.Errorf(\"expected function for parameter '%s', got %%s\", e.NodeTypeName(ghoulArg_%s))\n", name, name)
+	fmt.Fprintf(w, "\t\treturn nil, _fmt.Errorf(\"expected function for parameter '%s', got %%s\", _e.NodeTypeName(ghoulArg_%s))\n", name, name)
 	fmt.Fprintf(w, "\t}\n")
 	fmt.Fprintf(w, "\tghoulFunc_%s := ghoulArg_%s.FuncVal\n", name, name)
 
@@ -236,9 +236,9 @@ func (tm *TypeMapper) generateFunctionAdapter(info ArgConversionInfo, w io.Write
 	fmt.Fprintf(w, "\t\tghoulArgs := make([]*e.Node, %d)\n", len(sig.Params))
 	for i, p := range sig.Params {
 		if p.GhoulType != "" {
-			fmt.Fprintf(w, "\t\tghoulArgs[%d] = e.%s(p%d)\n", i, nodeConstructor(p.GhoulType), i)
+			fmt.Fprintf(w, "\t\tghoulArgs[%d] = _e.%s(p%d)\n", i, nodeConstructor(p.GhoulType), i)
 		} else {
-			fmt.Fprintf(w, "\t\tghoulArgs[%d] = e.MummyNodeVal(p%d, \"%s\")\n", i, i, p.Type)
+			fmt.Fprintf(w, "\t\tghoulArgs[%d] = _e.MummyNodeVal(p%d, \"%s\")\n", i, i, p.Type)
 		}
 	}
 
@@ -429,17 +429,17 @@ func (tm *TypeMapper) convertValueToExpression(valueName, goType string) string 
 	if ghoulType, exists := tm.primitiveMap[goType]; exists {
 		switch ghoulType {
 		case "Boolean":
-			return fmt.Sprintf("e.BoolNode(%s)", valueName)
+			return fmt.Sprintf("_e.BoolNode(%s)", valueName)
 		case "Integer":
-			return fmt.Sprintf("e.IntNode(int64(%s))", valueName)
+			return fmt.Sprintf("_e.IntNode(int64(%s))", valueName)
 		case "Float":
-			return fmt.Sprintf("e.FloatNode(float64(%s))", valueName)
+			return fmt.Sprintf("_e.FloatNode(float64(%s))", valueName)
 		case "String":
-			return fmt.Sprintf("e.StrNode(string(%s))", valueName)
+			return fmt.Sprintf("_e.StrNode(string(%s))", valueName)
 		}
 	}
 
-	return fmt.Sprintf("e.MummyNodeVal(%s, \"%s\")", valueName, goType)
+	return fmt.Sprintf("_e.MummyNodeVal(%s, \"%s\")", valueName, goType)
 }
 
 // builtInKindConst returns the Node kind constant name for a built-in ghoul type
