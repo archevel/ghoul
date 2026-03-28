@@ -189,7 +189,7 @@ func TestMapParametersWrappedAsMummy(t *testing.T) {
 	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
 	code := string(content)
 
-	if !strings.Contains(code, "lookupmap") {
+	if !strings.Contains(code, "lookup_map") {
 		t.Error("expected lookupmap to be generated (maps should be wrapped as mummy)")
 	}
 }
@@ -210,7 +210,7 @@ func TestChannelParametersWrappedAsMummy(t *testing.T) {
 	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
 	code := string(content)
 
-	if !strings.Contains(code, "sendonchannel") {
+	if !strings.Contains(code, "send_on_channel") {
 		t.Error("expected sendonchannel to be generated (channels should be wrapped as mummy)")
 	}
 }
@@ -239,10 +239,10 @@ func TestPossessSucceedsWithSkipUnwrappable(t *testing.T) {
 		t.Error("expected 'add' function to be wrapped")
 	}
 	// Maps and channels are now wrapped as mummies
-	if !strings.Contains(code, "sendonchannel") {
+	if !strings.Contains(code, "send_on_channel") {
 		t.Error("channel function should be wrapped")
 	}
-	if !strings.Contains(code, "lookupmap") {
+	if !strings.Contains(code, "lookup_map") {
 		t.Error("map function should be wrapped")
 	}
 	// Variadic functions SHOULD be wrapped (consuming remaining args)
@@ -327,7 +327,7 @@ func TestVariadicFunctionWithMixedParams(t *testing.T) {
 
 	// JoinWith has sep (regular) + parts (variadic)
 	// The regular param should be extracted first, then the variadic loop
-	if !strings.Contains(code, "joinwith") {
+	if !strings.Contains(code, "join_with") {
 		t.Error("expected joinwith function to be generated")
 	}
 	if !strings.Contains(code, "parts...)") {
@@ -351,11 +351,11 @@ func TestTypeAliasParametersWrappedAsPrimitives(t *testing.T) {
 	content, _ := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))
 	code := string(content)
 
-	if !strings.Contains(code, "mummy_addscores") {
+	if !strings.Contains(code, "mummy_add_scores") {
 		t.Fatal("expected addscores function to be generated")
 	}
 	// Extract the addscores function body to check it specifically
-	idx := strings.Index(code, "func mummy_addscores")
+	idx := strings.Index(code, "func mummy_add_scores")
 	if idx < 0 {
 		t.Fatal("could not find addscores function")
 	}
@@ -385,7 +385,7 @@ func TestNamedFunctionTypeParameterWrappedAsCallback(t *testing.T) {
 	code := string(content)
 
 	// ApplyTransform takes IntTransform (named func type) — should generate callback adapter
-	if !strings.Contains(code, "applytransform") {
+	if !strings.Contains(code, "apply_transform") {
 		t.Error("expected applytransform function to be generated")
 	}
 	if !strings.Contains(code, "FuncVal") {
@@ -532,7 +532,7 @@ func TestMultiNameFieldsInConstructor(t *testing.T) {
 	if !strings.Contains(code, "make-point") {
 		t.Fatal("expected make-point constructor")
 	}
-	idx := strings.Index(code, "func mummy_makepoint")
+	idx := strings.Index(code, "func mummy_make_point")
 	if idx < 0 {
 		t.Fatal("could not find makepoint function")
 	}

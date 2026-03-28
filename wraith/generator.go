@@ -266,7 +266,7 @@ func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperD
 		ghoulName = toGhoulName(typeName) + "-" + toGhoulName(funcInfo.Name)
 	}
 
-	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
+	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "_")
 
 	funcInfoCopy := funcInfo
 	wrapper := FunctionWrapperData{
@@ -528,7 +528,7 @@ func (g *Generator) writeToFile(content string) error {
 
 func (g *Generator) generateConstructor(structInfo StructInfo, importPath string) (FunctionWrapperData, error) {
 	ghoulName := "make-" + strings.ToLower(structInfo.Name)
-	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
+	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "_")
 	packagePrefix := getPackagePrefix(importPath)
 	qualifiedType := packagePrefix + "." + structInfo.Name
 
@@ -601,7 +601,7 @@ func buildGoFuncLiteralType(goType types.Type) string {
 func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method FunctionInfo, importPath string) (FunctionWrapperData, error) {
 	typeName := strings.ToLower(ifaceName)
 	ghoulName := typeName + "-" + strings.ToLower(method.Name)
-	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
+	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "_")
 	packagePrefix := getPackagePrefix(importPath)
 	qualifiedIface := packagePrefix + "." + ifaceName
 
@@ -702,18 +702,25 @@ func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method Func
 }
 
 func (g *Generator) generateValueAccessor(valInfo ValueInfo, importPath string) (FunctionWrapperData, error) {
-	// Skip unsigned integer types that overflow int64
+	// Skip typed uint/uint64/uintptr values (may overflow int64)
+	typeStr := valInfo.Type.String()
 	underlyingStr := valInfo.Type.Underlying().String()
-	if underlyingStr == "uint" || underlyingStr == "uint64" || underlyingStr == "uintptr" {
-		return FunctionWrapperData{}, fmt.Errorf("type %s may overflow int64", underlyingStr)
+	if typeStr == "uint" || typeStr == "uint64" || typeStr == "uintptr" ||
+		underlyingStr == "uint" || underlyingStr == "uint64" || underlyingStr == "uintptr" {
+		return FunctionWrapperData{}, fmt.Errorf("type %s may overflow int64", typeStr)
+	}
+	// Skip untyped integer constants with "Uint" in the name — their
+	// values (e.g., math.MaxUint = ^uint(0)) overflow int64
+	if underlyingStr == "untyped int" && strings.Contains(valInfo.Name, "Uint") {
+		return FunctionWrapperData{}, fmt.Errorf("constant %s may overflow int64", valInfo.Name)
 	}
 
 	ghoulName := toGhoulName(valInfo.Name)
-	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
+	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "_")
 	packagePrefix := getPackagePrefix(importPath)
 	qualifiedName := packagePrefix + "." + valInfo.Name
 
-	typeStr := qualifiedTypeToAlias(valInfo.Type.String())
+	qualifiedTypeStr := qualifiedTypeToAlias(valInfo.Type.String())
 	expr := g.typeMapper.convertValueToExpression(qualifiedName, valInfo.Type.Underlying().String())
 
 	var body bytes.Buffer
@@ -721,7 +728,7 @@ func (g *Generator) generateValueAccessor(valInfo ValueInfo, importPath string) 
 	fmt.Fprintf(&body, "\treturn %s, nil\n", expr)
 	fmt.Fprintf(&body, "}")
 
-	_ = typeStr
+	_ = qualifiedTypeStr
 
 	return FunctionWrapperData{
 		OriginalName:  valInfo.Name,
@@ -861,7 +868,7 @@ func toGhoulName(name string) string {
 
 func (g *Generator) generateSliceConstructor(structInfo StructInfo, importPath string) FunctionWrapperData {
 	ghoulName := strings.ToLower(structInfo.Name) + "-slice"
-	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
+	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "_")
 	packagePrefix := getPackagePrefix(importPath)
 	qualifiedType := packagePrefix + "." + structInfo.Name
 

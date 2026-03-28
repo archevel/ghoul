@@ -236,7 +236,7 @@ func (tm *TypeMapper) generateFunctionAdapter(info ArgConversionInfo, w io.Write
 	fmt.Fprintf(w, "\t\tghoulArgs := make([]*_e.Node, %d)\n", len(sig.Params))
 	for i, p := range sig.Params {
 		if p.GhoulType != "" {
-			fmt.Fprintf(w, "\t\tghoulArgs[%d] = _e.%s(p%d)\n", i, nodeConstructor(p.GhoulType), i)
+			fmt.Fprintf(w, "\t\tghoulArgs[%d] = _e.%s(%s(p%d))\n", i, nodeConstructor(p.GhoulType), nodeConstructorCast(p.GhoulType), i)
 		} else {
 			fmt.Fprintf(w, "\t\tghoulArgs[%d] = _e.MummyNodeVal(p%d, \"%s\")\n", i, i, p.Type)
 		}
@@ -471,6 +471,22 @@ func builtInFieldName(ghoulType string) string {
 		return "FloatVal"
 	default:
 		return ghoulType
+	}
+}
+
+// nodeConstructorCast returns the Go cast needed for a node constructor
+func nodeConstructorCast(ghoulType string) string {
+	switch ghoulType {
+	case "Integer":
+		return "int64"
+	case "Float":
+		return "float64"
+	case "String":
+		return "string"
+	case "Boolean":
+		return "bool"
+	default:
+		return ""
 	}
 }
 

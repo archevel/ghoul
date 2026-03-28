@@ -26,7 +26,7 @@ func TestGenerateSliceConstructorOutput(t *testing.T) {
 	if wrapper.GhoulName != "person-slice" {
 		t.Errorf("expected ghoul name 'person-slice', got '%s'", wrapper.GhoulName)
 	}
-	if wrapper.GoFuncName != "mummy_personslice" {
+	if wrapper.GoFuncName != "mummy_person_slice" {
 		t.Errorf("expected go func name 'w_personslice', got '%s'", wrapper.GoFuncName)
 	}
 	if !strings.Contains(wrapper.GeneratedCode, "[]*pkg.Person") {
@@ -70,7 +70,7 @@ func TestGenerateInterfaceMethodWrapperOutput(t *testing.T) {
 	if wrapper.GhoulName != "writer-write" {
 		t.Errorf("expected 'writer-write', got '%s'", wrapper.GhoulName)
 	}
-	if wrapper.GoFuncName != "mummy_writerwrite" {
+	if wrapper.GoFuncName != "mummy_writer_write" {
 		t.Errorf("expected 'writerwrite', got '%s'", wrapper.GoFuncName)
 	}
 	if !strings.Contains(wrapper.GeneratedCode, "pkg.Writer") {
@@ -129,7 +129,7 @@ func TestMethodNamingConvention(t *testing.T) {
 	if wrapper.GhoulName != "person-get-age" {
 		t.Errorf("expected 'person-get-age', got '%s'", wrapper.GhoulName)
 	}
-	if wrapper.GoFuncName != "mummy_persongetage" {
+	if wrapper.GoFuncName != "mummy_person_get_age" {
 		t.Errorf("expected 'w_persongetage', got '%s'", wrapper.GoFuncName)
 	}
 }
@@ -311,7 +311,7 @@ func TestFunctionsUsingExternalTypesAreWrapped(t *testing.T) {
 
 	// ReadAll uses io.Reader — the function should be wrapped and
 	// the generated code should import "io"
-	if !strings.Contains(code, "readall") {
+	if !strings.Contains(code, "read_all") {
 		t.Fatal("ReadAll should be wrapped — io.Reader is a standard external type")
 	}
 	if !strings.Contains(code, `"io"`) {
@@ -323,7 +323,7 @@ func TestFunctionsReturningExternalTypesAreWrapped(t *testing.T) {
 	code := possessAndRead(t)
 
 	// OpenFile returns *os.File — should be wrapped with mummy
-	if !strings.Contains(code, "openfile") {
+	if !strings.Contains(code, "open_file") {
 		t.Fatal("OpenFile should be wrapped — *os.File is a standard return type")
 	}
 	if !strings.Contains(code, `"os"`) {
@@ -385,9 +385,9 @@ func TestMultiReturnGeneratesListNode(t *testing.T) {
 	code := possessAndRead(t)
 
 	// SplitNameAge returns (string, int) — two non-error values
-	idx := strings.Index(code, "func mummy_splitnameage")
+	idx := strings.Index(code, "func mummy_split_name_age")
 	if idx < 0 {
-		t.Fatal("could not find mummy_splitnameage function")
+		t.Fatal("could not find mummy_split_name_age function")
 	}
 	funcBody := code[idx:min(idx+800, len(code))]
 	if !strings.Contains(funcBody, "result_r0") || !strings.Contains(funcBody, "result_r1") {
@@ -401,9 +401,9 @@ func TestMultiReturnGeneratesListNode(t *testing.T) {
 func TestErrorReturnVariableNoRedeclaration(t *testing.T) {
 	code := possessAndRead(t)
 
-	idx := strings.Index(code, "func mummy_closewithmessage")
+	idx := strings.Index(code, "func mummy_close_with_message")
 	if idx < 0 {
-		t.Fatal("could not find mummy_closewithmessage function")
+		t.Fatal("could not find mummy_close_with_message function")
 	}
 	funcBody := code[idx:min(idx+800, len(code))]
 	// Check that the result variable doesn't clash with the parameter.
