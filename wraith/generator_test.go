@@ -389,9 +389,9 @@ func TestMultiReturnGeneratesListNode(t *testing.T) {
 	if idx < 0 {
 		t.Fatal("could not find mummy_splitnameage function")
 	}
-	funcBody := code[idx:min(idx+500, len(code))]
+	funcBody := code[idx:min(idx+800, len(code))]
 	if !strings.Contains(funcBody, "result_r0") || !strings.Contains(funcBody, "result_r1") {
-		t.Error("multi-return should assign to result_r0")
+		t.Error("multi-return should assign to result_r0, result_r1")
 	}
 	if !strings.Contains(funcBody, "_e.NewListNode") {
 		t.Error("multi-return should pack values with NewListNode")
@@ -405,9 +405,16 @@ func TestErrorReturnVariableNoRedeclaration(t *testing.T) {
 	if idx < 0 {
 		t.Fatal("could not find mummy_closewithmessage function")
 	}
-	funcBody := code[idx:min(idx+500, len(code))]
-	if strings.Contains(funcBody, "err :=") {
-		t.Error("should not use := for error return when 'err' is already a parameter name")
+	funcBody := code[idx:min(idx+800, len(code))]
+	// Check that the result variable doesn't clash with the parameter.
+	// The generated code should use result_err, not bare err, for the return.
+	lines := strings.Split(funcBody, "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Match "err :=" but not "result_err :=" or "ghoulArg_err :="
+		if strings.HasPrefix(trimmed, "err :=") {
+			t.Errorf("should not use bare 'err :=' when 'err' is a parameter name: %s", trimmed)
+		}
 	}
 }
 
