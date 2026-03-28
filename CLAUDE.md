@@ -8,7 +8,7 @@ Ghoul is an undead-themed Lisp interpreter written in Go that aims to be simple 
 
 ## Architecture
 
-Processing flows through three phases: **exhume** (parse to `*bones.Node`) -> **reanimate** (expand macros + translate to semantic nodes) -> **consume** (evaluate semantic nodes via CPS trampoline).
+Processing flows through three phases: **exhume** (parse to `*bones.Node`) -> **reanimate** (expand macros + translate to semantic nodes) -> **consume** (compile to bytecode + execute on stack VM).
 
 Everything is `*bones.Node`. There is no `Expr` interface, no separate `Pair`/`List`/`Cons` types, no standalone `Function` type. The `Node` struct carries a `Kind` field that distinguishes syntax nodes (parser output), semantic nodes (reanimator output), and runtime nodes (values produced during evaluation).
 
@@ -20,7 +20,7 @@ The codebase is organized into thematically named packages:
 - **`bones/`**: The unified type system — `node.go` defines `*Node` with all node kinds, and `location.go` defines `CodeLocation`, `SourcePosition`, and `MacroExpansionLocation`. Foundation package with no ghoul imports.
 - **`exhumer/`**: Digs up structure from raw text — lexer and yacc-based parser for Lisp syntax. Produces `*bones.Node` trees (ListNode with Children) with `SourcePosition` set on parsed nodes.
 - **`reanimator/`**: Brings macromancy macros to life — walks the `*Node` tree, processes `define-syntax` forms to register macros, expands macro calls, then translates the fully-expanded tree into semantic nodes (`CallNode`, `LambdaNode`, `DefineNode`, `CondNode`, `BeginNode`, `SetNode`, `RequireNode`). Uses a sub-evaluator (via `consume`) for general transformer bodies.
-- **`consume/`**: How the ghoul feeds — CPS expression evaluator with proper tail call optimization. Files: `evaluator.go` (wrapper, translation from syntax to semantic nodes), `cps_evaluator.go` (CPS evaluation with continuation stack trampoline), `environment.go` (scope maps storing `*Node` values), `require.go` (require form handling), `module.go` (module loading state and exports), `suggest.go` (Levenshtein-based typo suggestions). Entry points: `ConsumeNodes([]*bones.Node)` for the main pipeline, `EvaluateNode(*bones.Node)` for translating and evaluating syntax node trees.
+- **`consume/`**: How the ghoul feeds — bytecode compiler and stack VM with proper tail call optimization. Files: `evaluator.go` (wrapper, translation from syntax to semantic nodes), `compiler.go` (AST to bytecode), `bytecode.go` (opcode definitions, CodeObject), `vm.go` (stack-based VM execution loop), `cps_evaluator.go` (entry points: ConsumeNodes, EvalSubExpression), `environment.go` (scope maps storing `*Node` values), `require.go` (require form handling), `module.go` (module loading state and exports), `suggest.go` (Levenshtein-based typo suggestions).
 - **`macromancy/`**: The dark arts — `macro.go` (pattern matching and transformer construction), `syntax_object.go` (hygiene via `SyntaxObject` wrapping), `marks.go` (mark types for hygienic expansion). Nested ellipsis and wildcard (`_`) patterns are supported.
 - **`tome/`**: The book of spells — standard library functions (`car`, `cdr`, `cons`, `list`, `+`, `-`, `eq?`, `map`, `filter`, `syntax-match?`, `assoc`, etc.).
 - **`mummy/`**: Wraith support — sarcophagus registry (`RegisterSarcophagus`, `LookupSarcophagus`) and conversion functions (`bytes`, `int-slice`, `float-slice`, `go-nil`, `string-from-bytes`). Mummy values are stored as `MummyNode` in `*bones.Node` (Kind: `MummyNode`, `ForeignVal` holds the Go value, `TypeNameV` holds the type name).
@@ -32,14 +32,13 @@ The codebase is organized into thematically named packages:
 
 This project requires:
 - Go 1.25+ with modules support
-- `goyacc` tool for parser generation: `go install golang.org/x/tools/cmd/goyacc@latest`
 
 ## Development Commands
 
 ### Building
 ```bash
-# Generate parser from yacc grammar (required after changing parser.y)
-go generate ./exhumer
+# Generate parser + stdlib sarcophagi
+go generate ./...
 
 # Build all packages
 go build ./...
@@ -95,15 +94,14 @@ All values are `*bones.Node`. The `Kind` field determines the node's role:
 ### Three-Phase Processing
 1. **Exhume** (`exhumer/`): Parse source text into `*bones.Node` trees (ListNode with Children) with source positions.
 2. **Reanimate** (`reanimator/`): Walk the node tree, process `define-syntax` forms to register macros, expand macro calls, strip all macro-related forms, and translate the result into semantic nodes (`CallNode`, `LambdaNode`, etc.) for the consumer. General transformer bodies are pre-expanded then evaluated through a sub-evaluator.
-3. **Consume** (`consume/`): Evaluate semantic nodes using CPS with a continuation stack trampoline.
+3. **Consume** (`consume/`): Compile semantic nodes to bytecode and execute on a stack-based VM.
 
 ### Consumer (Evaluator)
-- Uses continuation-passing style with a continuation stack for proper tail calls
-- Continuation type: `func(arg *Node, ev *Evaluator) (*Node, error)`
+- Compiles AST to bytecode (`compiler.go`), then runs on a stack VM (`vm.go`) with pre-allocated value stack and call frames
 - Two entry points:
-  - `ConsumeNodes([]*bones.Node)` — main pipeline entry point, evaluates semantic nodes produced by the reanimator
-  - `EvaluateNode(*bones.Node)` — translates a syntax node tree to semantic nodes then evaluates; used internally by the reanimator for macro transformer evaluation
-- `EvalSubExpression(*bones.Node)` — evaluates a single node with a fresh continuation stack
+  - `ConsumeNodes([]*bones.Node)` — main pipeline entry point, compiles and runs semantic nodes produced by the reanimator
+  - `EvaluateNode(*bones.Node)` — translates a syntax node tree to semantic nodes then compiles and runs; used internally by the reanimator for macro transformer evaluation
+- `EvalSubExpression(*bones.Node)` — evaluates a single node with a fresh VM
 - The consumer does NOT handle `define-syntax` or macro expansion — that is the reanimator's job
 - Module loading uses a `ModuleLoader` function injected by `ghoul.go` — the loader runs the full pipeline (parse -> expand -> translate -> evaluate) to avoid import cycles between `consume` and `ghoul`
 - Environment scope maps use `scopeKey` (Name + canonical marks string) as keys and store `*Node` values directly

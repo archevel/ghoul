@@ -289,9 +289,7 @@ func (vm *VM) callClosure(cd *closureData, args []*bones.Node, isTail bool, fram
 }
 
 func (vm *VM) doRequire(argsNode *bones.Node, env *environment) error {
-	// Call the require logic directly
-	cont := requireContinuation(argsNode.Children)
-	_, err := cont(bones.Nil, vm.ev)
+	_, err := doRequireArgs(argsNode.Children, vm.ev)
 	return err
 }
 

@@ -7,49 +7,47 @@ import (
 	"github.com/archevel/ghoul/mummy"
 )
 
-// requireContinuation handles (require module ...) with Node-based args.
-func requireContinuation(args []*bones.Node) continuation {
-	return func(arg *bones.Node, ev *Evaluator) (*bones.Node, error) {
-		if len(args) == 0 {
-			return bones.Nil, EvaluationError{msg: "require: module name required"}
-		}
-
-		moduleName := args[0].IdentName()
-		if moduleName == "" {
-			return bones.Nil, EvaluationError{msg: "require: module name must be an identifier"}
-		}
-
-		alias, only, err := parseRequireOptions(args)
-		if err != nil {
-			return bones.Nil, err
-		}
-
-		prefix := moduleName
-		if alias != "" {
-			prefix = alias
-		}
-
-		// Try Go sarcophagus first
-		entry := mummy.LookupSarcophagus(moduleName)
-		if entry != nil {
-			requireKey := moduleName + ":" + prefix
-			if ev.requiredModules[requireKey] {
-				return bones.Nil, nil
-			}
-			result, err := requireSarcophagus(entry, prefix, only, ev)
-			if err == nil {
-				ev.requiredModules[requireKey] = true
-			}
-			return result, err
-		}
-
-		// Try Ghoul file module
-		if ev.moduleState != nil {
-			return requireGhoulModule(moduleName, prefix, only, ev)
-		}
-
-		return bones.Nil, EvaluationError{msg: fmt.Sprintf("require: module '%s' not found", moduleName)}
+// doRequireArgs handles (require module ...) with Node-based args.
+func doRequireArgs(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+	if len(args) == 0 {
+		return bones.Nil, EvaluationError{msg: "require: module name required"}
 	}
+
+	moduleName := args[0].IdentName()
+	if moduleName == "" {
+		return bones.Nil, EvaluationError{msg: "require: module name must be an identifier"}
+	}
+
+	alias, only, err := parseRequireOptions(args)
+	if err != nil {
+		return bones.Nil, err
+	}
+
+	prefix := moduleName
+	if alias != "" {
+		prefix = alias
+	}
+
+	// Try Go sarcophagus first
+	entry := mummy.LookupSarcophagus(moduleName)
+	if entry != nil {
+		requireKey := moduleName + ":" + prefix
+		if ev.requiredModules[requireKey] {
+			return bones.Nil, nil
+		}
+		result, err := requireSarcophagus(entry, prefix, only, ev)
+		if err == nil {
+			ev.requiredModules[requireKey] = true
+		}
+		return result, err
+	}
+
+	// Try Ghoul file module
+	if ev.moduleState != nil {
+		return requireGhoulModule(moduleName, prefix, only, ev)
+	}
+
+	return bones.Nil, EvaluationError{msg: fmt.Sprintf("require: module '%s' not found", moduleName)}
 }
 
 func parseRequireOptions(args []*bones.Node) (alias string, only map[string]bool, err error) {

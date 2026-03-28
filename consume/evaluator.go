@@ -1,10 +1,8 @@
-// Package consume implements a continuation-passing style (CPS) expression
-// evaluator with proper tail call optimization. Evaluation proceeds by pushing
-// continuations onto a stack and stepping through them in a trampoline loop.
+// Package consume evaluates semantic *bones.Node AST via a bytecode compiler
+// and stack-based VM with proper tail call optimization.
 //
-// The primary entry point is ConsumeNodes which evaluates *bones.Node AST.
-// The Evaluate method translates syntax Node trees
-// before evaluation.
+// The primary entry point is ConsumeNodes which compiles and runs *bones.Node AST.
+// The Evaluate method translates syntax Node trees before evaluation.
 package consume
 
 import (
@@ -14,18 +12,6 @@ import (
 	e "github.com/archevel/ghoul/bones"
 	"github.com/archevel/ghoul/engraving"
 )
-
-type continuation func(arg *e.Node, ev *Evaluator) (*e.Node, error)
-
-// contItem is a tagged union: either a closure or a direct node-eval request.
-// Using a struct avoids allocating a closure for the very common evalContinuation case.
-type contItem struct {
-	fn            continuation // non-nil for closure continuations
-	node          *e.Node      // non-nil for direct node evaluation
-	maybeTailCall bool
-}
-
-type contStack []contItem
 
 // Evaluate parses a *Node tree (top-level ListNode), translates to semantic
 // nodes, and evaluates. This is the convenience entry point for tests.
@@ -55,7 +41,6 @@ type ModuleLoader func(filePath string, moduleEnv *environment, state *ModuleSta
 type Evaluator struct {
 	log             engraving.Logger
 	env             *environment
-	conts           *contStack
 	requiredModules map[string]bool
 	moduleState     *ModuleState
 	markCounter     *uint64
@@ -267,45 +252,3 @@ func (err EvaluationError) Unwrap() error {
 	return err.cause
 }
 
-func (ev *Evaluator) pushContinuation(cont continuation) {
-	*ev.conts = append(*ev.conts, contItem{fn: cont})
-}
-
-func (ev *Evaluator) pushEvalNode(node *e.Node, maybeTailCall bool) {
-	*ev.conts = append(*ev.conts, contItem{node: node, maybeTailCall: maybeTailCall})
-}
-
-func (ev *Evaluator) popContinuation() contItem {
-	idx := len(*ev.conts) - 1
-	next := (*ev.conts)[idx]
-	(*ev.conts)[idx] = contItem{} // clear to help GC
-	*ev.conts = (*ev.conts)[:idx]
-	return next
-}
-
-func (ev *Evaluator) stepThroughContinuationsWithContext(ctx context.Context) (*e.Node, error) {
-	var ret *e.Node = e.Nil
-	var err error
-
-	for len(*ev.conts) > 0 {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		next := ev.popContinuation()
-		if next.node != nil {
-			// Direct node evaluation — avoids closure allocation
-			ret, err = ev.evaluateNode(next.node, next.maybeTailCall)
-		} else {
-			ret, err = next.fn(ret, ev)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return ret, nil
-}
