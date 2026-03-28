@@ -1,0 +1,13 @@
+(require net/http as http)
+
+(http:handle-func "/"
+  (lambda (w req)
+    (define name (http:request-form-value req "name"))
+    (define greeting
+      (cond
+        ((eq? name "") "Hello Ghoul!")
+        (else (string-append "Hello Ghoul-" name "!"))))
+    (http:responsewriter-write w (bytes greeting))))
+
+(println "Listening on 0.0.0.0:8080")
+(http:listen-and-serve "0.0.0.0:8080" (go-nil))

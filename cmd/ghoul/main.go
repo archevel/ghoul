@@ -1,3 +1,4 @@
+//go:generate bash ../../scripts/possess.sh
 package main
 
 import (
