@@ -158,7 +158,13 @@ func (g *Generator) GenerateCode(packageInfo *PackageInfo) error {
 
 	// Generate accessors for exported constants and variables
 	for _, valInfo := range packageInfo.Values {
-		wrapper := g.generateValueAccessor(valInfo, packageInfo.ImportPath)
+		wrapper, err := g.generateValueAccessor(valInfo, packageInfo.ImportPath)
+		if err != nil {
+			if g.config.Verbose {
+				fmt.Printf("Skipping value %s: %v\n", valInfo.Name, err)
+			}
+			continue
+		}
 		functionWrappers = append(functionWrappers, wrapper)
 	}
 
@@ -344,7 +350,7 @@ func (g *Generator) processFunctionInfo(funcInfo FunctionInfo) (FunctionWrapperD
 			if isErrorType(result.Type) {
 				resultInfo.Name = "err"
 			} else {
-				resultInfo.Name = fmt.Sprintf("result%d", i)
+				resultInfo.Name = fmt.Sprintf("r%d", i)
 			}
 		}
 
@@ -388,13 +394,14 @@ func (g *Generator) generateFunctionBody(wrapper *FunctionWrapperData, importPat
 	// Generate function call
 	fmt.Fprintf(&body, "\n\t// Invoke the ancient Go function from beyond the veil\n\t")
 
-	// Generate result assignment if needed
+	// Generate result assignment if needed.
+	// Use result_ prefix to avoid clashing with parameter names.
 	if len(wrapper.Results) > 0 {
 		for i, result := range wrapper.Results {
 			if i > 0 {
 				fmt.Fprint(&body, ", ")
 			}
-			fmt.Fprintf(&body, "%s", result.Name)
+			fmt.Fprintf(&body, "result_%s", result.Name)
 		}
 		fmt.Fprint(&body, " := ")
 	}
@@ -447,8 +454,8 @@ func (g *Generator) generateResultHandling(results []ResultConversionInfo, body 
 	}
 
 	if errorIndex >= 0 {
-		fmt.Fprintf(body, "\tif %s != nil {\n", results[errorIndex].Name)
-		fmt.Fprintf(body, "\t\treturn nil, _fmt.Errorf(\"function failed: %%w\", %s)\n", results[errorIndex].Name)
+		fmt.Fprintf(body, "\tif result_%s != nil {\n", results[errorIndex].Name)
+		fmt.Fprintf(body, "\t\treturn nil, _fmt.Errorf(\"function failed: %%w\", result_%s)\n", results[errorIndex].Name)
 		fmt.Fprintf(body, "\t}\n")
 	}
 
@@ -461,20 +468,17 @@ func (g *Generator) generateResultHandling(results []ResultConversionInfo, body 
 	}
 
 	if len(nonErrorResults) == 0 {
-		// No return value, return Nil
 		fmt.Fprintf(body, "\treturn _e.Nil, nil\n")
 	} else if len(nonErrorResults) == 1 {
-		// Single return value
 		result := nonErrorResults[0]
-		fmt.Fprintf(body, "\treturn %s, nil\n", g.convertValueToExpression(result.Name, result.Type))
+		fmt.Fprintf(body, "\treturn %s, nil\n", g.convertValueToExpression("result_"+result.Name, result.Type))
 	} else {
-		// Multiple return values - create a list node
 		fmt.Fprintf(body, "\treturn _e.NewListNode([]*_e.Node{")
 		for i, result := range nonErrorResults {
 			if i > 0 {
 				fmt.Fprint(body, ", ")
 			}
-			fmt.Fprint(body, g.convertValueToExpression(result.Name, result.Type))
+			fmt.Fprint(body, g.convertValueToExpression("result_"+result.Name, result.Type))
 		}
 		fmt.Fprintf(body, "}), nil\n")
 	}
@@ -654,7 +658,7 @@ func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method Func
 			if isErrorType(result.Type) {
 				rName = "err"
 			} else {
-				rName = fmt.Sprintf("result%d", i)
+				rName = fmt.Sprintf("r%d", i)
 			}
 		}
 		wrapper.Results = append(wrapper.Results, ResultConversionInfo{
@@ -669,7 +673,7 @@ func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method Func
 			if i > 0 {
 				fmt.Fprint(&body, ", ")
 			}
-			fmt.Fprint(&body, r.Name)
+			fmt.Fprintf(&body, "result_%s", r.Name)
 		}
 		fmt.Fprint(&body, " := ")
 	}
@@ -697,7 +701,13 @@ func (g *Generator) generateInterfaceMethodWrapper(ifaceName string, method Func
 	}, nil
 }
 
-func (g *Generator) generateValueAccessor(valInfo ValueInfo, importPath string) FunctionWrapperData {
+func (g *Generator) generateValueAccessor(valInfo ValueInfo, importPath string) (FunctionWrapperData, error) {
+	// Skip unsigned integer types that overflow int64
+	underlyingStr := valInfo.Type.Underlying().String()
+	if underlyingStr == "uint" || underlyingStr == "uint64" || underlyingStr == "uintptr" {
+		return FunctionWrapperData{}, fmt.Errorf("type %s may overflow int64", underlyingStr)
+	}
+
 	ghoulName := toGhoulName(valInfo.Name)
 	goFuncName := "mummy_" + strings.ReplaceAll(ghoulName, "-", "")
 	packagePrefix := getPackagePrefix(importPath)
@@ -718,7 +728,7 @@ func (g *Generator) generateValueAccessor(valInfo ValueInfo, importPath string) 
 		GhoulName:     ghoulName,
 		GoFuncName:    goFuncName,
 		GeneratedCode: body.String(),
-	}
+	}, nil
 }
 
 func isUnexportedType(goType types.Type) bool {

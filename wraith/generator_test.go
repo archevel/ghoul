@@ -165,9 +165,9 @@ func TestGenerateResultHandlingSingleReturn(t *testing.T) {
 	g, _ := NewGenerator(config)
 	var buf bytes.Buffer
 	g.generateResultHandling([]ResultConversionInfo{
-		{Index: 0, Type: "int", Name: "result0"},
+		{Index: 0, Type: "int", Name: "r0"},
 	}, &buf)
-	if !strings.Contains(buf.String(), "_e.IntNode(int64(result0))") {
+	if !strings.Contains(buf.String(), "_e.IntNode(int64(result_r0))") {
 		t.Errorf("expected IntNode conversion, got:\n%s", buf.String())
 	}
 }
@@ -177,14 +177,14 @@ func TestGenerateResultHandlingWithError(t *testing.T) {
 	g, _ := NewGenerator(config)
 	var buf bytes.Buffer
 	g.generateResultHandling([]ResultConversionInfo{
-		{Index: 0, Type: "int", Name: "result0"},
+		{Index: 0, Type: "int", Name: "r0"},
 		{Index: 1, Type: "error", Name: "err"},
 	}, &buf)
 	code := buf.String()
-	if !strings.Contains(code, "err != nil") {
+	if !strings.Contains(code, "result_err != nil") {
 		t.Errorf("expected error check, got:\n%s", code)
 	}
-	if !strings.Contains(code, "_e.IntNode(int64(result0))") {
+	if !strings.Contains(code, "_e.IntNode(int64(result_r0))") {
 		t.Errorf("expected IntNode conversion, got:\n%s", code)
 	}
 }
@@ -379,6 +379,51 @@ func TestDocCommentsAreSingleLine(t *testing.T) {
 			t.Errorf("multi-line doc content leaked into code: %s", line)
 		}
 	}
+}
+
+func TestMultiReturnGeneratesListNode(t *testing.T) {
+	code := possessAndRead(t)
+
+	// SplitNameAge returns (string, int) — two non-error values
+	idx := strings.Index(code, "func mummy_splitnameage")
+	if idx < 0 {
+		t.Fatal("could not find mummy_splitnameage function")
+	}
+	funcBody := code[idx:min(idx+500, len(code))]
+	if !strings.Contains(funcBody, "result_r0") || !strings.Contains(funcBody, "result_r1") {
+		t.Error("multi-return should assign to result_r0")
+	}
+	if !strings.Contains(funcBody, "_e.NewListNode") {
+		t.Error("multi-return should pack values with NewListNode")
+	}
+}
+
+func TestErrorReturnVariableNoRedeclaration(t *testing.T) {
+	code := possessAndRead(t)
+
+	idx := strings.Index(code, "func mummy_closewithmessage")
+	if idx < 0 {
+		t.Fatal("could not find mummy_closewithmessage function")
+	}
+	funcBody := code[idx:min(idx+500, len(code))]
+	if strings.Contains(funcBody, "err :=") {
+		t.Error("should not use := for error return when 'err' is already a parameter name")
+	}
+}
+
+func TestUint64ConstantsSkipped(t *testing.T) {
+	code := possessAndRead(t)
+
+	if strings.Contains(code, "max-unsigned") || strings.Contains(code, "maxunsigned") {
+		t.Error("MaxUnsigned (uint) constant should be skipped — overflows int64")
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func possessAndRead(t *testing.T) string {

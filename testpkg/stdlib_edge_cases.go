@@ -57,6 +57,17 @@ func ConcatStrings(parts []string) string {
 
 const MaxUnsigned uint = ^uint(0)
 
+// --- Variable redeclaration: parameter named 'err' clashes with error return ---
+
+// CloseWithMessage closes something with an error message, returning an error.
+// The parameter 'err' clashes with the error return variable.
+func CloseWithMessage(err error) error {
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // --- Package name shadowing: parameter named same as package ---
 
 // Exported interface using io types

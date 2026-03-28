@@ -282,7 +282,7 @@ func (a *Analyzer) processFunctionDecl(funcDecl *ast.FuncDecl, pkg *packages.Pac
 				if i == len(funcDecl.Type.Results.List)-1 && isErrorType(fieldType) {
 					fieldName = "err"
 				} else {
-					fieldName = fmt.Sprintf("result%d", i)
+					fieldName = fmt.Sprintf("r%d", i)
 				}
 			}
 
@@ -341,7 +341,7 @@ func (a *Analyzer) processInterfaceType(name string, ifaceType *ast.InterfaceTyp
 				if isErrorType(r.Type()) {
 					rName = "err"
 				} else {
-					rName = fmt.Sprintf("result%d", i)
+					rName = fmt.Sprintf("r%d", i)
 				}
 			}
 			results = append(results, ParameterInfo{
