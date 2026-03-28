@@ -46,27 +46,3 @@
 
 (println (string-append "Is 999,999 odd? " (cond ((my-odd? 999999) "yes") (else "no"))))
 (println (string-append "Is 1,000,000 even? " (cond ((my-even? 1000000) "yes") (else "no"))))
-
-;; --- Fibonacci with accumulator ---
-;; Tail-recursive fib runs in O(n) time and constant stack space.
-;; The naive recursive version would be exponential, and even the
-;; linear Python version would hit the recursion limit at ~1000.
-
-(define fib (lambda (n a b)
-  (cond
-    ((eq? n 0) a)
-    (else (fib (- n 1) b (+ a b))))))
-
-(println (string-append "Fibonacci(50): " (number->string (fib 50 0 1))))
-
-;; --- Collatz sequence length ---
-;; Counts steps until n reaches 1. The sequence can be very long
-;; (e.g. 837799 takes 524 steps) — well beyond Python's stack.
-
-(define collatz-length (lambda (n steps)
-  (cond
-    ((eq? n 1) steps)
-    ((eq? 0 (mod n 2)) (collatz-length (/ n 2) (+ steps 1)))
-    (else (collatz-length (+ (* 3 n) 1) (+ steps 1))))))
-
-(println (string-append "Collatz steps for 837799: " (number->string (collatz-length 837799 0))))
