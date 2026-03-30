@@ -1,48 +1,48 @@
-package mummy
+package sarcophagus
 
 import (
 	"testing"
 )
 
-func TestRegisterAndLookupSarcophagus(t *testing.T) {
+func TestEntombAndUnearth(t *testing.T) {
 	defer ClearRegistry()
 
-	entry := &SarcophagusEntry{
+	m := &Mummy{
 		Names:    []string{"add", "subtract"},
 		Register: func(prefix string, only map[string]bool, register func(string, interface{})) {},
 	}
-	RegisterSarcophagus("testpkg", "github.com/example/testpkg", entry)
+	Entomb("testpkg", "github.com/example/testpkg", m)
 
-	found := LookupSarcophagus("testpkg")
+	found := Unearth("testpkg")
 	if found == nil {
-		t.Fatal("expected to find sarcophagus by short name")
+		t.Fatal("expected to find mummy by short name")
 	}
 	if len(found.Names) != 2 {
 		t.Errorf("expected 2 names, got %d", len(found.Names))
 	}
 }
 
-func TestLookupByFullPath(t *testing.T) {
+func TestUnearthByFullPath(t *testing.T) {
 	defer ClearRegistry()
 
-	entry := &SarcophagusEntry{
+	m := &Mummy{
 		Names:    []string{"add"},
 		Register: func(prefix string, only map[string]bool, register func(string, interface{})) {},
 	}
-	RegisterSarcophagus("testpkg", "github.com/example/testpkg", entry)
+	Entomb("testpkg", "github.com/example/testpkg", m)
 
-	found := LookupSarcophagus("github.com/example/testpkg")
+	found := Unearth("github.com/example/testpkg")
 	if found == nil {
-		t.Fatal("expected to find sarcophagus by full path")
+		t.Fatal("expected to find mummy by full path")
 	}
 }
 
-func TestLookupNonexistent(t *testing.T) {
+func TestUnearthNonexistent(t *testing.T) {
 	defer ClearRegistry()
 
-	found := LookupSarcophagus("nonexistent")
+	found := Unearth("nonexistent")
 	if found != nil {
-		t.Error("expected nil for nonexistent sarcophagus")
+		t.Error("expected nil for nonexistent mummy")
 	}
 }
 
@@ -54,7 +54,7 @@ func TestRegisterWithPrefixAddsPrefix(t *testing.T) {
 		registered[name] = fn
 	}
 
-	entry := &SarcophagusEntry{
+	m := &Mummy{
 		Names: []string{"add", "subtract"},
 		Register: func(prefix string, only map[string]bool, register func(string, interface{})) {
 			RegisterIfAllowed(prefix, only, "add", "dummy", register)
@@ -62,7 +62,7 @@ func TestRegisterWithPrefixAddsPrefix(t *testing.T) {
 		},
 	}
 
-	entry.Register("pkg", nil, register)
+	m.Register("pkg", nil, register)
 
 	if _, ok := registered["pkg:add"]; !ok {
 		t.Error("expected pkg:add to be registered")
@@ -82,7 +82,7 @@ func TestRegisterWithOnlyFilters(t *testing.T) {
 
 	only := map[string]bool{"add": true}
 
-	entry := &SarcophagusEntry{
+	m := &Mummy{
 		Names: []string{"add", "subtract"},
 		Register: func(prefix string, only map[string]bool, register func(string, interface{})) {
 			RegisterIfAllowed(prefix, only, "add", "dummy", register)
@@ -90,7 +90,7 @@ func TestRegisterWithOnlyFilters(t *testing.T) {
 		},
 	}
 
-	entry.Register("pkg", only, register)
+	m.Register("pkg", only, register)
 
 	if _, ok := registered["pkg:add"]; !ok {
 		t.Error("expected pkg:add to be registered")
@@ -100,37 +100,37 @@ func TestRegisterWithOnlyFilters(t *testing.T) {
 	}
 }
 
-func TestRegisterDuplicateShortName(t *testing.T) {
+func TestEntombDuplicateShortName(t *testing.T) {
 	defer ClearRegistry()
 
-	entry1 := &SarcophagusEntry{Names: []string{"add"}, Register: func(string, map[string]bool, func(string, interface{})) {}}
-	entry2 := &SarcophagusEntry{Names: []string{"mul"}, Register: func(string, map[string]bool, func(string, interface{})) {}}
+	m1 := &Mummy{Names: []string{"add"}, Register: func(string, map[string]bool, func(string, interface{})) {}}
+	m2 := &Mummy{Names: []string{"mul"}, Register: func(string, map[string]bool, func(string, interface{})) {}}
 
-	RegisterSarcophagus("pkg", "example/pkg1", entry1)
-	RegisterSarcophagus("pkg", "example/pkg2", entry2)
+	Entomb("pkg", "example/pkg1", m1)
+	Entomb("pkg", "example/pkg2", m2)
 
-	// Last registration wins for short name
-	if LookupSarcophagus("pkg") != entry2 {
-		t.Error("expected last registration to win for short name")
+	// Last entombment wins for short name
+	if Unearth("pkg") != m2 {
+		t.Error("expected last entombment to win for short name")
 	}
 
 	// Full paths should still work
-	if LookupSarcophagus("example/pkg1") != entry1 {
-		t.Error("expected first entry by full path")
+	if Unearth("example/pkg1") != m1 {
+		t.Error("expected first mummy by full path")
 	}
 }
 
 func TestClearRegistry(t *testing.T) {
-	entry := &SarcophagusEntry{Names: []string{"x"}, Register: func(string, map[string]bool, func(string, interface{})) {}}
-	RegisterSarcophagus("temp", "example/temp", entry)
+	m := &Mummy{Names: []string{"x"}, Register: func(string, map[string]bool, func(string, interface{})) {}}
+	Entomb("temp", "example/temp", m)
 
-	if LookupSarcophagus("temp") == nil {
-		t.Fatal("expected entry before clear")
+	if Unearth("temp") == nil {
+		t.Fatal("expected mummy before clear")
 	}
 
 	ClearRegistry()
 
-	if LookupSarcophagus("temp") != nil {
+	if Unearth("temp") != nil {
 		t.Error("expected nil after clear")
 	}
 }

@@ -5,7 +5,7 @@ import (
 
 	"github.com/archevel/ghoul/bones"
 	ev "github.com/archevel/ghoul/consume"
-	"github.com/archevel/ghoul/mummy"
+	"github.com/archevel/ghoul/sarcophagus"
 )
 
 // processRequire handles (require module ...) during macro expansion.
@@ -33,14 +33,14 @@ func (exp *Reanimator) processRequire(node *bones.Node, scope *macroScope) (*bon
 		prefix = alias
 	}
 
-	// Try Go sarcophagus first
-	entry := mummy.LookupSarcophagus(moduleName)
-	if entry != nil {
+	// Try entombed mummy first
+	mummy := sarcophagus.Unearth(moduleName)
+	if mummy != nil {
 		requireKey := moduleName + ":" + prefix
 		if exp.requiredModules[requireKey] {
 			return nil, nil
 		}
-		err := exp.requireSarcophagus(entry, prefix, only)
+		err := exp.requireMummy(mummy, prefix, only)
 		if err == nil {
 			exp.requiredModules[requireKey] = true
 		}
@@ -102,11 +102,11 @@ func (exp *Reanimator) checkNameConflict(qualifiedName string) error {
 	return nil
 }
 
-func (exp *Reanimator) requireSarcophagus(entry *mummy.SarcophagusEntry, prefix string, only map[string]bool) error {
-	namesToRegister := entry.Names
+func (exp *Reanimator) requireMummy(mummy *sarcophagus.Mummy, prefix string, only map[string]bool) error {
+	namesToRegister := mummy.Names
 	if only != nil {
 		namesToRegister = make([]string, 0)
-		for _, n := range entry.Names {
+		for _, n := range mummy.Names {
 			if only[n] {
 				namesToRegister = append(namesToRegister, n)
 			}
@@ -126,7 +126,7 @@ func (exp *Reanimator) requireSarcophagus(entry *mummy.SarcophagusEntry, prefix 
 			exp.evalEnv.BindByName(name, bones.FuncNode(wrapped))
 		}
 	}
-	entry.Register(prefix, only, register)
+	mummy.Register(prefix, only, register)
 	return nil
 }
 

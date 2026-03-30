@@ -1,20 +1,20 @@
-package mummy
+package sarcophagus
 
-type SarcophagusEntry struct {
+type Mummy struct {
 	Names    []string
 	Register func(prefix string, only map[string]bool, register func(string, interface{}))
 }
 
-var registry = map[string]*SarcophagusEntry{}
+var registry = map[string]*Mummy{}
 
-func RegisterSarcophagus(shortName string, fullPath string, entry *SarcophagusEntry) {
-	registry[shortName] = entry
+func Entomb(shortName string, fullPath string, mummy *Mummy) {
+	registry[shortName] = mummy
 	if fullPath != shortName {
-		registry[fullPath] = entry
+		registry[fullPath] = mummy
 	}
 }
 
-func LookupSarcophagus(name string) *SarcophagusEntry {
+func Unearth(name string) *Mummy {
 	return registry[name]
 }
 

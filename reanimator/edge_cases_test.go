@@ -821,7 +821,7 @@ func TestExpandNodeRequireStrippedWhenNotFound(t *testing.T) {
 	nodes := parseNodes(t, `(require foo)`)
 	_, err := r.ReanimateNodes(nodes)
 	// require is now processed during expansion — without a module loader
-	// or sarcophagus, it should error
+	// or mummy, it should error
 	if err == nil {
 		t.Fatal("expected error for require of nonexistent module")
 	}

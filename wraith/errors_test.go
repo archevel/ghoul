@@ -360,7 +360,7 @@ func TestTypeAliasParametersWrappedAsPrimitives(t *testing.T) {
 		t.Fatal("could not find addscores function")
 	}
 	funcBody := code[idx : idx+300]
-	if strings.Contains(funcBody, "*mummy.Mummy") {
+	if strings.Contains(funcBody, "*sarcophagus.Mummy") {
 		t.Errorf("type alias for int should use IntegerNode check, not mummy:\n%s", funcBody)
 	}
 	if !strings.Contains(funcBody, "_e.IntegerNode") {

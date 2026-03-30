@@ -13,7 +13,7 @@ func TestGenerateSliceConstructorOutput(t *testing.T) {
 	config := &Config{
 		PackagePath: ".",
 		OutputFile:  "/dev/null",
-		PackageName: "test_sarcophagus",
+		PackageName: "test_mummy",
 	}
 	g, err := NewGenerator(config)
 	if err != nil {
@@ -44,7 +44,7 @@ func TestGenerateInterfaceMethodWrapperOutput(t *testing.T) {
 	config := &Config{
 		PackagePath: ".",
 		OutputFile:  "/dev/null",
-		PackageName: "test_sarcophagus",
+		PackageName: "test_mummy",
 	}
 	g, err := NewGenerator(config)
 	if err != nil {
@@ -86,7 +86,7 @@ func TestGenerateInterfaceMethodWrapperNaming(t *testing.T) {
 	config := &Config{
 		PackagePath: ".",
 		OutputFile:  "/dev/null",
-		PackageName: "test_sarcophagus",
+		PackageName: "test_mummy",
 	}
 	g, _ := NewGenerator(config)
 
@@ -106,7 +106,7 @@ func TestMethodNamingConvention(t *testing.T) {
 	config := &Config{
 		PackagePath: ".",
 		OutputFile:  "/dev/null",
-		PackageName: "test_sarcophagus",
+		PackageName: "test_mummy",
 	}
 	g, _ := NewGenerator(config)
 
@@ -138,7 +138,7 @@ func TestConstructorNaming(t *testing.T) {
 	config := &Config{
 		PackagePath: ".",
 		OutputFile:  "/dev/null",
-		PackageName: "test_sarcophagus",
+		PackageName: "test_mummy",
 	}
 	g, _ := NewGenerator(config)
 
@@ -252,7 +252,7 @@ func TestGeneratedCodeContainsMultipleReturnTypes(t *testing.T) {
 	}
 }
 
-func TestPossessPackageCreatesSarcophagus(t *testing.T) {
+func TestPossessPackageCreatesMummy(t *testing.T) {
 	// Use the testpkg as the target
 	testpkgPath, _ := filepath.Abs("../testpkg")
 	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
@@ -282,8 +282,8 @@ func TestPossessPackageCreatesSarcophagus(t *testing.T) {
 		desc    string
 		content string
 	}{
-		{"package declaration", "package testpkg_sarcophagus"},
-		{"mummy import", "github.com/archevel/ghoul/mummy"},
+		{"package declaration", "package testpkg_mummy"},
+		{"sarcophagus import", "github.com/archevel/ghoul/sarcophagus"},
 		{"testpkg import", "github.com/archevel/ghoul/testpkg"},
 		{"constructor", "make-person"},
 		{"slice constructor", "person-slice"},
@@ -292,9 +292,9 @@ func TestPossessPackageCreatesSarcophagus(t *testing.T) {
 		{"callback adapter", "FuncVal"},
 		{"nil handling", "ForeignVal != nil"},
 		{"RegisterFunctions", "func RegisterFunctions"},
-		{"init registration", "_mummy.RegisterSarcophagus"},
+		{"init registration", "_sarcophagus.Entomb"},
 		{"registerWithPrefix", "func registerWithPrefix"},
-		{"RegisterIfAllowed", "_mummy.RegisterIfAllowed"},
+		{"RegisterIfAllowed", "_sarcophagus.RegisterIfAllowed"},
 		{"node signature", "[]*_e.Node"},
 		{"node return", "*_e.Node"},
 	}

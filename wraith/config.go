@@ -27,24 +27,24 @@ func PossessPackage(config *PossessionConfig) error {
 	}
 
 	packageName := filepath.Base(config.PackagePath)
-	sarcophagusName := packageName + "_sarcophagus"
+	mummyName := packageName + "_mummy"
 
 	outputDir := config.OutputDir
 	if outputDir == "" {
-		outputDir = filepath.Join(filepath.Dir(config.PackagePath), sarcophagusName)
+		outputDir = filepath.Join(filepath.Dir(config.PackagePath), mummyName)
 	}
 
 	outputFile := filepath.Join(outputDir, packageName+".go")
 
 	if config.Verbose {
 		fmt.Printf("📦 Target package: %s\n", packageName)
-		fmt.Printf("⚰️  Generating sarcophagus: %s\n", outputDir)
+		fmt.Printf("⚰️  Generating mummy: %s\n", outputDir)
 	}
 
 	legacyConfig := &Config{
 		PackagePath:     config.PackagePath,
 		OutputFile:      outputFile,
-		PackageName:     sarcophagusName,
+		PackageName:     mummyName,
 		Verbose:         config.Verbose,
 		SkipUnwrappable: config.SkipUnwrappable,
 	}

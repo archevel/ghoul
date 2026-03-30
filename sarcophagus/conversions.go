@@ -1,4 +1,4 @@
-package mummy
+package sarcophagus
 
 import (
 	"fmt"

@@ -4,7 +4,7 @@ import (
 	e "github.com/archevel/ghoul/bones"
 	ev "github.com/archevel/ghoul/consume"
 	"github.com/archevel/ghoul/macromancy"
-	"github.com/archevel/ghoul/mummy"
+	"github.com/archevel/ghoul/sarcophagus"
 )
 
 // stripMarks recursively removes hygiene marks from Node trees.
@@ -99,14 +99,14 @@ func registerSyntax(env *ev.Environment) {
 	})
 
 	// Mummy conversion functions
-	wrapMummyConv := func(fn mummy.NodeConversionFunc) func([]*e.Node, *ev.Evaluator) (*e.Node, error) {
+	wrapMummyConv := func(fn sarcophagus.NodeConversionFunc) func([]*e.Node, *ev.Evaluator) (*e.Node, error) {
 		return func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
 			return fn(args, evaluator)
 		}
 	}
-	env.Register("bytes", wrapMummyConv(mummy.BytesConvNode))
-	env.Register("string-from-bytes", wrapMummyConv(mummy.StringFromBytesNode))
-	env.Register("int-slice", wrapMummyConv(mummy.IntSliceNode))
-	env.Register("float-slice", wrapMummyConv(mummy.FloatSliceNode))
-	env.Register("go-nil", wrapMummyConv(mummy.GoNilNode))
+	env.Register("bytes", wrapMummyConv(sarcophagus.BytesConvNode))
+	env.Register("string-from-bytes", wrapMummyConv(sarcophagus.StringFromBytesNode))
+	env.Register("int-slice", wrapMummyConv(sarcophagus.IntSliceNode))
+	env.Register("float-slice", wrapMummyConv(sarcophagus.FloatSliceNode))
+	env.Register("go-nil", wrapMummyConv(sarcophagus.GoNilNode))
 }

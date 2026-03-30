@@ -13,7 +13,7 @@ func main() {
 	var (
 		verbose         = flag.Bool("v", false, "Enable verbose output")
 		skipUnwrappable = flag.Bool("skip-unwrappable", false, "Skip functions that can't be wrapped instead of failing")
-		outputDir       = flag.String("o", "", "Output directory for generated sarcophagus (default: next to package)")
+		outputDir       = flag.String("o", "", "Output directory for generated mummy (default: next to package)")
 	)
 	flag.Parse()
 
@@ -23,7 +23,7 @@ func main() {
 	if len(args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: wraith possess <package-path> [-v]\n")
 		fmt.Fprintf(os.Stderr, "\nCommands:\n")
-		fmt.Fprintf(os.Stderr, "  possess    Wrap a Go package like a mummy for Ghoul use\n")
+		fmt.Fprintf(os.Stderr, "  possess    Mummify a Go package for Ghoul use\n")
 		fmt.Fprintf(os.Stderr, "\nOptions:\n")
 		fmt.Fprintf(os.Stderr, "  -v         Enable verbose output\n")
 		fmt.Fprintf(os.Stderr, "\nExample:\n")
@@ -69,6 +69,6 @@ func main() {
 	}
 
 	if *verbose {
-		fmt.Printf("🎭 Package successfully possessed and wrapped like a mummy!\n")
+		fmt.Printf("🎭 Package successfully mummified!\n")
 	}
 }

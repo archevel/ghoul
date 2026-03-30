@@ -18,7 +18,7 @@ Ghoul is a lisp interpreter that aims to be simple to understand while being a b
 Prerequisites: Go 1.25+.
 
 ```bash
-# Generate parser + stdlib sarcophagi + stdlib.go
+# Generate parser + stdlib mummies + stdlib.go
 go generate ./...
 
 # Build the ghoul binary
@@ -33,9 +33,9 @@ go build -o ghoul ./cmd/ghoul/
 
 The `go generate` step runs two generators:
 1. `goyacc` to generate the parser from `exhumer/parser.y`
-2. `scripts/possess.sh` to wrap Go packages listed in `sarcophagi.txt` as FFI sarcophagi
+2. `scripts/possess.sh` to mummify Go packages listed in `sarcophagus.txt`
 
-To add a Go package to the stdlib, add its import path to `sarcophagi.txt` and re-run `go generate ./...`. Third-party packages work too — just `go get` them first.
+To add a Go package to the stdlib, add its import path to `sarcophagus.txt` and re-run `go generate ./...`. Third-party packages work too — just `go get` them first.
 
 ## Testing
 
@@ -63,6 +63,6 @@ All packages follow an undead/occult naming theme:
 | `macromancy` | The dark arts — macro pattern matching and hygienic expansion |
 | `tome` | The book of spells — standard library functions |
 | `engraving` | Carved records — logging |
-| `mummy` | FFI type registry for wraith-generated sarcophagi |
-| `wraith` | Possesses Go packages and generates sarcophagi (FFI wrappers) |
+| `sarcophagus` | Registry (sarcophagus) for wraith-generated mummies |
+| `wraith` | Possesses Go packages and generates mummies (FFI wrappers) |
 | `prelude` | Standard macros: `let`, `let*`, `when`, `unless`, `syntax-case` |

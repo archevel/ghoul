@@ -1,4 +1,4 @@
-# Go packages to wrap as Ghoul sarcophagi.
+# Go packages to entomb in the sarcophagus.
 # One package per line. Lines starting with # are comments.
 # Run: go generate ./cmd/ghoul/
 

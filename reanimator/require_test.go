@@ -6,18 +6,18 @@ import (
 
 	e "github.com/archevel/ghoul/bones"
 	ev "github.com/archevel/ghoul/consume"
-	"github.com/archevel/ghoul/mummy"
+	"github.com/archevel/ghoul/sarcophagus"
 )
 
 func registerTestModule() {
 	dummyFunc := func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
 		return e.IntNode(42), nil
 	}
-	mummy.RegisterSarcophagus("testmod", "github.com/example/testmod", &mummy.SarcophagusEntry{
+	sarcophagus.Entomb("testmod", "github.com/example/testmod", &sarcophagus.Mummy{
 		Names: []string{"foo", "bar"},
 		Register: func(prefix string, only map[string]bool, register func(string, interface{})) {
-			mummy.RegisterIfAllowed(prefix, only, "foo", dummyFunc, register)
-			mummy.RegisterIfAllowed(prefix, only, "bar", dummyFunc, register)
+			sarcophagus.RegisterIfAllowed(prefix, only, "foo", dummyFunc, register)
+			sarcophagus.RegisterIfAllowed(prefix, only, "bar", dummyFunc, register)
 		},
 	})
 }
@@ -34,7 +34,7 @@ func reanimateAndLookup(t *testing.T, input string) (*e.Node, error) {
 }
 
 func TestRequireBasic(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	registerTestModule()
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require testmod)`)
@@ -52,7 +52,7 @@ func TestRequireBasic(t *testing.T) {
 }
 
 func TestRequireWithAlias(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	registerTestModule()
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require testmod as tm)`)
@@ -70,7 +70,7 @@ func TestRequireWithAlias(t *testing.T) {
 }
 
 func TestRequireWithOnly(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	registerTestModule()
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require testmod only (foo))`)
@@ -84,7 +84,7 @@ func TestRequireWithOnly(t *testing.T) {
 }
 
 func TestRequireWithOnlyFiltersOut(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	registerTestModule()
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require testmod only (foo))`)
@@ -98,7 +98,7 @@ func TestRequireWithOnlyFiltersOut(t *testing.T) {
 }
 
 func TestRequireWithAliasAndOnly(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	registerTestModule()
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require testmod as tm only (bar))`)
@@ -112,7 +112,7 @@ func TestRequireWithAliasAndOnly(t *testing.T) {
 }
 
 func TestRequireNonexistentModule(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require nonexistent)`)
 	_, err := r.ReanimateNodes(nodes)
@@ -125,16 +125,16 @@ func TestRequireNonexistentModule(t *testing.T) {
 }
 
 func TestRequireNameClash(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	registerTestModule()
 
 	dummyFunc2 := func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
 		return e.IntNode(99), nil
 	}
-	mummy.RegisterSarcophagus("othermod", "github.com/example/othermod", &mummy.SarcophagusEntry{
+	sarcophagus.Entomb("othermod", "github.com/example/othermod", &sarcophagus.Mummy{
 		Names: []string{"foo"},
 		Register: func(prefix string, only map[string]bool, register func(string, interface{})) {
-			mummy.RegisterIfAllowed(prefix, only, "foo", dummyFunc2, register)
+			sarcophagus.RegisterIfAllowed(prefix, only, "foo", dummyFunc2, register)
 		},
 	})
 
@@ -150,7 +150,7 @@ func TestRequireNameClash(t *testing.T) {
 }
 
 func TestRequireSameModuleTwice(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	registerTestModule()
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require testmod) (require testmod)`)
@@ -161,7 +161,7 @@ func TestRequireSameModuleTwice(t *testing.T) {
 }
 
 func TestRequireSameModuleDifferentAlias(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	registerTestModule()
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require testmod as a) (require testmod as b)`)
@@ -178,7 +178,7 @@ func TestRequireSameModuleDifferentAlias(t *testing.T) {
 }
 
 func TestRequireEmptyForm(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require)`)
 	_, err := r.ReanimateNodes(nodes)
@@ -272,7 +272,7 @@ func TestRequireUnexpectedKeyword(t *testing.T) {
 }
 
 func TestRequireStripsFromOutput(t *testing.T) {
-	defer mummy.ClearRegistry()
+	defer sarcophagus.ClearRegistry()
 	registerTestModule()
 	r := newTestReanimator()
 	nodes := parseNodes(t, `(require testmod) (+ 1 2)`)
