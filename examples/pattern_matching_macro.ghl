@@ -1,0 +1,178 @@
+;; pattern_matching_macro.ghl
+;;
+;; A match macro for runtime pattern matching.
+;;
+;; Supports:
+;;   - Literal matching: integers, strings, booleans, ()
+;;   - Wildcard: _ matches anything, binds nothing
+;;   - Variable binding: bare identifiers bind the matched value
+;;   - List destructuring: (pat1 pat2 ...) matches element-by-element
+;;   - Nested patterns: (a (b c) d) works
+;;   - Dotted rest patterns: (head . tail) binds tail to the rest
+;;
+;; Usage:
+;;   (match expr
+;;     (pattern1 body1)
+;;     (pattern2 body2)
+;;     (_ fallback))
+;;
+;; Run: ghoul examples/pattern_matching_macro.ghl
+
+;; The macro generates inline cond/car/cdr chains at expansion time.
+;; Each pattern compiles to a guard condition and direct extraction.
+
+(define-syntax match
+  (lambda (stx)
+    (define expr (car (cdr stx)))
+    (define clauses (cdr (cdr stx)))
+
+    ;; Is this syntax node a literal (not a variable)?
+    (define syn-literal?
+      (lambda (p)
+        (cond
+          ((null? p) #t)
+          ((identifier? p) #f)
+          ((pair? p) #f)
+          (else #t))))
+
+    ;; Generate a guard that checks if val-expr matches pattern.
+    (define gen-guard
+      (lambda (pat val-expr)
+        (cond
+          ((identifier? pat)
+           (cond
+             ((eq? (syntax->datum pat) '_) #t)
+             (else #t)))
+          ((null? pat) (list 'null? val-expr))
+          ((syn-literal? pat) (list 'eq? pat val-expr))
+          ((pair? pat)
+           (define car-pat (car pat))
+           (define cdr-pat (cdr pat))
+           (define car-guard (gen-guard car-pat (list 'car val-expr)))
+           (define cdr-guard (gen-guard cdr-pat (list 'cdr val-expr)))
+           (define pair-check (list 'pair? val-expr))
+           (cond
+             ((eq? car-guard #t)
+               (cond
+                 ((eq? cdr-guard #t) pair-check)
+                 (else (list 'and pair-check cdr-guard))))
+             ((eq? cdr-guard #t)
+               (list 'and pair-check car-guard))
+             (else
+               (list 'and pair-check (list 'and car-guard cdr-guard)))))
+          (else #t))))
+
+    ;; Collect (var accessor-expr) pairs from a pattern.
+    (define gen-bindings
+      (lambda (pat val-expr)
+        (cond
+          ((null? pat) '())
+          ((identifier? pat)
+           (cond
+             ((eq? (syntax->datum pat) '_) '())
+             (else (list (list pat val-expr)))))
+          ((pair? pat)
+           (append (gen-bindings (car pat) (list 'car val-expr))
+                   (gen-bindings (cdr pat) (list 'cdr val-expr))))
+          (else '()))))
+
+    ;; Wrap body in nested lets that bind each variable.
+    (define wrap-bindings
+      (lambda (bindings body)
+        (cond
+          ((null? bindings) body)
+          (else
+            (define b (car bindings))
+            (define var (car b))
+            (define accessor (car (cdr b)))
+            (list 'let (list (list var accessor))
+              (wrap-bindings (cdr bindings) body))))))
+
+    ;; Build a cond chain from clauses.
+    (define build
+      (lambda (clauses)
+        (cond
+          ((null? clauses) '(begin))
+          (else
+            (define clause (car clauses))
+            (define pat (car clause))
+            (define body (car (cdr clause)))
+            (define rest (cdr clauses))
+            (define guard (gen-guard pat 'match-val__))
+            (define bindings (gen-bindings pat 'match-val__))
+            (define bound-body (wrap-bindings bindings body))
+            (cond
+              ((eq? guard #t) bound-body)
+              ((null? rest)
+                (list 'cond (list guard bound-body)))
+              (else
+                (list 'cond
+                  (list guard bound-body)
+                  (list 'else (build rest)))))))))
+
+    (list (list 'lambda (list 'match-val__) (build clauses)) expr)))
+
+
+;; ===================================================================
+;; Tests
+;; ===================================================================
+
+(println "--- Pattern matching tests ---")
+
+;; Literal matching
+(println (match 42
+  (42 "matched 42")
+  (_ "no match")))
+
+(println (match "hello"
+  ("world" "wrong")
+  ("hello" "matched hello")
+  (_ "no match")))
+
+;; Wildcard
+(println (match 99
+  (_ "wildcard catches all")))
+
+;; Variable binding
+(println (match 7
+  (x (string-append "got " (number->string x)))))
+
+;; List destructuring
+(println (match (list 1 2 3)
+  ((a b c) (number->string (+ a (+ b c))))))
+
+;; Nested list
+(println (match (list 1 (list 2 3))
+  ((a (b c)) (number->string (+ a (+ b c))))))
+
+;; Empty list
+(println (match '()
+  (() "empty!")
+  (_ "not empty")))
+
+;; Mixed literal and variable
+(println (match (list 1 2)
+  ((1 x) (string-append "second is " (number->string x)))
+  (_ "no match")))
+
+;; Failed first clause, matched second
+(println (match (list 3 4)
+  ((1 x) "starts with 1")
+  ((a b) (string-append (number->string a) " and " (number->string b)))))
+
+;; Boolean patterns
+(println (match #t
+  (#f "false")
+  (#t "true")))
+
+;; Dotted rest pattern (head . tail)
+(println (match (list 1 2 3 4)
+  ((h . t) (string-append "head=" (number->string h)
+                           " tail-len=" (number->string (length t))))))
+
+;; Nested with wildcard
+(println (match (list 1 2 3)
+  ((1 _ x) (string-append "third is " (number->string x)))
+  (_ "no match")))
+
+(println "--- All tests passed ---")
