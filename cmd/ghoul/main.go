@@ -1,4 +1,4 @@
-//go:generate bash ../../scripts/possess.sh
+//go:generate bash ../../scripts/mummify.sh
 package main
 
 import (

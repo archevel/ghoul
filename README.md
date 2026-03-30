@@ -33,7 +33,7 @@ go build -o ghoul ./cmd/ghoul/
 
 The `go generate` step runs two generators:
 1. `goyacc` to generate the parser from `exhumer/parser.y`
-2. `scripts/possess.sh` to mummify Go packages listed in `sarcophagus.txt`
+2. `scripts/mummify.sh` to mummify Go packages listed in `sarcophagus.txt`
 
 To add a Go package to the stdlib, add its import path to `sarcophagus.txt` and re-run `go generate ./...`. Third-party packages work too — just `go get` them first.
 
@@ -63,6 +63,6 @@ All packages follow an undead/occult naming theme:
 | `macromancy` | The dark arts — macro pattern matching and hygienic expansion |
 | `tome` | The book of spells — standard library functions |
 | `engraving` | Carved records — logging |
-| `sarcophagus` | Registry (sarcophagus) for wraith-generated mummies |
-| `wraith` | Possesses Go packages and generates mummies (FFI wrappers) |
+| `sarcophagus` | Registry (sarcophagus) where mummies are entombed |
+| `embalmer` | Mummifies Go packages, generating FFI wrappers for Ghoul |
 | `prelude` | Standard macros: `let`, `let*`, `when`, `unless`, `syntax-case` |

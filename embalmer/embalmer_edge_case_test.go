@@ -1,4 +1,4 @@
-package wraith
+package embalmer
 
 import (
 	"bytes"

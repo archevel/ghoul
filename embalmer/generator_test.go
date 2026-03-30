@@ -1,4 +1,4 @@
-package wraith
+package embalmer
 
 import (
 	"bytes"
@@ -227,7 +227,7 @@ func TestGeneratedCodeContainsMultipleReturnTypes(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -252,7 +252,7 @@ func TestGeneratedCodeContainsMultipleReturnTypes(t *testing.T) {
 	}
 }
 
-func TestPossessPackageCreatesMummy(t *testing.T) {
+func TestMummifyCreatesMummy(t *testing.T) {
 	// Use the testpkg as the target
 	testpkgPath, _ := filepath.Abs("../testpkg")
 	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
@@ -260,13 +260,13 @@ func TestPossessPackageCreatesMummy(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	err := PossessPackage(&PossessionConfig{
+	err := Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
 	})
 	if err != nil {
-		t.Fatalf("possession failed: %v", err)
+		t.Fatalf("mummification failed: %v", err)
 	}
 
 	outputFile := filepath.Join(outputDir, "testpkg.go")
@@ -307,7 +307,7 @@ func TestPossessPackageCreatesMummy(t *testing.T) {
 }
 
 func TestFunctionsUsingExternalTypesAreWrapped(t *testing.T) {
-	code := possessAndRead(t)
+	code := mummifyAndRead(t)
 
 	// ReadAll uses io.Reader — the function should be wrapped and
 	// the generated code should import "io"
@@ -320,7 +320,7 @@ func TestFunctionsUsingExternalTypesAreWrapped(t *testing.T) {
 }
 
 func TestFunctionsReturningExternalTypesAreWrapped(t *testing.T) {
-	code := possessAndRead(t)
+	code := mummifyAndRead(t)
 
 	// OpenFile returns *os.File — should be wrapped with mummy
 	if !strings.Contains(code, "open_file") {
@@ -332,7 +332,7 @@ func TestFunctionsReturningExternalTypesAreWrapped(t *testing.T) {
 }
 
 func TestUnexportedReturnTypesSkipped(t *testing.T) {
-	code := possessAndRead(t)
+	code := mummifyAndRead(t)
 
 	// MakeResult returns *result (unexported) — should be skipped
 	if strings.Contains(code, "makeresult") {
@@ -346,7 +346,7 @@ func TestUnexportedReturnTypesSkipped(t *testing.T) {
 }
 
 func TestCamelCaseToKebabNaming(t *testing.T) {
-	code := possessAndRead(t)
+	code := mummifyAndRead(t)
 
 	if !strings.Contains(code, `"is-even"`) {
 		t.Error("expected ghoul name 'is-even' for IsEven (CamelCase → kebab-case)")
@@ -357,7 +357,7 @@ func TestCamelCaseToKebabNaming(t *testing.T) {
 }
 
 func TestMultiReturnFunctionHandled(t *testing.T) {
-	code := possessAndRead(t)
+	code := mummifyAndRead(t)
 
 	// SplitNameAge returns (string, int) — should be wrapped with list return
 	if strings.Contains(code, "splitnameage") {
@@ -368,7 +368,7 @@ func TestMultiReturnFunctionHandled(t *testing.T) {
 }
 
 func TestDocCommentsAreSingleLine(t *testing.T) {
-	code := possessAndRead(t)
+	code := mummifyAndRead(t)
 
 	for _, line := range strings.Split(code, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -382,7 +382,7 @@ func TestDocCommentsAreSingleLine(t *testing.T) {
 }
 
 func TestMultiReturnGeneratesListNode(t *testing.T) {
-	code := possessAndRead(t)
+	code := mummifyAndRead(t)
 
 	// SplitNameAge returns (string, int) — two non-error values
 	idx := strings.Index(code, "func mummy_split_name_age")
@@ -399,7 +399,7 @@ func TestMultiReturnGeneratesListNode(t *testing.T) {
 }
 
 func TestErrorReturnVariableNoRedeclaration(t *testing.T) {
-	code := possessAndRead(t)
+	code := mummifyAndRead(t)
 
 	idx := strings.Index(code, "func mummy_close_with_message")
 	if idx < 0 {
@@ -419,7 +419,7 @@ func TestErrorReturnVariableNoRedeclaration(t *testing.T) {
 }
 
 func TestUint64ConstantsSkipped(t *testing.T) {
-	code := possessAndRead(t)
+	code := mummifyAndRead(t)
 
 	if strings.Contains(code, "max-unsigned") || strings.Contains(code, "maxunsigned") {
 		t.Error("MaxUnsigned (uint) constant should be skipped — overflows int64")
@@ -433,7 +433,7 @@ func min(a, b int) int {
 	return b
 }
 
-func possessAndRead(t *testing.T) string {
+func mummifyAndRead(t *testing.T) string {
 	t.Helper()
 
 	testpkgPath, _ := filepath.Abs("../testpkg")
@@ -442,13 +442,13 @@ func possessAndRead(t *testing.T) string {
 	}
 
 	outputDir := t.TempDir()
-	err := PossessPackage(&PossessionConfig{
+	err := Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
 	})
 	if err != nil {
-		t.Fatalf("PossessPackage failed: %v", err)
+		t.Fatalf("Mummify failed: %v", err)
 	}
 
 	content, err := os.ReadFile(filepath.Join(outputDir, "testpkg.go"))

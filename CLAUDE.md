@@ -16,7 +16,7 @@ The codebase is organized into thematically named packages:
 
 - **`ghoul.go`**: The ghoul itself — the public API that orchestrates the three phases. Creates the exhumer, reanimator, and consumer with a shared mark counter and environment. Injects a `ModuleLoader` into the reanimator to handle `require` during expansion. Returns `*bones.Node`.
 - **`cmd/ghoul/main.go`**: CLI interface supporting both REPL mode and file execution.
-- **`cmd/wraith/main.go`**: CLI for the wraith tool — possesses Go packages and generates mummies.
+- **`cmd/embalmer/main.go`**: CLI for the embalmer tool — mummifies Go packages for Ghoul use.
 - **`bones/`**: The unified type system — `node.go` defines `*Node` with all node kinds, and `location.go` defines `CodeLocation`, `SourcePosition`, and `MacroExpansionLocation`. Foundation package with no ghoul imports.
 - **`exhumer/`**: Digs up structure from raw text — lexer and yacc-based parser for Lisp syntax. Produces `*bones.Node` trees (ListNode with Children) with `SourcePosition` set on parsed nodes.
 - **`reanimator/`**: Brings macromancy macros to life — walks the `*Node` tree, processes `define-syntax` forms to register macros, expands macro calls, handles `require` (loading mummies and Ghoul modules during expansion so macros from required modules are available), then translates the fully-expanded tree into semantic nodes (`CallNode`, `LambdaNode`, `DefineNode`, `CondNode`, `BeginNode`, `SetNode`). Uses a sub-evaluator (via `consume`) for general transformer bodies.
@@ -24,7 +24,7 @@ The codebase is organized into thematically named packages:
 - **`macromancy/`**: The dark arts — `macro.go` (pattern matching and transformer construction), `syntax_object.go` (hygiene via `SyntaxObject` wrapping), `marks.go` (mark types for hygienic expansion). Nested ellipsis and wildcard (`_`) patterns are supported.
 - **`tome/`**: The book of spells — standard library functions (`car`, `cdr`, `cons`, `list`, `+`, `-`, `eq?`, `map`, `filter`, `syntax-match?`, `assoc`, etc.).
 - **`sarcophagus/`**: The resting place — mummy registry (`Entomb`, `Unearth`) and conversion functions (`bytes`, `int-slice`, `float-slice`, `go-nil`, `string-from-bytes`). Mummy values are stored as `MummyNode` in `*bones.Node` (Kind: `MummyNode`, `ForeignVal` holds the Go value, `TypeNameV` holds the type name).
-- **`wraith/`**: Code generation tool that analyzes Go packages and generates mummy packages with wrapped functions, struct constructors, interface method wrappers, and callback adapters.
+- **`embalmer/`**: The mortician — code generation tool that analyzes Go packages and generates mummy packages with wrapped functions, struct constructors, interface method wrappers, and callback adapters.
 - **`engraving/`**: Carved records — configurable logging with TRACE/DEBUG/WARN levels. Does not import `bones` — uses `any` args with a `reprAble` interface check to format values.
 - **`prelude/`**: The standard prelude (`prelude.ghl`) defining `let`, `let*`, `syntax-case`, `when`, and `unless` macros.
 
@@ -65,8 +65,8 @@ go test -v ./consume
 ./ghoul filename.ghoul
 
 # Possess a Go package (generate mummy)
-wraith possess ./path/to/package
-wraith -skip-unwrappable possess ./path/to/package
+embalmer mummify ./path/to/package
+embalmer -skip-unwrappable mummify ./path/to/package
 ```
 
 ## Key Implementation Details
@@ -132,7 +132,7 @@ All values are `*bones.Node`. The `Kind` field determines the node's role:
 - `suggestIdentifiers` provides Levenshtein-based typo suggestions for undefined identifiers
 - `NodeTypeName()` gives human-readable type names in error messages — internal Go types never leak into user-facing errors
 
-### Wraith Tool
+### Embalmer Tool
 - Generates mummy packages (not code in the target package)
 - Mummy values stored as `MummyNode` in `*bones.Node` — `ForeignVal` holds the Go value, `TypeNameV` holds the type name
 - Methods registered as `typename-methodname` (e.g., `person-getage`)
@@ -151,6 +151,7 @@ macromancy      -> bones
 consume         -> bones
 tome            -> bones, consume
 sarcophagus     (mummy registry, standalone)
+embalmer        (code gen tool, standalone)
 reanimator      -> bones, consume
 ghoul           -> all packages
 ```
@@ -158,7 +159,7 @@ ghoul           -> all packages
 ## Conventions
 
 - All packages use undead/occult themed names
-- No reflection in generated wraith code
+- No reflection in generated embalmer code
 - TDD approach for new features
 - Comments should explain *why*, not restate *what* the code does
 - Error messages use `NodeTypeName()` for human-readable type names, not `%T`

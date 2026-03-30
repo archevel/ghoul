@@ -1,4 +1,4 @@
-package wraith
+package embalmer
 
 import (
 	"os"
@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-func TestPossessNonexistentPackageFails(t *testing.T) {
-	err := PossessPackage(&PossessionConfig{
+func TestMummifyNonexistentPackageFails(t *testing.T) {
+	err := Mummify(&MummificationConfig{
 		PackagePath: "/nonexistent/path",
 	})
 	if err == nil {
@@ -19,9 +19,9 @@ func TestPossessNonexistentPackageFails(t *testing.T) {
 	}
 }
 
-func TestPossessEmptyPackageFails(t *testing.T) {
+func TestMummifyEmptyPackageFails(t *testing.T) {
 	emptyDir := t.TempDir()
-	err := PossessPackage(&PossessionConfig{
+	err := Mummify(&MummificationConfig{
 		PackagePath: emptyDir,
 		OutputDir:   t.TempDir(),
 	})
@@ -30,20 +30,20 @@ func TestPossessEmptyPackageFails(t *testing.T) {
 	}
 }
 
-func TestPossessPackageVerboseOutput(t *testing.T) {
+func TestMummifyVerboseOutput(t *testing.T) {
 	testpkgPath, _ := filepath.Abs("../testpkg")
 	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
 		t.Skip("testpkg not found")
 	}
 
-	err := PossessPackage(&PossessionConfig{
+	err := Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       t.TempDir(),
 		Verbose:         true,
 		SkipUnwrappable: true,
 	})
 	if err != nil {
-		t.Fatalf("possession failed: %v", err)
+		t.Fatalf("mummification failed: %v", err)
 	}
 }
 
@@ -59,20 +59,20 @@ func TestGenerateWrappersWithBadPackagePath(t *testing.T) {
 	}
 }
 
-func TestPossessPackageOutputDirCreated(t *testing.T) {
+func TestMummifyOutputDirCreated(t *testing.T) {
 	testpkgPath, _ := filepath.Abs("../testpkg")
 	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
 		t.Skip("testpkg not found")
 	}
 
 	outputDir := filepath.Join(t.TempDir(), "nested", "deep", "sarcophagus")
-	err := PossessPackage(&PossessionConfig{
+	err := Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
 	})
 	if err != nil {
-		t.Fatalf("possession failed: %v", err)
+		t.Fatalf("mummification failed: %v", err)
 	}
 
 	if _, err := os.Stat(outputDir); os.IsNotExist(err) {
@@ -87,7 +87,7 @@ func TestGeneratedCodeSkipsUnexportedFunctions(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -110,7 +110,7 @@ func TestGeneratedCodeSkipsUnexportedStructs(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -132,7 +132,7 @@ func TestResultHandlingVoidFunction(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -147,13 +147,13 @@ func TestResultHandlingVoidFunction(t *testing.T) {
 	}
 }
 
-func TestPossessFailsOnUnwrappableFunctions(t *testing.T) {
+func TestMummifyFailsOnUnwrappableFunctions(t *testing.T) {
 	testpkgPath, _ := filepath.Abs("../testpkg")
 	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
 		t.Skip("testpkg not found")
 	}
 
-	err := PossessPackage(&PossessionConfig{
+	err := Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       t.TempDir(),
 		SkipUnwrappable: false,
@@ -180,7 +180,7 @@ func TestMapParametersWrappedAsMummy(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -201,7 +201,7 @@ func TestChannelParametersWrappedAsMummy(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -215,14 +215,14 @@ func TestChannelParametersWrappedAsMummy(t *testing.T) {
 	}
 }
 
-func TestPossessSucceedsWithSkipUnwrappable(t *testing.T) {
+func TestMummifySucceedsWithSkipUnwrappable(t *testing.T) {
 	testpkgPath, _ := filepath.Abs("../testpkg")
 	if _, err := os.Stat(testpkgPath); os.IsNotExist(err) {
 		t.Skip("testpkg not found")
 	}
 
 	outputDir := t.TempDir()
-	err := PossessPackage(&PossessionConfig{
+	err := Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -267,7 +267,7 @@ func TestVariadicFunctionGeneratesArgCollection(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -289,7 +289,7 @@ func TestVariadicFunctionWithNoArgs(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -316,7 +316,7 @@ func TestVariadicFunctionWithMixedParams(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -342,7 +342,7 @@ func TestTypeAliasParametersWrappedAsPrimitives(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -375,7 +375,7 @@ func TestNamedFunctionTypeParameterWrappedAsCallback(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -400,7 +400,7 @@ func TestUnexportedReturnTypeWrappedAsMummy(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -427,7 +427,7 @@ func TestConstantsExposed(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -454,7 +454,7 @@ func TestVariablesExposed(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -475,7 +475,7 @@ func TestGenericFunctionsSkipped(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -495,7 +495,7 @@ func TestGenericFunctionsReportedAsUnsupported(t *testing.T) {
 		t.Skip("testpkg not found")
 	}
 
-	err := PossessPackage(&PossessionConfig{
+	err := Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       t.TempDir(),
 		SkipUnwrappable: false,
@@ -519,7 +519,7 @@ func TestMultiNameFieldsInConstructor(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -549,7 +549,7 @@ func TestUnexportedInterfaceMethodsSkipped(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,
@@ -574,7 +574,7 @@ func TestResultHandlingErrorFunction(t *testing.T) {
 	}
 
 	outputDir := t.TempDir()
-	PossessPackage(&PossessionConfig{
+	Mummify(&MummificationConfig{
 		PackagePath:     testpkgPath,
 		OutputDir:       outputDir,
 		SkipUnwrappable: true,

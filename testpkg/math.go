@@ -1,4 +1,4 @@
-// Package testpkg provides simple mathematical functions for testing wraith tool
+// Package testpkg provides simple mathematical functions for testing the embalmer tool
 package testpkg
 
 import "errors"
@@ -74,7 +74,7 @@ type Point struct {
 // Formatter has both exported and unexported methods
 type Formatter interface {
 	Format(val int) string
-	// unexported method — should be skipped by wraith
+	// unexported method — should be skipped by embalmer
 	internal()
 }
 

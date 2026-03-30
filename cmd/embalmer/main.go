@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/archevel/ghoul/wraith"
+	"github.com/archevel/ghoul/embalmer"
 )
 
 func main() {
@@ -21,21 +21,21 @@ func main() {
 
 	// Parse command
 	if len(args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: wraith possess <package-path> [-v]\n")
+		fmt.Fprintf(os.Stderr, "Usage: embalmer mummify <package-path> [-v]\n")
 		fmt.Fprintf(os.Stderr, "\nCommands:\n")
-		fmt.Fprintf(os.Stderr, "  possess    Mummify a Go package for Ghoul use\n")
+		fmt.Fprintf(os.Stderr, "  mummify    Mummify a Go package for Ghoul use\n")
 		fmt.Fprintf(os.Stderr, "\nOptions:\n")
 		fmt.Fprintf(os.Stderr, "  -v         Enable verbose output\n")
 		fmt.Fprintf(os.Stderr, "\nExample:\n")
-		fmt.Fprintf(os.Stderr, "  wraith possess ./mypackage\n")
+		fmt.Fprintf(os.Stderr, "  embalmer mummify ./mypackage\n")
 		os.Exit(1)
 	}
 
 	command := args[0]
 	packagePath := args[1]
 
-	if command != "possess" {
-		fmt.Fprintf(os.Stderr, "Error: unknown command '%s'. Use 'possess' to wrap a package.\n", command)
+	if command != "mummify" {
+		fmt.Fprintf(os.Stderr, "Error: unknown command '%s'. Use 'mummify' to wrap a package.\n", command)
 		os.Exit(1)
 	}
 
@@ -53,10 +53,10 @@ func main() {
 	}
 
 	if *verbose {
-		fmt.Printf("🧟 Wraith is possessing package: %s\n", absPackagePath)
+		fmt.Printf("🧟 Embalmer is mummifying package: %s\n", absPackagePath)
 	}
 
-	err = wraith.PossessPackage(&wraith.PossessionConfig{
+	err = embalmer.Mummify(&embalmer.MummificationConfig{
 		PackagePath:     absPackagePath,
 		OutputDir:       *outputDir,
 		Verbose:         *verbose,
@@ -64,7 +64,7 @@ func main() {
 	})
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "💀 Possession failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "💀 Mummification failed: %v\n", err)
 		os.Exit(1)
 	}
 

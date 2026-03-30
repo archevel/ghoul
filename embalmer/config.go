@@ -1,4 +1,4 @@
-package wraith
+package embalmer
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-type PossessionConfig struct {
+type MummificationConfig struct {
 	PackagePath     string
 	OutputDir       string
 	Verbose         bool
@@ -21,7 +21,7 @@ type Config struct {
 	SkipUnwrappable bool
 }
 
-func PossessPackage(config *PossessionConfig) error {
+func Mummify(config *MummificationConfig) error {
 	if _, err := os.Stat(config.PackagePath); os.IsNotExist(err) {
 		return fmt.Errorf("package path does not exist: %s", config.PackagePath)
 	}
