@@ -168,6 +168,40 @@ func TestMergeWithStdlibNoDuplicates(t *testing.T) {
 	}
 }
 
+func TestParseGraveyardWithLocalPath(t *testing.T) {
+	content := `
+[[embalm]]
+package = "github.com/example/local-lib"
+path = "/tmp/local-lib"
+`
+	p := writeTestFile(t, "graveyard.toml", content)
+	entries, err := parseGraveyard(p)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].Package != "github.com/example/local-lib" {
+		t.Errorf("expected 'github.com/example/local-lib', got '%s'", entries[0].Package)
+	}
+	if entries[0].Path != "/tmp/local-lib" {
+		t.Errorf("expected path '/tmp/local-lib', got '%s'", entries[0].Path)
+	}
+}
+
+func TestParseGraveyardPathWithoutPackage(t *testing.T) {
+	content := `
+[[embalm]]
+path = "/some/path"
+`
+	p := writeTestFile(t, "graveyard.toml", content)
+	_, err := parseGraveyard(p)
+	if err == nil {
+		t.Fatal("expected error when path is set but package is missing")
+	}
+}
+
 func writeTestFile(t *testing.T, name, content string) string {
 	t.Helper()
 	dir := t.TempDir()

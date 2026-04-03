@@ -3,6 +3,7 @@ package main
 // EmbalmEntry represents a package to be mummified, parsed from graveyard.toml.
 type EmbalmEntry struct {
 	Package         string `toml:"package"`
+	Path            string `toml:"path"` // Local filesystem path — adds a replace directive in go.mod
 	SkipUnwrappable bool   `toml:"skip_unwrappable"`
 }
 

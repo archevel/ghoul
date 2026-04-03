@@ -11,3 +11,8 @@
 # [[embalm]]
 # package = "image/color"
 # skip_unwrappable = true
+#
+# Use 'path' for local packages not yet published:
+# [[embalm]]
+# package = "github.com/my/local-lib"
+# path = "/home/me/code/local-lib"

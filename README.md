@@ -50,6 +50,10 @@ skip_unwrappable = true   # skip functions with channel/map types
 
 [[embalm]]
 package = "github.com/foo/bar"
+
+[[embalm]]
+package = "github.com/my/local-lib"
+path = "/home/me/code/local-lib"   # use a local directory (adds a replace directive)
 ```
 
 ### Undertaker flags

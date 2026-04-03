@@ -134,8 +134,16 @@ func build(opts BuildOptions) error {
 		}
 	}
 
+	// Collect entries with local paths for replace directives
+	var localEntries []EmbalmEntry
+	for _, entry := range entries {
+		if entry.Path != "" {
+			localEntries = append(localEntries, entry)
+		}
+	}
+
 	// Generate go.mod
-	if err := generateGoMod(buildDir, moduleName, localGhoulPath); err != nil {
+	if err := generateGoMod(buildDir, moduleName, localGhoulPath, localEntries); err != nil {
 		return err
 	}
 
@@ -146,9 +154,9 @@ func build(opts BuildOptions) error {
 		}
 	}
 
-	// go get third-party packages
+	// go get third-party packages (skip stdlib and local-path entries)
 	for _, entry := range entries {
-		if isStdlib(entry.Package) {
+		if isStdlib(entry.Package) || entry.Path != "" {
 			continue
 		}
 		if opts.Verbose {
@@ -252,10 +260,15 @@ func build(opts BuildOptions) error {
 	return nil
 }
 
-func generateGoMod(buildDir, moduleName, ghoulModulePath string) error {
+func generateGoMod(buildDir, moduleName, ghoulModulePath string, localEntries []EmbalmEntry) error {
 	content := fmt.Sprintf("module %s\n\ngo 1.25\n", moduleName)
 	if ghoulModulePath != "" {
 		content += fmt.Sprintf("\nreplace github.com/archevel/ghoul => %s\n", ghoulModulePath)
+	}
+	for _, e := range localEntries {
+		if e.Path != "" {
+			content += fmt.Sprintf("\nreplace %s => %s\n", e.Package, e.Path)
+		}
 	}
 	return os.WriteFile(filepath.Join(buildDir, "go.mod"), []byte(content), 0644)
 }

@@ -54,7 +54,7 @@ func TestIsStdlib(t *testing.T) {
 
 func TestGenerateGoMod(t *testing.T) {
 	dir := t.TempDir()
-	err := generateGoMod(dir, "ghoul-build/my-ghoul", "")
+	err := generateGoMod(dir, "ghoul-build/my-ghoul", "", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestGenerateGoMod(t *testing.T) {
 
 func TestGenerateGoModWithReplace(t *testing.T) {
 	dir := t.TempDir()
-	err := generateGoMod(dir, "ghoul-build/my-ghoul", "/home/user/ghoul")
+	err := generateGoMod(dir, "ghoul-build/my-ghoul", "/home/user/ghoul", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -94,8 +94,49 @@ func TestGenerateGoModWithReplace(t *testing.T) {
 	}
 }
 
+func TestGenerateGoModWithLocalPackageReplaces(t *testing.T) {
+	dir := t.TempDir()
+	localEntries := []EmbalmEntry{
+		{Package: "github.com/foo/bar", Path: "/home/user/bar"},
+		{Package: "github.com/baz/qux", Path: "/opt/qux"},
+	}
+	err := generateGoMod(dir, "ghoul-build/test", "", localEntries)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, "go.mod"))
+	content := string(data)
+
+	if !strings.Contains(content, "replace github.com/foo/bar => /home/user/bar") {
+		t.Errorf("expected replace for foo/bar, got:\n%s", content)
+	}
+	if !strings.Contains(content, "replace github.com/baz/qux => /opt/qux") {
+		t.Errorf("expected replace for baz/qux, got:\n%s", content)
+	}
+}
+
+func TestGenerateGoModNoLocalPackages(t *testing.T) {
+	dir := t.TempDir()
+	err := generateGoMod(dir, "ghoul-build/test", "", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, _ := os.ReadFile(filepath.Join(dir, "go.mod"))
+	content := string(data)
+
+	// No replace directives for packages
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "replace") {
+			t.Errorf("unexpected replace directive: %s", line)
+		}
+	}
+}
+
 func TestGenerateGoModInvalidDir(t *testing.T) {
-	err := generateGoMod("/nonexistent/dir/that/does/not/exist", "mod", "")
+	err := generateGoMod("/nonexistent/dir/that/does/not/exist", "mod", "", nil)
 	if err == nil {
 		t.Fatal("expected error writing to nonexistent directory")
 	}
@@ -608,6 +649,59 @@ package = "github.com/baz/qux"
 	}
 	if !hasBaz {
 		t.Errorf("expected go get github.com/baz/qux, commands: %v", cmds)
+	}
+}
+
+func TestBuildSkipsGoGetForLocalPath(t *testing.T) {
+	content := `
+[[embalm]]
+package = "github.com/foo/bar"
+path = "/some/local/path"
+`
+	graveyardPath := writeTestFile(t, "graveyard.toml", content)
+	dir := t.TempDir()
+
+	origRunner := cmdRunner
+	defer func() { cmdRunner = origRunner }()
+	var cmds []string
+	cmdRunner = func(dir, name string, args ...string) error {
+		cmds = append(cmds, name+" "+strings.Join(args, " "))
+		return nil
+	}
+
+	origBI := readBuildInfo
+	defer func() { readBuildInfo = origBI }()
+	readBuildInfo = func() (*debug.BuildInfo, bool) {
+		return &debug.BuildInfo{
+			Deps: []*debug.Module{
+				{Path: "github.com/archevel/ghoul", Version: "v0.1.0"},
+			},
+		}, true
+	}
+
+	err := build(BuildOptions{
+		BinaryName:    "test-ghoul",
+		GraveyardFile: graveyardPath,
+		WorkDir:       filepath.Join(dir, "build"),
+		Keep:          true,
+		NoStdlib:      true,
+		NoPrelude:     true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should NOT have go get for the local package
+	for _, c := range cmds {
+		if strings.Contains(c, "go get github.com/foo/bar") {
+			t.Errorf("should not go get local-path package, but found: %s", c)
+		}
+	}
+
+	// go.mod should have replace directive for the local package
+	data, _ := os.ReadFile(filepath.Join(dir, "build", "go.mod"))
+	if !strings.Contains(string(data), "replace github.com/foo/bar => /some/local/path") {
+		t.Errorf("expected replace directive in go.mod for local package, got:\n%s", string(data))
 	}
 }
 
