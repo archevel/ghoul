@@ -44,6 +44,58 @@ func TestPreludeWhen(t *testing.T) {
 	}
 }
 
+func TestPreludeAnd(t *testing.T) {
+	cases := []struct{ code, desc string; expected *e.Node }{
+		{"(and)", "(and) should be #t", e.BoolNode(true)},
+		{"(and #t)", "(and #t) should be #t", e.BoolNode(true)},
+		{"(and #t #t)", "(and #t #t) should be #t", e.BoolNode(true)},
+		{"(and #t #f)", "(and #t #f) should be #f", e.BoolNode(false)},
+		{"(and #t #t #t)", "(and #t #t #t) should be #t", e.BoolNode(true)},
+		{"(and #t #f #t)", "(and #t #f #t) should be #f", e.BoolNode(false)},
+		{"(and 42)", "(and 42) should be 42", e.IntNode(42)},
+	}
+	for _, tc := range cases {
+		g := New()
+		res, err := g.Process(strings.NewReader(tc.code))
+		if err != nil { t.Fatalf("%s: %v", tc.desc, err) }
+		if !res.Equiv(tc.expected) { t.Errorf("%s, got %s", tc.desc, res.Repr()) }
+	}
+}
+
+func TestPreludeAndShortCircuit(t *testing.T) {
+	g := New()
+	res, err := g.Process(strings.NewReader("(and #f (/ 1 0))"))
+	if err != nil { t.Fatalf("expected short-circuit, got error: %v", err) }
+	if !res.Equiv(e.BoolNode(false)) { t.Error("(and #f (/ 1 0)) should be #f") }
+}
+
+func TestPreludeOr(t *testing.T) {
+	cases := []struct{ code, desc string; expected *e.Node }{
+		{"(or)", "(or) should be #f", e.BoolNode(false)},
+		{"(or #f)", "(or #f) should be #f", e.BoolNode(false)},
+		{"(or #t #t)", "(or #t #t) should be #t", e.BoolNode(true)},
+		{"(or #t #f)", "(or #t #f) should be #t", e.BoolNode(true)},
+		{"(or #f #t)", "(or #f #t) should be #t", e.BoolNode(true)},
+		{"(or #f #f)", "(or #f #f) should be #f", e.BoolNode(false)},
+		{"(or #f #f #t)", "(or #f #f #t) should be #t", e.BoolNode(true)},
+		{"(or #f #f #f)", "(or #f #f #f) should be #f", e.BoolNode(false)},
+		{"(or #f 42)", "(or #f 42) should be 42", e.IntNode(42)},
+	}
+	for _, tc := range cases {
+		g := New()
+		res, err := g.Process(strings.NewReader(tc.code))
+		if err != nil { t.Fatalf("%s: %v", tc.desc, err) }
+		if !res.Equiv(tc.expected) { t.Errorf("%s, got %s", tc.desc, res.Repr()) }
+	}
+}
+
+func TestPreludeOrShortCircuit(t *testing.T) {
+	g := New()
+	res, err := g.Process(strings.NewReader("(or #t (/ 1 0))"))
+	if err != nil { t.Fatalf("expected short-circuit, got error: %v", err) }
+	if !res.Equiv(e.BoolNode(true)) { t.Error("(or #t (/ 1 0)) should be #t") }
+}
+
 func TestBareSkipsPrelude(t *testing.T) {
 	g := NewBare()
 	_, err := g.Process(strings.NewReader("(let ((x 1)) x)"))

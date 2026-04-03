@@ -101,6 +101,25 @@
     (define clause-code (build-clauses clauses))
     (list (list 'lambda (list 'stx__) clause-code) stx-expr)))
 
+;; and -- short-circuit logical conjunction
+;; (and) => #t, (and x) => x, (and x rest ...) => (if x (and rest ...) #f)
+(define-syntax and (syntax-rules ()
+  ((and) #t)
+  ((and x) x)
+  ((and x rest ...)
+   (cond (x (and rest ...))
+         (else #f)))))
+
+;; or -- short-circuit logical disjunction
+;; (or) => #f, (or x) => x, (or x rest ...) => (let ((t x)) (if t t (or rest ...)))
+(define-syntax or (syntax-rules ()
+  ((or) #f)
+  ((or x) x)
+  ((or x rest ...)
+   (let ((or-temp x))
+     (cond (or-temp or-temp)
+           (else (or rest ...)))))))
+
 ;; when -- conditional execution
 ;; (when test body ...)
 (define-syntax when (syntax-rules ()

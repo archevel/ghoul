@@ -8,18 +8,6 @@ import (
 )
 
 func registerLogic(env *ev.Environment) {
-	env.Register("and", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
-		fst := args[0]
-		if fst.Kind != e.BooleanNode {
-			return nil, fmt.Errorf("and: expected boolean as first argument, got %s", e.NodeTypeName(fst))
-		}
-		snd := args[1]
-		if snd.Kind != e.BooleanNode {
-			return nil, fmt.Errorf("and: expected boolean as second argument, got %s", e.NodeTypeName(snd))
-		}
-		return e.BoolNode(fst.BoolVal && snd.BoolVal), nil
-	})
-
 	env.Register("not", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
 		val := args[0]
 		if val.Kind != e.BooleanNode {
@@ -28,15 +16,4 @@ func registerLogic(env *ev.Environment) {
 		return e.BoolNode(!val.BoolVal), nil
 	})
 
-	env.Register("or", func(args []*e.Node, evaluator *ev.Evaluator) (*e.Node, error) {
-		fst := args[0]
-		if fst.Kind != e.BooleanNode {
-			return nil, fmt.Errorf("or: expected boolean as first argument, got %s", e.NodeTypeName(fst))
-		}
-		snd := args[1]
-		if snd.Kind != e.BooleanNode {
-			return nil, fmt.Errorf("or: expected boolean as second argument, got %s", e.NodeTypeName(snd))
-		}
-		return e.BoolNode(fst.BoolVal || snd.BoolVal), nil
-	})
 }
