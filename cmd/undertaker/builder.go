@@ -23,16 +23,24 @@ type BuildOptions struct {
 	NoStdlib      bool
 }
 
+// cmdRunner executes shell commands. The default runs real commands;
+// tests can replace it to capture invocations without side effects.
+var cmdRunner func(dir, name string, args ...string) error = defaultRunCmd
+
 // safeName converts a Go import path to a filesystem-safe name.
 func safeName(importPath string) string {
 	return strings.ReplaceAll(importPath, "/", "_")
 }
 
+// readBuildInfo is the function used to read Go build info. Tests can
+// replace it to simulate different build environments.
+var readBuildInfo = debug.ReadBuildInfo
+
 // ghoulModuleVersion returns the version of the ghoul module that the
 // undertaker binary was built with. When running via `go run` (development),
 // this returns "(devel)" and we need a replace directive instead.
 func ghoulModuleVersion() (version string, isDevel bool) {
-	info, ok := debug.ReadBuildInfo()
+	info, ok := readBuildInfo()
 	if !ok {
 		return "latest", false
 	}
@@ -257,6 +265,10 @@ func goGet(dir, pkg string) error {
 }
 
 func runCmd(dir string, name string, args ...string) error {
+	return cmdRunner(dir, name, args...)
+}
+
+func defaultRunCmd(dir string, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
