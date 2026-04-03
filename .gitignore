@@ -1,4 +1,3 @@
-exhumer/parser.go
 *.output
 undertaker
 .ghoul/
