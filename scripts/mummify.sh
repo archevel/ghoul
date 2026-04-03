@@ -39,10 +39,17 @@ while IFS= read -r line || [ -n "$line" ]; do
     dir="$OUTPUT_DIR/${safe}_mummy"
 
     # Resolve import path to source directory via go list
-    pkg_path=$(cd "$PROJECT_DIR" && go list -json "$pkg" 2>/dev/null | grep '"Dir"' | head -1 | sed 's/.*: "//;s/".*//')
+    pkg_path=$(cd "$PROJECT_DIR" && go list -json "$pkg" 2>/dev/null | grep '"Dir"' | head -1 | sed 's/.*: "//;s/".*//') || true
+
+    # If not resolved, try go get to add the dependency (handles replace directives and remote packages)
+    if [ -z "$pkg_path" ] || [ ! -d "$pkg_path" ]; then
+        if (cd "$PROJECT_DIR" && go get "$pkg" 2>/dev/null); then
+            pkg_path=$(cd "$PROJECT_DIR" && go list -json "$pkg" 2>/dev/null | grep '"Dir"' | head -1 | sed 's/.*: "//;s/".*//') || true
+        fi
+    fi
 
     if [ -z "$pkg_path" ] || [ ! -d "$pkg_path" ]; then
-        echo "  ⚠ $pkg: could not resolve (is it in go.mod?)"
+        echo "  ⚠ $pkg: could not resolve (is it in go.mod or has a replace directive?)"
         failed+=("$pkg")
         continue
     fi

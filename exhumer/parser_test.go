@@ -439,3 +439,33 @@ func TestInnerNodesHavePositions(t *testing.T) {
 		t.Errorf("Expected position %q, was %q", expectedPos, actualPos)
 	}
 }
+
+func TestParseTestFileLevelGhl(t *testing.T) {
+	// Test parsing the test_file_level.ghl file which was failing
+	f, err := os.Open("test_file_level.ghl")
+	if err != nil {
+		t.Fatalf("failed to open test_file_level.ghl: %v", err)
+	}
+	defer f.Close()
+
+	filename := "test_file_level.ghl"
+	res, parsed := ParseWithDebug(f, &filename)
+	if res != 0 {
+		t.Errorf("Failed to parse test_file_level.ghl, parse result: %d", res)
+	}
+
+	// Also test via ReadFile + StringReader
+	content, err := os.ReadFile("test_file_level.ghl")
+	if err != nil {
+		t.Fatalf("failed to read test_file_level.ghl: %v", err)
+	}
+	res2, _ := Parse(strings.NewReader(string(content)))
+	if res2 != 0 {
+		t.Errorf("Failed to parse test_file_level.ghl via string reader, parse result: %d", res2)
+	}
+
+	// Sanity check: should have parsed some expressions
+	if parsed.Expressions == nil || parsed.Expressions == e.Nil {
+		t.Error("Expected non-empty parse result")
+	}
+}

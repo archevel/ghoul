@@ -102,3 +102,10 @@ func ParseWithFilename(r io.Reader, filename *string) (int, *ParsedExpressions) 
 	res := yyParse(lex)
 	return res, &ParsedExpressions{Expressions: lex.result}
 }
+
+func ParseWithDebug(r io.Reader, filename *string) (int, *ParsedExpressions) {
+	lex := NewDebugLexer(r)
+	lex.Filename = filename
+	res := yyParse(lex)
+	return res, &ParsedExpressions{Expressions: lex.result}
+}

@@ -34,3 +34,24 @@ func TestAndTypeError(t *testing.T) {
 	_, err := evalWithStdlib("(and 1 #t)")
 	if err == nil { t.Fatal("expected type error") }
 }
+
+func TestOr(t *testing.T) {
+	r1, _ := evalWithStdlib("(or #t #t)")
+	if !r1.Equiv(e.BoolNode(true)) { t.Error("(or #t #t) should be #t") }
+	r2, _ := evalWithStdlib("(or #t #f)")
+	if !r2.Equiv(e.BoolNode(true)) { t.Error("(or #t #f) should be #t") }
+	r3, _ := evalWithStdlib("(or #f #t)")
+	if !r3.Equiv(e.BoolNode(true)) { t.Error("(or #f #t) should be #t") }
+	r4, _ := evalWithStdlib("(or #f #f)")
+	if !r4.Equiv(e.BoolNode(false)) { t.Error("(or #f #f) should be #f") }
+}
+
+func TestOrFirstArgTypeError(t *testing.T) {
+	_, err := evalWithStdlib("(or 1 #t)")
+	if err == nil { t.Fatal("expected type error") }
+}
+
+func TestOrSecondArgTypeError(t *testing.T) {
+	_, err := evalWithStdlib("(or #t 42)")
+	if err == nil { t.Fatal("expected type error") }
+}
