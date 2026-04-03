@@ -652,7 +652,7 @@ package = "github.com/baz/qux"
 	}
 }
 
-func TestBuildSkipsGoGetForLocalPath(t *testing.T) {
+func TestBuildLocalPathHasReplaceAndGoGet(t *testing.T) {
 	content := `
 [[embalm]]
 package = "github.com/foo/bar"
@@ -691,11 +691,15 @@ path = "/some/local/path"
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Should NOT have go get for the local package
+	// Should have go get for the local package (replace resolves it to local path)
+	hasGoGet := false
 	for _, c := range cmds {
 		if strings.Contains(c, "go get github.com/foo/bar") {
-			t.Errorf("should not go get local-path package, but found: %s", c)
+			hasGoGet = true
 		}
+	}
+	if !hasGoGet {
+		t.Errorf("expected go get for local-path package, commands: %v", cmds)
 	}
 
 	// go.mod should have replace directive for the local package

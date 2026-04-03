@@ -60,26 +60,33 @@ func ghoulModuleVersion() (version string, isDevel bool) {
 }
 
 // findLocalGhoulRoot tries to find the local ghoul module root by looking
-// for go.mod with "module github.com/archevel/ghoul" starting from the
-// undertaker binary's location.
+// for go.mod with "module github.com/archevel/ghoul". It checks both
+// the current working directory and the executable's directory.
 func findLocalGhoulRoot() (string, error) {
-	// Try to find it relative to the working directory
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
+	// Collect candidate starting directories
+	var candidates []string
+	if cwd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, cwd)
 	}
-	for {
-		modFile := filepath.Join(dir, "go.mod")
-		if data, err := os.ReadFile(modFile); err == nil {
-			if strings.Contains(string(data), "module github.com/archevel/ghoul") {
-				return dir, nil
+	if exe, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Dir(exe))
+	}
+
+	for _, start := range candidates {
+		dir := start
+		for {
+			modFile := filepath.Join(dir, "go.mod")
+			if data, err := os.ReadFile(modFile); err == nil {
+				if strings.Contains(string(data), "module github.com/archevel/ghoul") {
+					return dir, nil
+				}
 			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
 		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
 	}
 	return "", fmt.Errorf("could not find local ghoul module root")
 }
@@ -154,9 +161,9 @@ func build(opts BuildOptions) error {
 		}
 	}
 
-	// go get third-party packages (skip stdlib and local-path entries)
+	// go get third-party packages (skip stdlib)
 	for _, entry := range entries {
-		if isStdlib(entry.Package) || entry.Path != "" {
+		if isStdlib(entry.Package) {
 			continue
 		}
 		if opts.Verbose {
