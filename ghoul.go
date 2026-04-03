@@ -18,6 +18,11 @@ import (
 //go:embed prelude/prelude.ghl
 var preludeSource string
 
+// PreludeSource returns the standard prelude source code.
+func PreludeSource() string {
+	return preludeSource
+}
+
 type Ghoul interface {
 	Process(exprReader io.Reader) (*e.Node, error)
 	ProcessFile(filename string) (*e.Node, error)
@@ -32,6 +37,11 @@ func New() Ghoul {
 // NewBare creates a Ghoul instance without the prelude.
 func NewBare() Ghoul {
 	return newGhoul(engraving.StandardLogger, false)
+}
+
+// NewBareWithLogger creates a Ghoul instance without the prelude, using the given logger.
+func NewBareWithLogger(logger engraving.Logger) Ghoul {
+	return newGhoul(logger, false)
 }
 
 func NewLoggingGhoul(logger engraving.Logger) Ghoul {

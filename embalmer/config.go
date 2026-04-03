@@ -7,14 +7,18 @@ import (
 )
 
 type MummificationConfig struct {
-	PackagePath     string
+	PackagePath     string // Filesystem path to the package directory
+	ImportPath      string // Go import path (e.g. "math", "github.com/foo/bar") — used instead of PackagePath when set
+	WorkDir         string // Directory context for resolving ImportPath (e.g. a temp module dir)
 	OutputDir       string
 	Verbose         bool
 	SkipUnwrappable bool
 }
 
 type Config struct {
-	PackagePath     string
+	PackagePath     string // Filesystem path to the package directory
+	ImportPath      string // Go import path — used instead of PackagePath when set
+	WorkDir         string // Directory context for resolving ImportPath
 	OutputFile      string
 	PackageName     string
 	Verbose         bool
@@ -22,15 +26,25 @@ type Config struct {
 }
 
 func Mummify(config *MummificationConfig) error {
-	if _, err := os.Stat(config.PackagePath); os.IsNotExist(err) {
-		return fmt.Errorf("package path does not exist: %s", config.PackagePath)
+	var packageName string
+
+	if config.ImportPath != "" {
+		// Import-path mode: derive package name from the import path
+		packageName = filepath.Base(config.ImportPath)
+	} else {
+		if _, err := os.Stat(config.PackagePath); os.IsNotExist(err) {
+			return fmt.Errorf("package path does not exist: %s", config.PackagePath)
+		}
+		packageName = filepath.Base(config.PackagePath)
 	}
 
-	packageName := filepath.Base(config.PackagePath)
 	mummyName := packageName + "_mummy"
 
 	outputDir := config.OutputDir
 	if outputDir == "" {
+		if config.ImportPath != "" {
+			return fmt.Errorf("OutputDir is required when using ImportPath")
+		}
 		outputDir = filepath.Join(filepath.Dir(config.PackagePath), mummyName)
 	}
 
@@ -43,6 +57,8 @@ func Mummify(config *MummificationConfig) error {
 
 	legacyConfig := &Config{
 		PackagePath:     config.PackagePath,
+		ImportPath:      config.ImportPath,
+		WorkDir:         config.WorkDir,
 		OutputFile:      outputFile,
 		PackageName:     mummyName,
 		Verbose:         config.Verbose,

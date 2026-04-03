@@ -67,24 +67,40 @@ func NewAnalyzer(config *Config) *Analyzer {
 
 // AnalyzePackage analyzes the configured Go package and returns package information
 func (a *Analyzer) AnalyzePackage() (*PackageInfo, error) {
-	if a.config.Verbose {
-		fmt.Printf("Loading package from: %s\n", a.config.PackagePath)
+	var loadDir, loadPattern string
+
+	if a.config.ImportPath != "" {
+		// Import-path mode: resolve via Go import path
+		loadPattern = a.config.ImportPath
+		loadDir = a.config.WorkDir // may be empty, which means current dir
+		if a.config.Verbose {
+			fmt.Printf("Loading package by import path: %s\n", a.config.ImportPath)
+		}
+	} else {
+		// Directory mode: existing behavior
+		loadPattern = "."
+		loadDir = a.config.PackagePath
+		if a.config.Verbose {
+			fmt.Printf("Loading package from: %s\n", a.config.PackagePath)
+		}
 	}
 
 	// Use go/packages to load the package with full type information
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedImports |
 			packages.NeedTypes | packages.NeedSyntax | packages.NeedTypesInfo,
-		Dir: a.config.PackagePath,  // Set working directory to package path
+		Dir: loadDir,
 	}
 
-	// Load the package as "." to work relative to the directory
-	pkgs, err := packages.Load(cfg, ".")
+	pkgs, err := packages.Load(cfg, loadPattern)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load package: %w", err)
 	}
 
 	if len(pkgs) == 0 {
+		if a.config.ImportPath != "" {
+			return nil, fmt.Errorf("no packages found for import path: %s", a.config.ImportPath)
+		}
 		return nil, fmt.Errorf("no packages found at path: %s", a.config.PackagePath)
 	}
 
