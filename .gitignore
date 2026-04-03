@@ -1,5 +1,4 @@
 exhumer/parser.go
 *.output
-mummies/
-cmd/ghoul/mummies.go
-ghoul
+undertaker
+.ghoul/
