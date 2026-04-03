@@ -1,0 +1,13 @@
+# graveyard.toml — Go packages to include in the ghoul binary.
+#
+# The default stdlib packages (math, strings, fmt, os, net/http, etc.)
+# are included automatically. Add extra packages here.
+#
+# Build: undertaker prepare ghoul graveyard.toml
+#
+# [[embalm]]
+# package = "github.com/my/cool-lib"
+#
+# [[embalm]]
+# package = "image/color"
+# skip_unwrappable = true

@@ -13,29 +13,89 @@ Ghoul is a lisp interpreter that aims to be simple to understand while being a b
 - Comprehensive standard library implementation written in Ghoul - it should rely on Golang implementations as much as possible.
 - Special handling of datastructures in the interpreter - special syntax for e.g. maps should be handled by macromancy!
 
-## Building
+## Building a Ghoul
 
 Prerequisites: Go 1.25+.
 
-```bash
-# Generate parser + stdlib mummies + stdlib.go
-go generate ./...
+Ghoul binaries are built with the **undertaker** tool. The undertaker mummifies Go packages (wrapping them for use from Ghoul) and produces a self-contained binary.
 
-# Build the ghoul binary
-go build -o ghoul ./cmd/ghoul/
+```bash
+# Install the undertaker
+go install github.com/archevel/ghoul/cmd/undertaker@latest
+
+# Create a graveyard.toml listing the Go packages you want
+cat > graveyard.toml <<'EOF'
+[[embalm]]
+package = "github.com/my/cool-lib"
+EOF
+
+# Build a custom ghoul binary (stdlib packages are included by default)
+undertaker prepare my-ghoul graveyard.toml
 
 # Run the REPL
-./ghoul
+./my-ghoul
 
 # Run a file
+./my-ghoul examples/stdlib.ghl
+```
+
+The default stdlib packages (math, strings, fmt, os, net/http, etc.) are included automatically. Use `--no-stdlib` to include only the packages listed in your `graveyard.toml`.
+
+### graveyard.toml format
+
+```toml
+[[embalm]]
+package = "net/http"
+skip_unwrappable = true   # skip functions with channel/map types
+
+[[embalm]]
+package = "github.com/foo/bar"
+```
+
+### Undertaker flags
+
+| Flag | Description |
+|------|-------------|
+| `--no-stdlib` | Don't auto-include default stdlib mummies |
+| `--no-prelude` | Omit the standard prelude (let, let*, when, unless, syntax-case) |
+| `--verbose` | Verbose output during build |
+| `--keep` | Preserve the `.ghoul/build/` directory after build |
+| `--work-dir` | Override the build directory |
+
+### Running the examples
+
+To run the examples that use Go standard library functions:
+
+```bash
+# Build a ghoul with default stdlib (from the repo root)
+undertaker prepare ghoul graveyard.toml
+
+# Pure Ghoul examples (no mummies needed)
+./ghoul examples/basics.ghl
+./ghoul examples/macros.ghl
+./ghoul examples/modules.ghl
+./ghoul examples/tail_calls.ghl
+./ghoul examples/pattern_matching_macro.ghl
+
+# Examples that require stdlib mummies
+./ghoul examples/stdlib.ghl
 ./ghoul examples/hello_server.ghoul
 ```
 
-The `go generate` step runs two generators:
-1. `goyacc` to generate the parser from `exhumer/parser.y`
-2. `scripts/mummify.sh` to mummify Go packages listed in `sarcophagus.txt`
+An empty `graveyard.toml` works fine — the default stdlib packages are included automatically.
 
-To add a Go package to the stdlib, add its import path to `sarcophagus.txt` and re-run `go generate ./...`. Third-party packages work too — just `go get` them first.
+### Development
+
+```bash
+# Generate the parser (only needed after changing exhumer/parser.y)
+go generate ./exhumer/
+
+# Run all tests
+go test ./...
+
+# Build the undertaker from source (for development)
+go build -o undertaker ./cmd/undertaker
+```
 
 ## Testing
 
@@ -49,7 +109,7 @@ go test ./...
 
 ## Package Structure
 
-The ghoul feeds in three phases: **exhume** (parse) → **reanimate** (expand macros + translate to AST) → **consume** (evaluate).
+The ghoul feeds in three phases: **exhume** (parse) -> **reanimate** (expand macros + translate to AST) -> **consume** (evaluate).
 
 All packages follow an undead/occult naming theme:
 
@@ -63,6 +123,7 @@ All packages follow an undead/occult naming theme:
 | `macromancy` | The dark arts — macro pattern matching and hygienic expansion |
 | `tome` | The book of spells — standard library functions |
 | `engraving` | Carved records — logging |
-| `sarcophagus` | Registry (sarcophagus) where mummies are entombed |
+| `sarcophagus` | Registry where mummies are entombed |
 | `embalmer` | Mummifies Go packages, generating FFI wrappers for Ghoul |
+| `undertaker` | Build tool — assembles a ghoul binary from a `graveyard.toml` |
 | `prelude` | Standard macros: `let`, `let*`, `when`, `unless`, `syntax-case` |

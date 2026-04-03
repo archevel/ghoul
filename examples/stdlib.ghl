@@ -5,7 +5,7 @@
 ;; prefix is the full path; use 'as' for a shorter alias.
 ;;
 ;; Run: ghoul examples/stdlib.ghl
-;; (requires: go generate ./cmd/ghoul/ && go build ./cmd/ghoul/)
+;; (build a ghoul first: undertaker prepare ghoul graveyard.toml)
 
 ;; --- Math ---
 

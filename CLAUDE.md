@@ -15,8 +15,8 @@ Everything is `*bones.Node`. There is no `Expr` interface, no separate `Pair`/`L
 The codebase is organized into thematically named packages:
 
 - **`ghoul.go`**: The ghoul itself — the public API that orchestrates the three phases. Creates the exhumer, reanimator, and consumer with a shared mark counter and environment. Injects a `ModuleLoader` into the reanimator to handle `require` during expansion. Returns `*bones.Node`.
-- **`cmd/ghoul/main.go`**: CLI interface supporting both REPL mode and file execution.
-- **`cmd/embalmer/main.go`**: CLI for the embalmer tool — mummifies Go packages for Ghoul use.
+- **`cmd/undertaker/`**: The build tool — parses `graveyard.toml`, mummifies Go packages, generates a main.go and sarcophagus.go, and produces a self-contained ghoul binary. Usage: `undertaker prepare <binary-name> <graveyard.toml>`.
+- **`cmd/embalmer/main.go`**: CLI for the embalmer tool — mummifies a single Go package for Ghoul use.
 - **`bones/`**: The unified type system — `node.go` defines `*Node` with all node kinds, and `location.go` defines `CodeLocation`, `SourcePosition`, and `MacroExpansionLocation`. Foundation package with no ghoul imports.
 - **`exhumer/`**: Digs up structure from raw text — lexer and yacc-based parser for Lisp syntax. Produces `*bones.Node` trees (ListNode with Children) with `SourcePosition` set on parsed nodes.
 - **`reanimator/`**: Brings macromancy macros to life — walks the `*Node` tree, processes `define-syntax` forms to register macros, expands macro calls, handles `require` (loading mummies and Ghoul modules during expansion so macros from required modules are available), then translates the fully-expanded tree into semantic nodes (`CallNode`, `LambdaNode`, `DefineNode`, `CondNode`, `BeginNode`, `SetNode`). Uses a sub-evaluator (via `consume`) for general transformer bodies.
@@ -35,13 +35,22 @@ This project requires:
 
 ## Development Commands
 
-### Building
+### Building a ghoul binary
 ```bash
-# Generate parser + stdlib mummies
-go generate ./...
+# Install the undertaker (or build from source: go build -o undertaker ./cmd/undertaker)
+go install github.com/archevel/ghoul/cmd/undertaker@latest
 
-# Build all packages
-go build ./...
+# Build a ghoul with default stdlib (use an empty graveyard.toml or one with extra packages)
+undertaker prepare ghoul graveyard.toml
+
+# Build with extra packages
+undertaker prepare my-ghoul graveyard.toml
+```
+
+### Generating the parser
+```bash
+# Only needed after changing exhumer/parser.y
+go generate ./exhumer/
 ```
 
 ### Testing
@@ -62,9 +71,9 @@ go test -v ./consume
 ./ghoul
 
 # Execute a Ghoul file
-./ghoul filename.ghoul
+./ghoul examples/stdlib.ghl
 
-# Possess a Go package (generate mummy)
+# Mummify a single Go package (standalone embalmer CLI)
 embalmer mummify ./path/to/package
 embalmer -skip-unwrappable mummify ./path/to/package
 ```
