@@ -187,6 +187,111 @@ func (vm *VM) run(ctx context.Context, code *CodeObject) (*bones.Node, error) {
 			closure := makeClosure(codeObj, frame.env)
 			vm.push(closure)
 
+		case OP_INT_ADD:
+			idx := readUint16(frame.code.Code, frame.ip)
+			frame.ip += 2
+			b := vm.pop()
+			a := vm.pop()
+			if a.Kind == bones.IntegerNode && b.Kind == bones.IntegerNode {
+				vm.push(bones.IntNode(a.IntVal + b.IntVal))
+			} else {
+				result, err := vm.callArithFallback(frame, idx, a, b)
+				if err != nil {
+					return nil, err
+				}
+				vm.push(result)
+			}
+
+		case OP_INT_SUB:
+			idx := readUint16(frame.code.Code, frame.ip)
+			frame.ip += 2
+			b := vm.pop()
+			a := vm.pop()
+			if a.Kind == bones.IntegerNode && b.Kind == bones.IntegerNode {
+				vm.push(bones.IntNode(a.IntVal - b.IntVal))
+			} else {
+				result, err := vm.callArithFallback(frame, idx, a, b)
+				if err != nil {
+					return nil, err
+				}
+				vm.push(result)
+			}
+
+		case OP_INT_MUL:
+			idx := readUint16(frame.code.Code, frame.ip)
+			frame.ip += 2
+			b := vm.pop()
+			a := vm.pop()
+			if a.Kind == bones.IntegerNode && b.Kind == bones.IntegerNode {
+				vm.push(bones.IntNode(a.IntVal * b.IntVal))
+			} else {
+				result, err := vm.callArithFallback(frame, idx, a, b)
+				if err != nil {
+					return nil, err
+				}
+				vm.push(result)
+			}
+
+		case OP_INT_LT:
+			idx := readUint16(frame.code.Code, frame.ip)
+			frame.ip += 2
+			b := vm.pop()
+			a := vm.pop()
+			if a.Kind == bones.IntegerNode && b.Kind == bones.IntegerNode {
+				vm.push(bones.BoolNode(a.IntVal < b.IntVal))
+			} else {
+				result, err := vm.callArithFallback(frame, idx, a, b)
+				if err != nil {
+					return nil, err
+				}
+				vm.push(result)
+			}
+
+		case OP_INT_LE:
+			idx := readUint16(frame.code.Code, frame.ip)
+			frame.ip += 2
+			b := vm.pop()
+			a := vm.pop()
+			if a.Kind == bones.IntegerNode && b.Kind == bones.IntegerNode {
+				vm.push(bones.BoolNode(a.IntVal <= b.IntVal))
+			} else {
+				result, err := vm.callArithFallback(frame, idx, a, b)
+				if err != nil {
+					return nil, err
+				}
+				vm.push(result)
+			}
+
+		case OP_INT_GT:
+			idx := readUint16(frame.code.Code, frame.ip)
+			frame.ip += 2
+			b := vm.pop()
+			a := vm.pop()
+			if a.Kind == bones.IntegerNode && b.Kind == bones.IntegerNode {
+				vm.push(bones.BoolNode(a.IntVal > b.IntVal))
+			} else {
+				result, err := vm.callArithFallback(frame, idx, a, b)
+				if err != nil {
+					return nil, err
+				}
+				vm.push(result)
+			}
+
+		case OP_INT_GE:
+			idx := readUint16(frame.code.Code, frame.ip)
+			frame.ip += 2
+			b := vm.pop()
+			a := vm.pop()
+			if a.Kind == bones.IntegerNode && b.Kind == bones.IntegerNode {
+				vm.push(bones.BoolNode(a.IntVal >= b.IntVal))
+			} else {
+				result, err := vm.callArithFallback(frame, idx, a, b)
+				if err != nil {
+					return nil, err
+				}
+				vm.push(result)
+			}
+
 		default:
 			return nil, fmt.Errorf("VM: unknown opcode %d", op)
 		}
@@ -289,6 +394,26 @@ func (vm *VM) wrapError(err error, frame *callFrame) error {
 		return EvaluationError{msg: err.Error(), Loc: loc}
 	}
 	return EvaluationError{msg: err.Error()}
+}
+
+// callArithFallback looks up a function by name from the constant pool and
+// calls it with two arguments. Used when a specialized integer opcode
+// encounters non-integer operands.
+func (vm *VM) callArithFallback(frame *callFrame, nameIdx uint16, a, b *bones.Node) (*bones.Node, error) {
+	nameNode := frame.code.Constants[nameIdx]
+	funNode, err := lookupNode(nameNode, frame.env)
+	if err != nil {
+		return nil, vm.wrapError(err, frame)
+	}
+	if funNode.Kind == bones.FunctionNode && funNode.FuncVal != nil {
+		proc := *funNode.FuncVal
+		result, err := proc([]*bones.Node{a, b}, vm.ev)
+		if err != nil {
+			return nil, vm.wrapError(err, frame)
+		}
+		return result, nil
+	}
+	return nil, vm.wrapError(fmt.Errorf("not a procedure: %s", funNode.Repr()), frame)
 }
 
 func vmTruthy(n *bones.Node) bool {

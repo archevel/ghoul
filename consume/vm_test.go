@@ -449,6 +449,417 @@ func TestVMTailCallOptimization(t *testing.T) {
 	}
 }
 
+// --- Specialized integer arithmetic opcodes ---
+
+func TestVMIntAddFastPath(t *testing.T) {
+	env := NewEnvironment()
+	// Register + so the compiler can resolve it, but the fast path
+	// should not call it for int+int.
+	env.Register("+", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int+int — fast path should have handled this")
+		return bones.IntNode(0), nil
+	})
+	// (+ 3 4) → 7
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("+"), bones.IntNode(3), bones.IntNode(4),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.IntVal != 7 {
+		t.Errorf("expected 7, got %s", result.Repr())
+	}
+}
+
+func TestVMIntAddFloatFallback(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("+", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		// Real + implementation for float support
+		a, _ := asFloatForTest(args[0])
+		b, _ := asFloatForTest(args[1])
+		return bones.FloatNode(a + b), nil
+	})
+	// (+ 1.5 2.5) → 4.0 via fallback
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("+"), bones.FloatNode(1.5), bones.FloatNode(2.5),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.FloatVal != 4.0 {
+		t.Errorf("expected 4.0, got %s", result.Repr())
+	}
+}
+
+func TestVMIntAddMixedFallback(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("+", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		a, _ := asFloatForTest(args[0])
+		b, _ := asFloatForTest(args[1])
+		return bones.FloatNode(a + b), nil
+	})
+	// (+ 1 2.5) → 3.5 via fallback
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("+"), bones.IntNode(1), bones.FloatNode(2.5),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.FloatVal != 3.5 {
+		t.Errorf("expected 3.5, got %s", result.Repr())
+	}
+}
+
+func TestVMIntAddNested(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("+", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int+int — fast path should have handled this")
+		return bones.IntNode(0), nil
+	})
+	// (+ (+ 1 2) 3) → 6
+	inner := &bones.Node{Kind: bones.CallNode, Children: []*bones.Node{
+		bones.IdentNode("+"), bones.IntNode(1), bones.IntNode(2),
+	}}
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("+"), inner, bones.IntNode(3),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.IntVal != 6 {
+		t.Errorf("expected 6, got %s", result.Repr())
+	}
+}
+
+func TestVMIntAddThreeArgsFallsBackToCall(t *testing.T) {
+	env := NewEnvironment()
+	called := false
+	env.Register("+", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		called = true
+		sum := int64(0)
+		for _, a := range args {
+			sum += a.IntVal
+		}
+		return bones.IntNode(sum), nil
+	})
+	// (+ 1 2 3) → should use regular OP_CALL (3 args, not 2)
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("+"), bones.IntNode(1), bones.IntNode(2), bones.IntNode(3),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if !called {
+		t.Error("expected regular call for 3-arg +")
+	}
+	if result.IntVal != 6 {
+		t.Errorf("expected 6, got %s", result.Repr())
+	}
+}
+
+// asFloatForTest coerces a node to float64 for test fallback functions.
+func asFloatForTest(node *bones.Node) (float64, bool) {
+	switch node.Kind {
+	case bones.IntegerNode:
+		return float64(node.IntVal), true
+	case bones.FloatNodeKind:
+		return node.FloatVal, true
+	}
+	return 0, false
+}
+
+// --- OP_INT_SUB ---
+
+func TestVMIntSubFastPath(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("-", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int-int")
+		return bones.IntNode(0), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("-"), bones.IntNode(10), bones.IntNode(3),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.IntVal != 7 {
+		t.Errorf("expected 7, got %s", result.Repr())
+	}
+}
+
+func TestVMIntSubFloatFallback(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("-", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		a, _ := asFloatForTest(args[0])
+		b, _ := asFloatForTest(args[1])
+		return bones.FloatNode(a - b), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("-"), bones.FloatNode(10.5), bones.FloatNode(3.0),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.FloatVal != 7.5 {
+		t.Errorf("expected 7.5, got %s", result.Repr())
+	}
+}
+
+// --- OP_INT_MUL ---
+
+func TestVMIntMulFastPath(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("*", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int*int")
+		return bones.IntNode(0), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("*"), bones.IntNode(3), bones.IntNode(4),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.IntVal != 12 {
+		t.Errorf("expected 12, got %s", result.Repr())
+	}
+}
+
+func TestVMIntMulFloatFallback(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("*", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		a, _ := asFloatForTest(args[0])
+		b, _ := asFloatForTest(args[1])
+		return bones.FloatNode(a * b), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("*"), bones.FloatNode(2.5), bones.FloatNode(4.0),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.FloatVal != 10.0 {
+		t.Errorf("expected 10.0, got %s", result.Repr())
+	}
+}
+
+// --- OP_INT_LT ---
+
+func TestVMIntLtFastPath(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("<", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int<int")
+		return bones.BoolNode(false), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("<"), bones.IntNode(1), bones.IntNode(2),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if !result.BoolVal {
+		t.Errorf("expected #t, got %s", result.Repr())
+	}
+}
+
+func TestVMIntLtFastPathFalse(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("<", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int<int")
+		return bones.BoolNode(false), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("<"), bones.IntNode(5), bones.IntNode(3),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.BoolVal {
+		t.Errorf("expected #f, got %s", result.Repr())
+	}
+}
+
+func TestVMIntLtFloatFallback(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("<", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		a, _ := asFloatForTest(args[0])
+		b, _ := asFloatForTest(args[1])
+		return bones.BoolNode(a < b), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("<"), bones.FloatNode(1.0), bones.FloatNode(2.0),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if !result.BoolVal {
+		t.Errorf("expected #t, got %s", result.Repr())
+	}
+}
+
+// --- OP_INT_LE ---
+
+func TestVMIntLeFastPath(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("<=", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int<=int")
+		return bones.BoolNode(false), nil
+	})
+	// 3 <= 3 → true
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("<="), bones.IntNode(3), bones.IntNode(3),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if !result.BoolVal {
+		t.Errorf("expected #t, got %s", result.Repr())
+	}
+}
+
+func TestVMIntLeFastPathFalse(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("<=", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int<=int")
+		return bones.BoolNode(false), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("<="), bones.IntNode(5), bones.IntNode(3),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.BoolVal {
+		t.Errorf("expected #f, got %s", result.Repr())
+	}
+}
+
+func TestVMIntLeFloatFallback(t *testing.T) {
+	env := NewEnvironment()
+	env.Register("<=", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		a, _ := asFloatForTest(args[0])
+		b, _ := asFloatForTest(args[1])
+		return bones.BoolNode(a <= b), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("<="), bones.FloatNode(3.0), bones.FloatNode(3.0),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if !result.BoolVal {
+		t.Errorf("expected #t, got %s", result.Repr())
+	}
+}
+
+// --- OP_INT_GT ---
+
+func TestVMIntGtFastPath(t *testing.T) {
+	env := NewEnvironment()
+	env.Register(">", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int>int")
+		return bones.BoolNode(false), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode(">"), bones.IntNode(5), bones.IntNode(3),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if !result.BoolVal {
+		t.Errorf("expected #t, got %s", result.Repr())
+	}
+}
+
+func TestVMIntGtFastPathFalse(t *testing.T) {
+	env := NewEnvironment()
+	env.Register(">", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int>int")
+		return bones.BoolNode(false), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode(">"), bones.IntNode(1), bones.IntNode(3),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.BoolVal {
+		t.Errorf("expected #f, got %s", result.Repr())
+	}
+}
+
+func TestVMIntGtFloatFallback(t *testing.T) {
+	env := NewEnvironment()
+	env.Register(">", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		a, _ := asFloatForTest(args[0])
+		b, _ := asFloatForTest(args[1])
+		return bones.BoolNode(a > b), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode(">"), bones.FloatNode(5.0), bones.FloatNode(3.0),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if !result.BoolVal {
+		t.Errorf("expected #t, got %s", result.Repr())
+	}
+}
+
+// --- OP_INT_GE ---
+
+func TestVMIntGeFastPath(t *testing.T) {
+	env := NewEnvironment()
+	env.Register(">=", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int>=int")
+		return bones.BoolNode(false), nil
+	})
+	// 3 >= 3 → true
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode(">="), bones.IntNode(3), bones.IntNode(3),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if !result.BoolVal {
+		t.Errorf("expected #t, got %s", result.Repr())
+	}
+}
+
+func TestVMIntGeFastPathFalse(t *testing.T) {
+	env := NewEnvironment()
+	env.Register(">=", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		t.Error("fallback called for int>=int")
+		return bones.BoolNode(false), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode(">="), bones.IntNode(2), bones.IntNode(3),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.BoolVal {
+		t.Errorf("expected #f, got %s", result.Repr())
+	}
+}
+
+func TestVMIntGeFloatFallback(t *testing.T) {
+	env := NewEnvironment()
+	env.Register(">=", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		a, _ := asFloatForTest(args[0])
+		b, _ := asFloatForTest(args[1])
+		return bones.BoolNode(a >= b), nil
+	})
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode(">="), bones.FloatNode(3.0), bones.FloatNode(3.0),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if !result.BoolVal {
+		t.Errorf("expected #t, got %s", result.Repr())
+	}
+}
+
 func TestVMScopeIsolation(t *testing.T) {
 	env := NewEnvironment()
 	// (define x 1)

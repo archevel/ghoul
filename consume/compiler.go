@@ -235,12 +235,45 @@ func compileCondBody(co *CodeObject, body []*bones.Node, tailPos bool) error {
 	return nil
 }
 
+// intArithOp maps binary arithmetic operator names to specialized opcodes.
+var intArithOp = map[string]byte{
+	"+":  OP_INT_ADD,
+	"-":  OP_INT_SUB,
+	"*":  OP_INT_MUL,
+	"<":  OP_INT_LT,
+	"<=": OP_INT_LE,
+	">":  OP_INT_GT,
+	">=": OP_INT_GE,
+}
+
 func compileCall(co *CodeObject, node *bones.Node, tailPos bool) error {
 	if len(node.Children) == 0 {
 		return fmt.Errorf("compile: empty call")
 	}
 
 	argc := len(node.Children) - 1
+
+	// Try to emit a specialized integer opcode for binary calls to known operators.
+	if argc == 2 {
+		callee := node.Children[0]
+		if callee.Kind == bones.IdentifierNode {
+			if op, ok := intArithOp[callee.IdentName()]; ok {
+				// Compile the two arguments
+				for _, arg := range node.Children[1:] {
+					if err := compileExpr(co, arg, false); err != nil {
+						return err
+					}
+				}
+				// Emit the specialized opcode with the callee name in the
+				// constant pool so the VM can fall back to a normal call.
+				nameIdx := co.addConstant(callee)
+				co.emitWithLoc(op, node.Loc)
+				co.Code = co.Code[:len(co.Code)-1]
+				co.emitWithOperand(op, nameIdx)
+				return nil
+			}
+		}
+	}
 
 	// Compile arguments left to right
 	for _, arg := range node.Children[1:] {

@@ -22,6 +22,17 @@ const (
 	OP_JUMP                      // set IP to operand
 	OP_JUMP_IF_FALSE             // pop, jump to operand if falsy
 	OP_MAKE_CLOSURE              // create closure from CodeObject at constants[operand]
+
+	// Specialized integer arithmetic — fast path for binary int ops.
+	// Pops two values; if both are IntegerNode, performs the op directly.
+	// Otherwise falls back to calling the named function from the environment.
+	OP_INT_ADD // int + int → int; fallback to "+"
+	OP_INT_SUB // int - int → int; fallback to "-"
+	OP_INT_MUL // int * int → int; fallback to "*"
+	OP_INT_LT  // int < int → bool; fallback to "<"
+	OP_INT_LE  // int <= int → bool; fallback to "<="
+	OP_INT_GT  // int > int → bool; fallback to ">"
+	OP_INT_GE  // int >= int → bool; fallback to ">="
 )
 
 // CodeObject represents a compiled function or top-level script.
@@ -133,6 +144,20 @@ func opcodeName(op byte) string {
 		return "OP_JUMP_IF_FALSE"
 	case OP_MAKE_CLOSURE:
 		return "OP_MAKE_CLOSURE"
+	case OP_INT_ADD:
+		return "OP_INT_ADD"
+	case OP_INT_SUB:
+		return "OP_INT_SUB"
+	case OP_INT_MUL:
+		return "OP_INT_MUL"
+	case OP_INT_LT:
+		return "OP_INT_LT"
+	case OP_INT_LE:
+		return "OP_INT_LE"
+	case OP_INT_GT:
+		return "OP_INT_GT"
+	case OP_INT_GE:
+		return "OP_INT_GE"
 	default:
 		return fmt.Sprintf("OP_UNKNOWN(%d)", op)
 	}
