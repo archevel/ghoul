@@ -141,6 +141,38 @@ func (vm *VM) run(ctx context.Context, code *CodeObject) (*bones.Node, error) {
 				return nil, vm.wrapError(err, frame)
 			}
 
+		case OP_LOAD_LOCAL:
+			operand := readUint16(frame.code.Code, frame.ip)
+			frame.ip += 2
+			depth, slot := decodeLexAddr(operand)
+			lf := frame.locals
+			for i := 0; i < depth; i++ {
+				lf = lf.parent
+			}
+			vm.push(lf.slots[slot])
+
+		case OP_SET_LOCAL:
+			operand := readUint16(frame.code.Code, frame.ip)
+			frame.ip += 2
+			depth, slot := decodeLexAddr(operand)
+			val := vm.peek() // leave value on stack
+			lf := frame.locals
+			for i := 0; i < depth; i++ {
+				lf = lf.parent
+			}
+			lf.slots[slot] = val
+
+		case OP_DEFINE_LOCAL:
+			slotIdx := int(readUint16(frame.code.Code, frame.ip))
+			frame.ip += 2
+			val := vm.peek() // leave value on stack
+			lf := frame.locals
+			// Grow slots if needed (define may come after params)
+			for slotIdx >= len(lf.slots) {
+				lf.slots = append(lf.slots, nil)
+			}
+			lf.slots[slotIdx] = val
+
 		case OP_CALL:
 			argc := int(readUint16(frame.code.Code, frame.ip))
 			frame.ip += 2
@@ -184,7 +216,7 @@ func (vm *VM) run(ctx context.Context, code *CodeObject) (*bones.Node, error) {
 			if !ok {
 				return nil, fmt.Errorf("VM: expected CodeObject in constant pool")
 			}
-			closure := makeClosure(codeObj, frame.env)
+			closure := makeClosureWithLocals(codeObj, frame.env, frame.locals)
 			vm.push(closure)
 
 		case OP_INT_ADD:
@@ -340,12 +372,42 @@ func (vm *VM) doCall(argc int, isTail bool, frame *callFrame) error {
 	return vm.wrapError(fmt.Errorf("not a procedure: %s", funNode.Repr()), frame)
 }
 
+// bindLocalParams binds arguments into the localFrame's slots by index,
+// matching the slot order established by the compiler.
+func bindLocalParams(lf *localFrame, params *bones.ParamSpec, args []*bones.Node) error {
+	slot := 0
+	if params != nil {
+		for _, _ = range params.Fixed {
+			if slot >= len(args) {
+				return fmt.Errorf("arity mismatch: too few arguments")
+			}
+			lf.slots[slot] = args[slot]
+			slot++
+		}
+		if params.Variadic != nil {
+			lf.slots[slot] = bones.NewListNode(args[slot:])
+			slot++
+		} else if slot < len(args) {
+			return fmt.Errorf("arity mismatch: too many arguments")
+		}
+	}
+	return nil
+}
+
 func (vm *VM) callClosure(cd *closureData, args []*bones.Node, isTail bool, frame *callFrame) error {
 	// Self-tail-call optimization: when a closure tail-calls itself,
-	// reuse the current frame's top scope instead of allocating a new
-	// environment. This eliminates per-iteration allocation in tight
-	// recursive loops (e.g., pixel-drawing loops).
+	// reuse the current frame's local slots instead of allocating new ones.
 	if isTail && cd.code == frame.code {
+		if frame.locals != nil {
+			// Reuse the local frame: clear slots and rebind params
+			for i := range frame.locals.slots {
+				frame.locals.slots[i] = nil
+			}
+			if err := bindLocalParams(frame.locals, cd.code.Params, args); err != nil {
+				return err
+			}
+		}
+		// Also clear the map-based scope (for OP_DEFINE/OP_SET compatibility)
 		topScope := currentScope(frame.env)
 		clear(*topScope)
 		if cd.code.Params != nil {
@@ -369,10 +431,26 @@ func (vm *VM) callClosure(cd *closureData, args []*bones.Node, isTail bool, fram
 		return nil
 	}
 
-	// Create new environment
+	// Create new local frame for lexically-addressed variables.
+	// A frame is needed when the function has local slots (params or defines)
+	// OR when it captures locals from an enclosing scope (cd.locals != nil)
+	// so that depth-walking in OP_LOAD_LOCAL can reach the parent chain.
+	var newLocals *localFrame
+	if cd.code.NumLocals > 0 || cd.locals != nil {
+		newLocals = &localFrame{
+			slots:  make([]*bones.Node, cd.code.NumLocals),
+			parent: cd.locals,
+		}
+		if err := bindLocalParams(newLocals, cd.code.Params, args); err != nil {
+			return err
+		}
+	}
+
+	// Create new environment (still needed for OP_LOAD_VAR fallback)
 	newEnv := newEnvWithEmptyScope(cd.env)
 
-	// Bind parameters
+	// Bind parameters into the map-based env too, for OP_LOAD_VAR compatibility
+	// (needed when the same closure is called via the FuncVal wrapper path)
 	if cd.code.Params != nil {
 		argIdx := 0
 		for _, param := range cd.code.Params.Fixed {
@@ -395,6 +473,7 @@ func (vm *VM) callClosure(cd *closureData, args []*bones.Node, isTail bool, fram
 		frame.code = cd.code
 		frame.ip = 0
 		frame.env = newEnv
+		frame.locals = newLocals
 		vm.sp = frame.bp // trim stack
 	} else {
 		// Push new frame
@@ -403,10 +482,11 @@ func (vm *VM) callClosure(cd *closureData, args []*bones.Node, isTail bool, fram
 			vm.frames = append(vm.frames, callFrame{})
 		}
 		vm.frames[vm.fp] = callFrame{
-			code: cd.code,
-			ip:   0,
-			bp:   vm.sp,
-			env:  newEnv,
+			code:   cd.code,
+			ip:     0,
+			bp:     vm.sp,
+			env:    newEnv,
+			locals: newLocals,
 		}
 	}
 
@@ -454,11 +534,10 @@ func vmTruthy(n *bones.Node) bool {
 	return true
 }
 
-// makeClosure creates a FuncNode that wraps a compiled closure.
-// It stores the closureData in ForeignVal for the VM fast path,
-// and provides a FuncVal wrapper for Go stdlib callback compatibility.
-func makeClosure(code *CodeObject, env *environment) *bones.Node {
-	cd := &closureData{code: code, env: env}
+// makeClosureWithLocals creates a FuncNode that wraps a compiled closure,
+// capturing both the map-based environment and the indexed local frame.
+func makeClosureWithLocals(code *CodeObject, env *environment, locals *localFrame) *bones.Node {
+	cd := &closureData{code: code, env: env, locals: locals}
 
 	// Build the node first so the wrapper can reference it
 	node := &bones.Node{Kind: bones.FunctionNode, ForeignVal: cd}

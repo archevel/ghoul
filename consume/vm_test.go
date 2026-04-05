@@ -975,6 +975,189 @@ func TestVMSelfTailCallWithDefineInBody(t *testing.T) {
 	}
 }
 
+// --- Lexical addressing ---
+
+func TestVMLexicalLocalAccess(t *testing.T) {
+	// ((lambda (x) x) 42) — param access via OP_LOAD_LOCAL
+	env := NewEnvironment()
+	lambda := &bones.Node{
+		Kind:   bones.LambdaNode,
+		Params: &bones.ParamSpec{Fixed: []*bones.Node{bones.IdentNode("x")}},
+		Children: []*bones.Node{bones.IdentNode("x")},
+	}
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{lambda, bones.IntNode(42)}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.IntVal != 42 {
+		t.Errorf("expected 42, got %s", result.Repr())
+	}
+}
+
+func TestVMLexicalClosureCapture(t *testing.T) {
+	// (define make-adder (lambda (n) (lambda (x) (+ x n))))
+	// ((make-adder 5) 10) → 15
+	env := NewEnvironment()
+	env.Register("+", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		return bones.IntNode(args[0].IntVal + args[1].IntVal), nil
+	})
+	innerLambda := &bones.Node{
+		Kind:   bones.LambdaNode,
+		Params: &bones.ParamSpec{Fixed: []*bones.Node{bones.IdentNode("x")}},
+		Children: []*bones.Node{
+			{Kind: bones.CallNode, Children: []*bones.Node{
+				bones.IdentNode("+"), bones.IdentNode("x"), bones.IdentNode("n"),
+			}},
+		},
+	}
+	makeAdder := &bones.Node{
+		Kind:   bones.LambdaNode,
+		Params: &bones.ParamSpec{Fixed: []*bones.Node{bones.IdentNode("n")}},
+		Children: []*bones.Node{innerLambda},
+	}
+	nodes := []*bones.Node{
+		{Kind: bones.DefineNode, Children: []*bones.Node{bones.IdentNode("make-adder"), makeAdder}},
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			{Kind: bones.CallNode, Children: []*bones.Node{
+				bones.IdentNode("make-adder"), bones.IntNode(5),
+			}},
+			bones.IntNode(10),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.IntVal != 15 {
+		t.Errorf("expected 15, got %s", result.Repr())
+	}
+}
+
+func TestVMLexicalDefineInBody(t *testing.T) {
+	// ((lambda () (define x 42) x)) → 42
+	env := NewEnvironment()
+	lambda := &bones.Node{
+		Kind:   bones.LambdaNode,
+		Params: &bones.ParamSpec{},
+		Children: []*bones.Node{
+			{Kind: bones.DefineNode, Children: []*bones.Node{
+				bones.IdentNode("x"), bones.IntNode(42),
+			}},
+			bones.IdentNode("x"),
+		},
+	}
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{lambda}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.IntVal != 42 {
+		t.Errorf("expected 42, got %s", result.Repr())
+	}
+}
+
+func TestVMLexicalSetLocal(t *testing.T) {
+	// (define make-counter (lambda (n)
+	//   (lambda () (set! n (+ n 1)) n)))
+	// (define c (make-counter 0))
+	// (c) → 1
+	// (c) → 2
+	env := NewEnvironment()
+	env.Register("+", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		return bones.IntNode(args[0].IntVal + args[1].IntVal), nil
+	})
+	innerLambda := &bones.Node{
+		Kind:   bones.LambdaNode,
+		Params: &bones.ParamSpec{},
+		Children: []*bones.Node{
+			{Kind: bones.SetNode, Children: []*bones.Node{
+				bones.IdentNode("n"),
+				&bones.Node{Kind: bones.CallNode, Children: []*bones.Node{
+					bones.IdentNode("+"), bones.IdentNode("n"), bones.IntNode(1),
+				}},
+			}},
+			bones.IdentNode("n"),
+		},
+	}
+	makeCounter := &bones.Node{
+		Kind:   bones.LambdaNode,
+		Params: &bones.ParamSpec{Fixed: []*bones.Node{bones.IdentNode("n")}},
+		Children: []*bones.Node{innerLambda},
+	}
+	nodes := []*bones.Node{
+		{Kind: bones.DefineNode, Children: []*bones.Node{bones.IdentNode("make-counter"), makeCounter}},
+		{Kind: bones.DefineNode, Children: []*bones.Node{
+			bones.IdentNode("c"),
+			&bones.Node{Kind: bones.CallNode, Children: []*bones.Node{
+				bones.IdentNode("make-counter"), bones.IntNode(0),
+			}},
+		}},
+		{Kind: bones.CallNode, Children: []*bones.Node{bones.IdentNode("c")}},
+		{Kind: bones.CallNode, Children: []*bones.Node{bones.IdentNode("c")}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.IntVal != 2 {
+		t.Errorf("expected 2, got %s", result.Repr())
+	}
+}
+
+func TestVMLexicalRecursiveDefine(t *testing.T) {
+	// ((lambda ()
+	//   (define fact (lambda (n)
+	//     (cond ((eq? n 0) 1) (else (* n (fact (- n 1)))))))
+	//   (fact 5))) → 120
+	env := NewEnvironment()
+	env.Register("*", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		return bones.IntNode(args[0].IntVal * args[1].IntVal), nil
+	})
+	env.Register("-", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		return bones.IntNode(args[0].IntVal - args[1].IntVal), nil
+	})
+	env.Register("eq?", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		return bones.BoolNode(args[0].Equiv(args[1])), nil
+	})
+	factLambda := &bones.Node{
+		Kind:   bones.LambdaNode,
+		Params: &bones.ParamSpec{Fixed: []*bones.Node{bones.IdentNode("n")}},
+		Children: []*bones.Node{
+			{Kind: bones.CondNode, Clauses: []*bones.CondClause{
+				{
+					Test: &bones.Node{Kind: bones.CallNode, Children: []*bones.Node{
+						bones.IdentNode("eq?"), bones.IdentNode("n"), bones.IntNode(0),
+					}},
+					Consequent: []*bones.Node{bones.IntNode(1)},
+				},
+				{
+					IsElse: true,
+					Consequent: []*bones.Node{
+						{Kind: bones.CallNode, Children: []*bones.Node{
+							bones.IdentNode("*"),
+							bones.IdentNode("n"),
+							{Kind: bones.CallNode, Children: []*bones.Node{
+								bones.IdentNode("fact"),
+								{Kind: bones.CallNode, Children: []*bones.Node{
+									bones.IdentNode("-"), bones.IdentNode("n"), bones.IntNode(1),
+								}},
+							}},
+						}},
+					},
+				},
+			}},
+		},
+	}
+	outerLambda := &bones.Node{
+		Kind:   bones.LambdaNode,
+		Params: &bones.ParamSpec{},
+		Children: []*bones.Node{
+			{Kind: bones.DefineNode, Children: []*bones.Node{bones.IdentNode("fact"), factLambda}},
+			{Kind: bones.CallNode, Children: []*bones.Node{bones.IdentNode("fact"), bones.IntNode(5)}},
+		},
+	}
+	nodes := []*bones.Node{
+		{Kind: bones.CallNode, Children: []*bones.Node{outerLambda}},
+	}
+	result := compileAndRun(t, nodes, env)
+	if result.IntVal != 120 {
+		t.Errorf("expected 120, got %s", result.Repr())
+	}
+}
+
 func TestVMScopeIsolation(t *testing.T) {
 	env := NewEnvironment()
 	// (define x 1)

@@ -33,6 +33,12 @@ const (
 	OP_INT_LE  // int <= int → bool; fallback to "<="
 	OP_INT_GT  // int > int → bool; fallback to ">"
 	OP_INT_GE  // int >= int → bool; fallback to ">="
+
+	// Lexical addressing — O(1) variable access for locally-bound variables.
+	// Operand encodes (depth << 8 | slot) as a uint16.
+	OP_LOAD_LOCAL   // push env[depth][slot]
+	OP_SET_LOCAL    // pop value, assign to env[depth][slot], push value
+	OP_DEFINE_LOCAL // pop value, bind to env[top][slot], push value
 )
 
 // CodeObject represents a compiled function or top-level script.
@@ -42,6 +48,7 @@ type CodeObject struct {
 	Locs      []LocEntry      // source map: bytecode offset → source location
 	Params    *bones.ParamSpec // nil for top-level scripts
 	Name      string          // for debugging
+	NumLocals int             // number of indexed local slots needed
 }
 
 // LocEntry maps a bytecode offset to a source location for error reporting.
@@ -50,18 +57,28 @@ type LocEntry struct {
 	Loc     bones.CodeLocation
 }
 
+// localFrame holds indexed local variable slots for a single lexical scope.
+// Frames form a linked chain via the parent pointer, enabling O(1) access
+// to variables at known (depth, slot) coordinates.
+type localFrame struct {
+	slots  []*bones.Node
+	parent *localFrame
+}
+
 // closureData holds a compiled function and its captured environment.
 type closureData struct {
-	code *CodeObject
-	env  *environment
+	code   *CodeObject
+	env    *environment
+	locals *localFrame // captured local slots from enclosing scopes
 }
 
 // callFrame tracks VM state per function call.
 type callFrame struct {
-	code *CodeObject
-	ip   int
-	bp   int          // base pointer into value stack
-	env  *environment
+	code   *CodeObject
+	ip     int
+	bp     int          // base pointer into value stack
+	env    *environment
+	locals *localFrame  // indexed local slots for this scope
 }
 
 // --- CodeObject helpers ---
@@ -158,6 +175,12 @@ func opcodeName(op byte) string {
 		return "OP_INT_GT"
 	case OP_INT_GE:
 		return "OP_INT_GE"
+	case OP_LOAD_LOCAL:
+		return "OP_LOAD_LOCAL"
+	case OP_SET_LOCAL:
+		return "OP_SET_LOCAL"
+	case OP_DEFINE_LOCAL:
+		return "OP_DEFINE_LOCAL"
 	default:
 		return fmt.Sprintf("OP_UNKNOWN(%d)", op)
 	}
