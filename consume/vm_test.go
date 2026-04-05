@@ -860,6 +860,121 @@ func TestVMIntGeFloatFallback(t *testing.T) {
 	}
 }
 
+// --- Self-tail-call environment reuse ---
+
+func TestVMSelfTailCallReuseBasic(t *testing.T) {
+	// Same as TestVMTailCallOptimization but verifies that the self-tail-call
+	// fast path produces correct results (scope is properly cleared/rebound).
+	env := NewEnvironment()
+	env.Register("-", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		return bones.IntNode(args[0].IntVal - args[1].IntVal), nil
+	})
+	env.Register("eq?", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		return bones.BoolNode(args[0].Equiv(args[1])), nil
+	})
+	env.Register("+", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		return bones.IntNode(args[0].IntVal + args[1].IntVal), nil
+	})
+	// (define sum-to (lambda (n acc)
+	//   (cond ((eq? n 0) acc) (else (sum-to (- n 1) (+ acc n))))))
+	// (sum-to 100 0)
+	lambda := &bones.Node{
+		Kind:   bones.LambdaNode,
+		Params: &bones.ParamSpec{Fixed: []*bones.Node{bones.IdentNode("n"), bones.IdentNode("acc")}},
+		Children: []*bones.Node{
+			{Kind: bones.CondNode, Clauses: []*bones.CondClause{
+				{
+					Test: &bones.Node{Kind: bones.CallNode, Children: []*bones.Node{
+						bones.IdentNode("eq?"), bones.IdentNode("n"), bones.IntNode(0),
+					}},
+					Consequent: []*bones.Node{bones.IdentNode("acc")},
+				},
+				{
+					IsElse: true,
+					Consequent: []*bones.Node{
+						{Kind: bones.CallNode, Children: []*bones.Node{
+							bones.IdentNode("sum-to"),
+							{Kind: bones.CallNode, Children: []*bones.Node{
+								bones.IdentNode("-"), bones.IdentNode("n"), bones.IntNode(1),
+							}},
+							{Kind: bones.CallNode, Children: []*bones.Node{
+								bones.IdentNode("+"), bones.IdentNode("acc"), bones.IdentNode("n"),
+							}},
+						}},
+					},
+				},
+			}},
+		},
+	}
+	nodes := []*bones.Node{
+		{Kind: bones.DefineNode, Children: []*bones.Node{bones.IdentNode("sum-to"), lambda}},
+		{Kind: bones.CallNode, Children: []*bones.Node{
+			bones.IdentNode("sum-to"), bones.IntNode(100), bones.IntNode(0),
+		}},
+	}
+	result := compileAndRun(t, nodes, env)
+	// sum 1..100 = 5050
+	if result.IntVal != 5050 {
+		t.Errorf("expected 5050, got %s", result.Repr())
+	}
+}
+
+func TestVMSelfTailCallWithDefineInBody(t *testing.T) {
+	// Verifies that define bindings inside the loop body don't leak
+	// across iterations when the scope is cleared and reused.
+	env := NewEnvironment()
+	env.Register("+", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		return bones.IntNode(args[0].IntVal + args[1].IntVal), nil
+	})
+	env.Register("eq?", func(args []*bones.Node, ev *Evaluator) (*bones.Node, error) {
+		return bones.BoolNode(args[0].Equiv(args[1])), nil
+	})
+	// (define f (lambda (n)
+	//   (define x (+ n 10))
+	//   (cond ((eq? n 0) x) (else (f (+ n -1))))))
+	// (f 3) → when n=0, x=10
+	lambda := &bones.Node{
+		Kind:   bones.LambdaNode,
+		Params: &bones.ParamSpec{Fixed: []*bones.Node{bones.IdentNode("n")}},
+		Children: []*bones.Node{
+			{Kind: bones.DefineNode, Children: []*bones.Node{
+				bones.IdentNode("x"),
+				&bones.Node{Kind: bones.CallNode, Children: []*bones.Node{
+					bones.IdentNode("+"), bones.IdentNode("n"), bones.IntNode(10),
+				}},
+			}},
+			{Kind: bones.CondNode, Clauses: []*bones.CondClause{
+				{
+					Test: &bones.Node{Kind: bones.CallNode, Children: []*bones.Node{
+						bones.IdentNode("eq?"), bones.IdentNode("n"), bones.IntNode(0),
+					}},
+					Consequent: []*bones.Node{bones.IdentNode("x")},
+				},
+				{
+					IsElse: true,
+					Consequent: []*bones.Node{
+						{Kind: bones.CallNode, Children: []*bones.Node{
+							bones.IdentNode("f"),
+							{Kind: bones.CallNode, Children: []*bones.Node{
+								bones.IdentNode("+"), bones.IdentNode("n"), bones.IntNode(-1),
+							}},
+						}},
+					},
+				},
+			}},
+		},
+	}
+	nodes := []*bones.Node{
+		{Kind: bones.DefineNode, Children: []*bones.Node{bones.IdentNode("f"), lambda}},
+		{Kind: bones.CallNode, Children: []*bones.Node{bones.IdentNode("f"), bones.IntNode(3)}},
+	}
+	result := compileAndRun(t, nodes, env)
+	// When n=0, x = 0+10 = 10. Previous iterations' x values (13, 12, 11) must not leak.
+	if result.IntVal != 10 {
+		t.Errorf("expected 10 (x when n=0), got %s", result.Repr())
+	}
+}
+
 func TestVMScopeIsolation(t *testing.T) {
 	env := NewEnvironment()
 	// (define x 1)

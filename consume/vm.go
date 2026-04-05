@@ -341,6 +341,34 @@ func (vm *VM) doCall(argc int, isTail bool, frame *callFrame) error {
 }
 
 func (vm *VM) callClosure(cd *closureData, args []*bones.Node, isTail bool, frame *callFrame) error {
+	// Self-tail-call optimization: when a closure tail-calls itself,
+	// reuse the current frame's top scope instead of allocating a new
+	// environment. This eliminates per-iteration allocation in tight
+	// recursive loops (e.g., pixel-drawing loops).
+	if isTail && cd.code == frame.code {
+		topScope := currentScope(frame.env)
+		clear(*topScope)
+		if cd.code.Params != nil {
+			argIdx := 0
+			for _, param := range cd.code.Params.Fixed {
+				if argIdx >= len(args) {
+					return fmt.Errorf("arity mismatch: too few arguments")
+				}
+				bindNode(param, args[argIdx], frame.env)
+				argIdx++
+			}
+			if cd.code.Params.Variadic != nil {
+				remaining := bones.NewListNode(args[argIdx:])
+				bindNode(cd.code.Params.Variadic, remaining, frame.env)
+			} else if argIdx < len(args) {
+				return fmt.Errorf("arity mismatch: too many arguments")
+			}
+		}
+		frame.ip = 0
+		vm.sp = frame.bp
+		return nil
+	}
+
 	// Create new environment
 	newEnv := newEnvWithEmptyScope(cd.env)
 
