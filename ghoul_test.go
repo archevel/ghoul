@@ -1028,3 +1028,48 @@ func TestRequireSameModuleFromTwoModules(t *testing.T) {
 		t.Errorf("expected 55, got %s", result.Repr())
 	}
 }
+
+// Cross-module set! tests: verify that set! on a module-qualified binding
+// does NOT propagate back to the exporting module's internal variable.
+// This documents the current behavior where module exports are value copies
+// in the importer's scope, not references to the exporter's scope.
+
+func TestSetOnImportedBindingDoesNotAffectExporter(t *testing.T) {
+	dir := t.TempDir()
+	// Module A: defines foo and a getter that reads foo from A's own scope
+	os.WriteFile(filepath.Join(dir, "a.ghl"), []byte(
+		"(define foo 42) (define get-foo (lambda () foo))"), 0644)
+	// Main: imports A, mutates a:foo, then calls a:get-foo to see if A noticed
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte(
+		"(require a) (set! a:foo 99) (a:get-foo)"), 0644)
+
+	g := New()
+	result, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// A's internal foo is still 42 — set! only changed main's local binding
+	if !result.Equiv(e.IntNode(42)) {
+		t.Errorf("expected 42 (A's foo unchanged), got %s", result.Repr())
+	}
+}
+
+func TestSetViaExportedSetterAffectsExporter(t *testing.T) {
+	dir := t.TempDir()
+	// Module A: defines foo, a setter, and a getter
+	os.WriteFile(filepath.Join(dir, "a.ghl"), []byte(
+		"(define foo 42) (define set-foo! (lambda (v) (set! foo v))) (define get-foo (lambda () foo))"), 0644)
+	// Main: imports A, calls the setter, then reads via the getter
+	os.WriteFile(filepath.Join(dir, "main.ghl"), []byte(
+		"(require a) (a:set-foo! 99) (a:get-foo)"), 0644)
+
+	g := New()
+	result, err := g.ProcessFile(filepath.Join(dir, "main.ghl"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// The setter lambda closes over A's actual foo, so the change IS visible
+	if !result.Equiv(e.IntNode(99)) {
+		t.Errorf("expected 99 (A's foo changed via setter), got %s", result.Repr())
+	}
+}
